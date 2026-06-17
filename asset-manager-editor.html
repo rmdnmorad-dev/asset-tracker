@@ -1595,151 +1595,94 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
 
     <script>
-        // ==================== SUPABASE CONFIG ====================
-        const SUPA_URL  = 'https://edwkmiiguxzrcjsdhott.supabase.co';
-        const SUPA_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVkd2ttaWlndXh6cmNqc2Rob3R0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2MDI3OTYsImV4cCI6MjA5NzE3ODc5Nn0.5Vksy5uIKFNs8UrQatTtRm3OM_ry1cakZJ4ac0-1DQw';
+        // ==================== SUPABASE DATABASE ====================
+        const SUPA_URL = 'https://edwkmiiguxzrcjsdhott.supabase.co';
+        const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVkd2ttaWlndXh6cmNqc2Rob3R0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2MDI3OTYsImV4cCI6MjA5NzE3ODc5Nn0.5Vksy5uIKFNs8UrQatTtRm3OM_ry1cakZJ4ac0-1DQw';
 
-        const supa = async (method, table, body = null, params = '') => {
-            const url = `${SUPA_URL}/rest/v1/${table}${params}`;
-            const headers = {
-                'apikey': SUPA_KEY,
-                'Authorization': `Bearer ${SUPA_KEY}`,
-                'Content-Type': 'application/json',
-                'Prefer': 'return=representation'
-            };
-            const opts = { method, headers };
-            if (body) opts.body = JSON.stringify(body);
-            try {
-                const res = await fetch(url, opts);
-                if (!res.ok) {
-                    const err = await res.text();
-                    console.error(`Supabase ${method} ${table}:`, err);
-                    return method === 'GET' ? [] : null;
-                }
-                const text = await res.text();
-                return text ? JSON.parse(text) : (method === 'GET' ? [] : null);
-            } catch (e) {
-                console.error(`Supabase network error ${method} ${table}:`, e);
-                showToast('Connection error — check your internet connection', 'error');
-                return method === 'GET' ? [] : null;
-            }
+        // Field name maps: JS camelCase -> Supabase snake_case
+        const FIELD_MAP = {
+            assets: { assignedEmployeeId:'assigned_employee_id', assignmentDate:'assignment_date', purchaseDate:'purchase_date', lastUpdated:'last_updated', createdDate:'created_date' },
+            employees: { jobTitle:'job_title', createdDate:'created_date' },
+            assignments: { assetId:'asset_id', assetName:'asset_name', employeeId:'employee_id', employeeName:'employee_name', assignmentDate:'assignment_date', unassignmentDate:'unassignment_date', createdDate:'created_date' },
+            categories: { createdDate:'created_date' },
+            conditions: { createdDate:'created_date' }
         };
 
-        // ── CRUD helpers matching the old IndexedDB API shape ─────────────
-        // Field name mapping: JS camelCase ↔ Supabase snake_case
         const toSnake = (obj, table) => {
-            if (!obj) return obj;
             const o = { ...obj };
-            const maps = {
-                assets: {
-                    assignedEmployeeId: 'assigned_employee_id',
-                    assignmentDate: 'assignment_date',
-                    purchaseDate: 'purchase_date',
-                    lastUpdated: 'last_updated',
-                    createdDate: 'created_date'
-                },
-                employees: { createdDate: 'created_date', jobTitle: 'job_title' },
-                assignments: {
-                    assetId: 'asset_id', assetName: 'asset_name',
-                    employeeId: 'employee_id', employeeName: 'employee_name',
-                    assignmentDate: 'assignment_date',
-                    unassignmentDate: 'unassignment_date',
-                    createdDate: 'created_date'
-                },
-                categories: { createdDate: 'created_date' },
-                conditions:  { createdDate: 'created_date' }
-            };
-            const m = maps[table] || {};
+            const m = FIELD_MAP[table] || {};
             for (const [js, sql] of Object.entries(m)) {
                 if (js in o) { o[sql] = o[js]; delete o[js]; }
             }
-            // Remove fields Supabase generates
             delete o.id; delete o.created_date; delete o.last_updated;
             return o;
         };
 
         const toCamel = (obj, table) => {
-            if (!obj) return obj;
             const o = { ...obj };
-            const maps = {
-                assets: {
-                    assigned_employee_id: 'assignedEmployeeId',
-                    assignment_date: 'assignmentDate',
-                    purchase_date: 'purchaseDate',
-                    last_updated: 'lastUpdated',
-                    created_date: 'createdDate'
-                },
-                employees: { created_date: 'createdDate', job_title: 'jobTitle' },
-                assignments: {
-                    asset_id: 'assetId', asset_name: 'assetName',
-                    employee_id: 'employeeId', employee_name: 'employeeName',
-                    assignment_date: 'assignmentDate',
-                    unassignment_date: 'unassignmentDate',
-                    created_date: 'createdDate'
-                },
-                categories: { created_date: 'createdDate' },
-                conditions:  { created_date: 'createdDate' }
-            };
-            const m = maps[table] || {};
-            for (const [sql, js] of Object.entries(m)) {
+            const m = FIELD_MAP[table] || {};
+            for (const [js, sql] of Object.entries(m)) {
                 if (sql in o) { o[js] = o[sql]; delete o[sql]; }
             }
             return o;
         };
 
+        const supaFetch = async (method, table, body, params = '') => {
+            try {
+                const res = await fetch(`${SUPA_URL}/rest/v1/${table}${params}`, {
+                    method,
+                    headers: {
+                        'apikey': SUPA_KEY,
+                        'Authorization': 'Bearer ' + SUPA_KEY,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=representation'
+                    },
+                    body: body ? JSON.stringify(body) : undefined
+                });
+                const text = await res.text();
+                try { return text ? JSON.parse(text) : []; } catch(e) { return []; }
+            } catch(e) {
+                console.warn('supaFetch error:', method, table, e.message);
+                return [];
+            }
+        };
+
+        // These replace IndexedDB — same function signatures, same return values
+        const initDB = async () => true;
+
         const getAllRecords = async (table) => {
-            const rows = await supa('GET', table, null, '?order=id.asc&limit=10000');
-            return rows.map(r => toCamel(r, table));
+            const rows = await supaFetch('GET', table, null, '?order=id.asc&limit=10000');
+            return Array.isArray(rows) ? rows.map(r => toCamel(r, table)) : [];
         };
 
         const addRecord = async (table, data) => {
             const body = toSnake({ ...data }, table);
-            const rows = await supa('POST', table, body);
+            const rows = await supaFetch('POST', table, body);
             const row = Array.isArray(rows) ? rows[0] : rows;
             return row ? row.id : null;
         };
 
         const updateRecord = async (table, data) => {
             const id = data.id;
-            if (!id) throw new Error('updateRecord: missing id');
             const body = toSnake({ ...data }, table);
-            await supa('PATCH', table, body, `?id=eq.${id}`);
+            await supaFetch('PATCH', table, body, `?id=eq.${id}`);
+            return id;
         };
 
         const deleteRecord = async (table, id) => {
-            await supa('DELETE', table, null, `?id=eq.${id}`);
+            await supaFetch('DELETE', table, null, `?id=eq.${id}`);
         };
 
         const clearStore = async (table) => {
-            await supa('DELETE', table, null, '?id=gt.0');
+            await supaFetch('DELETE', table, null, '?id=gt.0');
         };
 
-        // Stub — Supabase has no object stores to open
-        const initDB = async () => true;
-
-        // ── Helper: get single record by id ───────────────────────────────
-        const getRecord = async (table, id) => {
-            const rows = await supa('GET', table, null, `?id=eq.${id}`);
-            return rows.length ? toCamel(rows[0], table) : null;
+        const getRecordByIndex = async (table, indexName, value) => {
+            const col = (FIELD_MAP[table] && FIELD_MAP[table][indexName]) || indexName;
+            const rows = await supaFetch('GET', table, null, `?${col}=eq.${encodeURIComponent(value)}`);
+            return Array.isArray(rows) ? rows.map(r => toCamel(r, table)) : [];
         };
 
-        // ── Real-time sync: reload visible page every 30s ─────────────────
-        // (Supabase Realtime requires a JS library; polling is simpler for
-        //  a single-file HTML app and still feels instant for this use case)
-        let _currentPage = 'dashboard';
-        const _pageReloaders = {
-            dashboard:   () => loadDashboard(),
-            assets:      () => loadAssets(),
-            employees:   () => loadEmployees(),
-            assignments: () => loadAssignments(),
-            history:     null,
-            reports:     () => loadReports(),
-            settings:    () => loadSettings()
-        };
-        setInterval(() => {
-            const fn = _pageReloaders[_currentPage];
-            if (fn) fn();
-        }, 30000);
 
         // ==================== SHARED HELPERS ====================
         // Build a quick lookup map of employee id -> employee record
@@ -1878,7 +1821,6 @@
 
         // ==================== UI CONTROLS ====================
         const switchPage = (pageName) => {
-            _currentPage = pageName;
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
             document.getElementById(pageName).classList.add('active');
 
@@ -2029,7 +1971,8 @@
         };
 
         const loadAssetForEdit = async (assetId) => {
-            const asset = await getRecord('assets', assetId);
+            const rows = await supaFetch('GET', 'assets', null, `?id=eq.${assetId}`);
+            const asset = rows.length ? toCamel(rows[0], 'assets') : null;
             if (asset) {
                 document.getElementById('assetModel').value = asset.model || '';
                 document.getElementById('assetTag').value = asset.tag;
@@ -2040,14 +1983,12 @@
                 document.getElementById('assetLocation').value = asset.location || '';
                 document.getElementById('assetEmployee').value = asset.assignedEmployeeId || '';
                 document.getElementById('assetNotes').value = asset.notes || '';
-
                 const assignmentDateGroup = document.getElementById('assetAssignmentDateGroup');
                 const assignmentDateInput = document.getElementById('assetAssignmentDate');
                 if (asset.assignedEmployeeId) {
                     assignmentDateGroup.style.display = 'block';
                     assignmentDateInput.value = (asset.assignmentDate && asset.assignmentDate !== 'NA')
-                        ? asset.assignmentDate
-                        : new Date().toISOString().split('T')[0];
+                        ? asset.assignmentDate : new Date().toISOString().split('T')[0];
                 } else {
                     assignmentDateGroup.style.display = 'none';
                     assignmentDateInput.value = '';
@@ -2094,8 +2035,10 @@
             try {
                 let previousEmployeeId = null;
                 if (currentAssetId) {
-                    const existing = await getRecord('assets', currentAssetId);
+                    const existingRows = await supaFetch('GET', 'assets', null, `?id=eq.${currentAssetId}`);
+                    const existing = existingRows.length ? toCamel(existingRows[0], 'assets') : null;
                     previousEmployeeId = existing ? existing.assignedEmployeeId : null;
+
                     asset.id = currentAssetId;
                     await updateRecord('assets', asset);
                     showToast('Asset updated successfully', 'success');
@@ -2105,7 +2048,10 @@
                     showToast('Asset added successfully', 'success');
                 }
 
+                // If an employee was newly assigned (or changed) from this form,
+                // record it in the assignment history too.
                 if (employeeId && employeeId !== previousEmployeeId) {
+                    // Close out any previous active assignment for this asset
                     const assignments = await getAllRecords('assignments');
                     const activeAssignment = assignments.find(a => a.assetId === asset.id && a.status === 'Active');
                     if (activeAssignment) {
@@ -2113,7 +2059,10 @@
                         activeAssignment.unassignmentDate = new Date().toISOString().split('T')[0];
                         await updateRecord('assignments', activeAssignment);
                     }
-                    const employee = await getRecord('employees', employeeId);
+
+                    const empRows = await supaFetch('GET', 'employees', null, `?id=eq.${employeeId}`);
+                    const employee = empRows.length ? toCamel(empRows[0], 'employees') : null;
+
                     await addRecord('assignments', {
                         assetId: asset.id,
                         assetName: asset.name,
@@ -2265,7 +2214,8 @@
         };
 
         const loadEmployeeForEdit = async (employeeId) => {
-            const employee = await getRecord('employees', employeeId);
+            const rows = await supaFetch('GET', 'employees', null, `?id=eq.${employeeId}`);
+            const employee = rows.length ? toCamel(rows[0], 'employees') : null;
             if (employee) {
                 document.getElementById('employeeName').value = employee.name;
                 document.getElementById('employeeDepartment').value = employee.department || '';
@@ -2298,8 +2248,9 @@
 
             try {
                 if (currentEmployeeId) {
-                    const existing = await getRecord('employees', currentEmployeeId);
-                    if (existing && existing.email) employee.email = existing.email;
+                    const existingEmpRows = await supaFetch('GET', 'employees', null, `?id=eq.${currentEmployeeId}`);
+                    const existing = existingEmpRows.length ? toCamel(existingEmpRows[0], 'employees') : null;
+                    if (existing && existing.email) { employee.email = existing.email; }
                     employee.id = currentEmployeeId;
                     await updateRecord('employees', employee);
                     showToast('Employee updated successfully', 'success');
@@ -2432,9 +2383,13 @@
             }
 
             try {
-                const asset = await getRecord('assets', currentAssignAssetId);
-                const employee = await getRecord('employees', employeeId);
+                const assetRows = await supaFetch('GET', 'assets', null, `?id=eq.${currentAssignAssetId}`);
+                const asset = assetRows.length ? toCamel(assetRows[0], 'assets') : null;
+                const empRows2 = await supaFetch('GET', 'employees', null, `?id=eq.${employeeId}`);
+                const employee = empRows2.length ? toCamel(empRows2[0], 'employees') : null;
+                if (!asset || !employee) { showToast('Asset or employee not found', 'error'); return; }
 
+                // Update asset
                 asset.assignedEmployeeId = employeeId;
                 asset.status = 'Assigned';
                 asset.assignmentDate = assignDate;
@@ -2468,8 +2423,11 @@
             if (!await showConfirm('This asset will be unassigned from its current employee.', 'Unassign Asset?', 'Unassign')) return;
 
             try {
-                const asset = await getRecord('assets', assetId);
+                const unassignRows = await supaFetch('GET', 'assets', null, `?id=eq.${assetId}`);
+                const asset = unassignRows.length ? toCamel(unassignRows[0], 'assets') : null;
+                if (!asset) { showToast('Asset not found', 'error'); return; }
 
+                // Update asset
                 asset.assignedEmployeeId = null;
                 asset.status = 'Unassigned';
                 asset.unassignmentDate = new Date().toISOString().split('T')[0];
@@ -3275,9 +3233,7 @@
 
         const clearDatabase = async () => {
             if (!await showConfirm('This will delete ALL data including assets, employees, and assignments. This cannot be undone.', 'Clear Entire Database?', 'Clear Everything')) return;
-
             try {
-                // Delete in order to respect foreign key constraints
                 await clearStore('assignments');
                 await clearStore('assets');
                 await clearStore('employees');
@@ -3738,21 +3694,10 @@
 
         document.addEventListener('DOMContentLoaded', async () => {
 
-            // Wire up navigation FIRST so clicks always work
+            // Wire ALL clicks first — before any async calls
             document.querySelectorAll('.nav-item').forEach(item => {
-                item.addEventListener('click', () => {
-                    switchPage(item.dataset.page);
-                });
+                item.addEventListener('click', () => switchPage(item.dataset.page));
             });
-
-            // Load data in background — never block the UI
-            setTimeout(async () => {
-                try { await loadCategories(); } catch(e) { console.warn('categories:', e); }
-                try { await loadConditions(); } catch(e) { console.warn('conditions:', e); }
-                try { await loadEmployeeSelects(); } catch(e) { console.warn('employee selects:', e); }
-                try { await repairAssetEmployeeLinks(); } catch(e) { console.warn('repair skipped:', e); }
-                try { await loadDashboard(); } catch(e) { console.warn('dashboard:', e); }
-            }, 0);
 
             // Asset buttons
             document.getElementById('addAssetBtn').addEventListener('click', () => openAssetModal());
@@ -3949,45 +3894,59 @@
                     try {
                         const backup = JSON.parse(event.target.result);
 
-                        // Clear in FK-safe order
+                        // Clear in FK-safe order then re-insert
                         await clearStore('assignments');
                         await clearStore('assets');
                         await clearStore('employees');
                         await clearStore('categories');
                         await clearStore('conditions');
-                        {
 
-                        // Import data, preserving original ids (using put/update so
-                        // explicit ids are honored). Skip individual records that
-                        // fail so one bad row doesn't abort the entire import.
+                        // Insert employees first (assets reference them)
+                        let importedEmployees = 0, skippedEmployees = 0;
+                        const empIdMap = {}; // old id -> new id
+                        for (const emp of (backup.employees || [])) {
+                            try {
+                                const oldId = emp.id;
+                                const newId = await addRecord('employees', emp);
+                                if (oldId) empIdMap[oldId] = newId;
+                                importedEmployees++;
+                            } catch (err) {
+                                skippedEmployees++;
+                                console.warn('Skipped employee:', emp.name, err);
+                            }
+                        }
+
+                        // Insert assets, remapping assignedEmployeeId
                         let importedAssets = 0, skippedAssets = 0;
+                        const assetIdMap = {}; // old id -> new id
                         for (const asset of (backup.assets || [])) {
                             try {
-                                await updateRecord('assets', asset);
+                                const oldId = asset.id;
+                                if (asset.assignedEmployeeId && empIdMap[asset.assignedEmployeeId]) {
+                                    asset.assignedEmployeeId = empIdMap[asset.assignedEmployeeId];
+                                }
+                                const newId = await addRecord('assets', asset);
+                                if (oldId) assetIdMap[oldId] = newId;
                                 importedAssets++;
                             } catch (err) {
                                 skippedAssets++;
                                 console.warn('Skipped asset:', asset.tag, err);
                             }
                         }
-                        let importedEmployees = 0, skippedEmployees = 0;
-                        for (const emp of (backup.employees || [])) {
+
+                        // Insert assignments, remapping assetId and employeeId
+                        for (const assign of (backup.assignments || [])) {
                             try {
-                                await updateRecord('employees', emp);
-                                importedEmployees++;
-                            } catch (err) {
-                                skippedEmployees++;
-                                console.warn('Skipped employee:', emp.email, err);
-                            }
+                                if (assign.assetId && assetIdMap[assign.assetId]) assign.assetId = assetIdMap[assign.assetId];
+                                if (assign.employeeId && empIdMap[assign.employeeId]) assign.employeeId = empIdMap[assign.employeeId];
+                                await addRecord('assignments', assign);
+                            } catch (err) { console.warn('Skipped assignment:', err); }
                         }
                         for (const cat of (backup.categories || [])) {
-                            try { await updateRecord('categories', cat); } catch (err) { /* ignore */ }
+                            try { await addRecord('categories', cat); } catch (err) { }
                         }
                         for (const cond of (backup.conditions || [])) {
-                            try { await updateRecord('conditions', cond); } catch (err) { /* ignore */ }
-                        }
-                        for (const assign of (backup.assignments || [])) {
-                            try { await updateRecord('assignments', assign); } catch (err) { /* ignore */ }
+                            try { await addRecord('conditions', cond); } catch (err) { }
                         }
 
                         // Just in case some references still don't line up
@@ -4079,6 +4038,15 @@
                 const isLight = document.body.classList.contains('light-theme');
                 showToast(isLight ? 'Switched to light theme' : 'Switched to dark theme', 'info');
             });
+
+            // Load data after all clicks are wired up
+            setTimeout(async () => {
+                try { await loadCategories(); } catch(e) { console.warn(e); }
+                try { await loadConditions(); } catch(e) { console.warn(e); }
+                try { await loadEmployeeSelects(); } catch(e) { console.warn(e); }
+                try { await repairAssetEmployeeLinks(); } catch(e) { console.warn(e); }
+                try { loadDashboard(); } catch(e) { console.warn(e); }
+            }, 0);
         });
 
         // Utility function
