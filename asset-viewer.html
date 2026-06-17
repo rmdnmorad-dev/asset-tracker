@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Asset Tracker — Live View</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        :root {
+            --primary: #06B6D4; --primary-dark: #0891B2;
+            --bg: #0F172A; --bg-card: #1E293B;
+            --border: #334155; --text: #F1F5F9; --text2: #CBD5E1;
+            --success: #10B981; --danger: #EF4444; --warning: #F59E0B;
+        }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }
+
+        /* HEADER */
+        .top-bar { background:var(--bg-card); border-bottom:1px solid var(--border); padding:1rem 2rem; display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
+        .logo { display:flex; align-items:center; gap:10px; font-size:20px; font-weight:700; color:var(--text); }
+        .logo i { color:var(--primary); }
+        .live-badge { background:rgba(16,185,129,.15); color:var(--success); border:1px solid var(--success); border-radius:20px; padding:.25rem .75rem; font-size:12px; font-weight:600; display:flex; align-items:center; gap:6px; }
+        .live-dot { width:8px; height:8px; border-radius:50%; background:var(--success); animation:pulse 2s infinite; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+        .last-updated { font-size:12px; color:var(--text2); }
+
+        /* SEARCH */
+        .search-wrap { padding:1.5rem 2rem .5rem; }
+        .search-box { position:relative; max-width:500px; }
+        .search-box input { width:100%; background:var(--bg-card); border:1px solid var(--border); color:var(--text); padding:.75rem 1rem .75rem 2.5rem; border-radius:8px; font-size:14px; }
+        .search-box input:focus { outline:none; border-color:var(--primary); }
+        .search-box i { position:absolute; left:1rem; top:50%; transform:translateY(-50%); color:var(--text2); }
+
+        /* TABS */
+        .tabs-bar { display:flex; gap:0; border-bottom:2px solid var(--border); padding:0 2rem; margin-bottom:0; }
+        .tab-btn { padding:.75rem 1.25rem; color:var(--text2); cursor:pointer; border:none; background:none; font-weight:600; font-size:14px; border-bottom:3px solid transparent; margin-bottom:-2px; transition:all .2s; }
+        .tab-btn:hover { color:var(--primary); }
+        .tab-btn.active { color:var(--primary); border-bottom-color:var(--primary); }
+
+        /* CONTENT */
+        .content { padding:1.5rem 2rem; }
+        .tab-panel { display:none; }
+        .tab-panel.active { display:block; }
+
+        /* KPI */
+        .kpi-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:1rem; margin-bottom:1.5rem; }
+        .kpi-card { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:1.25rem; }
+        .kpi-label { font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--text2); }
+        .kpi-value { font-size:32px; font-weight:700; margin:.25rem 0; }
+
+        /* CHARTS */
+        .charts-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(360px,1fr)); gap:1.5rem; margin-top:1rem; }
+        .chart-card { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:1.5rem; }
+        .chart-title { font-size:15px; font-weight:700; margin-bottom:1rem; }
+        .chart-wrap { position:relative; height:260px; }
+
+        /* TABLE */
+        .table-wrap { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+        table { width:100%; border-collapse:collapse; }
+        thead th { background:rgba(6,182,212,.08); padding:.9rem 1rem; text-align:left; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--text2); border-bottom:1px solid var(--border); white-space:nowrap; cursor:pointer; user-select:none; }
+        thead th:hover { color:var(--primary); }
+        thead th::after { content:' ⇅'; opacity:.4; font-size:10px; }
+        thead th.sort-asc::after { content:' ↑'; opacity:1; color:var(--primary); }
+        thead th.sort-desc::after { content:' ↓'; opacity:1; color:var(--primary); }
+        tbody td { padding:.85rem 1rem; border-bottom:1px solid var(--border); font-size:14px; color:var(--text); }
+        tbody tr:last-child td { border-bottom:none; }
+        tbody tr:hover { background:rgba(6,182,212,.04); }
+        code { background:rgba(6,182,212,.1); color:var(--primary); padding:.2rem .4rem; border-radius:4px; font-size:13px; }
+
+        /* BADGES */
+        .badge { display:inline-block; padding:.25rem .6rem; border-radius:5px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+        .badge-success { background:rgba(16,185,129,.15); color:var(--success); }
+        .badge-danger  { background:rgba(239,68,68,.15);  color:var(--danger); }
+        .badge-warning { background:rgba(245,158,11,.15); color:var(--warning); }
+        .badge-info    { background:rgba(6,182,212,.15);  color:var(--primary); }
+
+        /* EMPTY */
+        .empty { text-align:center; padding:3rem; color:var(--text2); }
+        .empty i { font-size:48px; margin-bottom:1rem; opacity:.4; display:block; }
+
+        /* SPINNER */
+        .spinner-wrap { display:flex; align-items:center; justify-content:center; padding:3rem; gap:1rem; color:var(--text2); }
+        .spinner { width:24px; height:24px; border:3px solid var(--border); border-top-color:var(--primary); border-radius:50%; animation:spin .8s linear infinite; }
+        @keyframes spin { to { transform:rotate(360deg); } }
+
+        /* HISTORY */
+        .history-search { position:relative; margin-bottom:1.5rem; max-width:600px; }
+        .history-search input { width:100%; background:var(--bg-card); border:1px solid var(--border); color:var(--text); padding:.75rem 1rem .75rem 2.5rem; border-radius:8px; }
+        .history-search i { position:absolute; left:1rem; top:50%; transform:translateY(-50%); color:var(--text2); }
+        .history-card { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:1.5rem; margin-bottom:1rem; }
+        .history-card h4 { font-size:15px; font-weight:700; margin-bottom:1rem; color:var(--primary); }
+        .timeline { border-left:2px solid var(--border); padding-left:1.5rem; }
+        .timeline-item { position:relative; margin-bottom:1.25rem; }
+        .timeline-item::before { content:''; position:absolute; left:-1.65rem; top:4px; width:10px; height:10px; border-radius:50%; background:var(--primary); border:2px solid var(--bg); }
+        .timeline-item.inactive::before { background:var(--text2); }
+        .tl-name { font-weight:600; font-size:14px; }
+        .tl-dates { font-size:12px; color:var(--text2); margin-top:.2rem; }
+
+        @media(max-width:768px) {
+            .top-bar { flex-direction:column; align-items:flex-start; }
+            .content { padding:1rem; }
+            .charts-grid { grid-template-columns:1fr; }
+            .kpi-grid { grid-template-columns:1fr 1fr; }
+        }
+
+        ::-webkit-scrollbar { width:6px; height:6px; }
+        ::-webkit-scrollbar-track { background:var(--bg); }
+        ::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+    </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="top-bar">
+    <div class="logo"><i class="fas fa-cubes"></i> Asset Tracker</div>
+    <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
+        <span class="live-badge"><span class="live-dot"></span> Live View</span>
+        <span class="last-updated" id="lastUpdated">Loading…</span>
+    </div>
+</div>
+
+<!-- GLOBAL SEARCH -->
+<div class="search-wrap">
+    <div class="search-box">
+        <i class="fas fa-search"></i>
+        <input type="text" id="globalSearch" placeholder="Search assets, employees…">
+    </div>
+</div>
+
+<!-- TABS -->
+<div class="tabs-bar">
+    <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+    <button class="tab-btn" data-tab="assets">Assets</button>
+    <button class="tab-btn" data-tab="employees">Employees</button>
+    <button class="tab-btn" data-tab="assignments">Assignments</button>
+    <button class="tab-btn" data-tab="history">History</button>
+</div>
+
+<div class="content">
+
+    <!-- DASHBOARD -->
+    <div class="tab-panel active" id="tab-dashboard">
+        <div class="kpi-grid" id="kpiGrid"></div>
+        <div class="charts-grid" id="chartsGrid"></div>
+    </div>
+
+    <!-- ASSETS -->
+    <div class="tab-panel" id="tab-assets">
+        <div style="display:flex;gap:.75rem;flex-wrap:wrap;margin-bottom:1rem;">
+            <select id="catFilter" class="form-select" style="width:160px;background:var(--bg-card);color:var(--text);border-color:var(--border);">
+                <option value="">All Categories</option>
+            </select>
+            <select id="statusFilter" class="form-select" style="width:140px;background:var(--bg-card);color:var(--text);border-color:var(--border);">
+                <option value="">All Status</option>
+                <option value="Assigned">Assigned</option>
+                <option value="Unassigned">Unassigned</option>
+            </select>
+        </div>
+        <div class="table-wrap">
+            <table id="assetsTable">
+                <thead><tr>
+                    <th data-col="tag">Tag</th>
+                    <th data-col="category">Category</th>
+                    <th data-col="condition">Condition</th>
+                    <th data-col="location">Location</th>
+                    <th data-col="assignedTo">Assigned To</th>
+                    <th data-col="assignmentDate">Assignment Date</th>
+                    <th data-col="status">Status</th>
+                </tr></thead>
+                <tbody id="assetsBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- EMPLOYEES -->
+    <div class="tab-panel" id="tab-employees">
+        <div class="table-wrap">
+            <table id="employeesTable">
+                <thead><tr>
+                    <th data-col="name">Name</th>
+                    <th data-col="department">Department</th>
+                    <th data-col="jobTitle">Job Title</th>
+                    <th data-col="phone">Phone</th>
+                    <th data-col="location">Location</th>
+                    <th data-col="status">Status</th>
+                </tr></thead>
+                <tbody id="employeesBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ASSIGNMENTS -->
+    <div class="tab-panel" id="tab-assignments">
+        <div class="table-wrap">
+            <table id="assignmentsTable">
+                <thead><tr>
+                    <th data-col="assetName">Asset</th>
+                    <th data-col="employeeName">Employee</th>
+                    <th data-col="assignmentDate">Assigned Date</th>
+                    <th data-col="unassignmentDate">Returned Date</th>
+                    <th data-col="status">Status</th>
+                </tr></thead>
+                <tbody id="assignmentsBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- HISTORY -->
+    <div class="tab-panel" id="tab-history">
+        <div class="history-search">
+            <i class="fas fa-search"></i>
+            <input type="text" id="historySearch" placeholder="Search employee name or asset tag…">
+        </div>
+        <div id="historyResults">
+            <div class="empty"><i class="fas fa-history"></i><p>Search above to see full assignment history</p></div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+// ── SUPABASE ──────────────────────────────────────────────────
+const SUPA_URL = 'https://edwkmiiguxzrcjsdhott.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVkd2ttaWlndXh6cmNqc2Rob3R0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2MDI3OTYsImV4cCI6MjA5NzE3ODc5Nn0.5Vksy5uIKFNs8UrQatTtRm3OM_ry1cakZJ4ac0-1DQw';
+
+const supaGet = async (table, params = '') => {
+    try {
+        const res = await fetch(`${SUPA_URL}/rest/v1/${table}${params}`, {
+            headers: { 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}` }
+        });
+        if (!res.ok) { console.error('Supabase error', table, await res.text()); return []; }
+        return res.json();
+    } catch(e) {
+        console.error('Network error', table, e);
+        return [];
+    }
+};
+
+// ── DATA CACHE ────────────────────────────────────────────────
+let _assets = [], _employees = [], _assignments = [], _empMap = {}, _activeMap = {};
+
+const loadAll = async () => {
+    [_assets, _employees, _assignments] = await Promise.all([
+        supaGet('assets',      '?order=id.asc&limit=10000'),
+        supaGet('employees',   '?order=id.asc&limit=10000'),
+        supaGet('assignments', '?order=id.asc&limit=10000')
+    ]);
+    // camelCase FK fields
+    _assets      = _assets.map(a => ({ ...a, assignedEmployeeId: a.assigned_employee_id, assignmentDate: a.assignment_date, purchaseDate: a.purchase_date }));
+    _employees   = _employees.map(e => ({ ...e, jobTitle: e.job_title, createdDate: e.created_date }));
+    _assignments = _assignments.map(a => ({ ...a, assetId: a.asset_id, assetName: a.asset_name, employeeId: a.employee_id, employeeName: a.employee_name, assignmentDate: a.assignment_date, unassignmentDate: a.unassignment_date }));
+
+    _empMap = {};
+    _employees.forEach(e => { _empMap[e.id] = e; });
+    _activeMap = {};
+    _assignments.forEach(a => { if (a.status === 'Active') _activeMap[a.assetId] = a; });
+
+    document.getElementById('lastUpdated').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+    renderAll();
+};
+
+const resolveAssignee = (asset) => {
+    if (asset.assignedEmployeeId && _empMap[asset.assignedEmployeeId]) return _empMap[asset.assignedEmployeeId].name;
+    const aa = _activeMap[asset.id];
+    if (aa) return aa.employeeName;
+    return null;
+};
+
+const fmtDate = (d) => {
+    if (!d || d === 'NA') return '-';
+    const m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return `${parseInt(m[2])}/${parseInt(m[3])}/${m[1]}`;
+    return d;
+};
+
+// ── SEARCH FILTER ─────────────────────────────────────────────
+let _searchQ = '';
+document.getElementById('globalSearch').addEventListener('input', e => {
+    _searchQ = e.target.value.toLowerCase().trim();
+    renderAssets(); renderEmployees(); renderAssignments();
+});
+
+// ── TABS ──────────────────────────────────────────────────────
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    });
+});
+
+// ── TABLE SORT ────────────────────────────────────────────────
+const _sortState = {};
+const attachSort = (tableId, renderFn) => {
+    document.querySelectorAll(`#${tableId} thead th`).forEach(th => {
+        th.addEventListener('click', () => {
+            const col = th.dataset.col;
+            const prev = _sortState[tableId] || { col: '', dir: 'asc' };
+            const dir = prev.col === col && prev.dir === 'asc' ? 'desc' : 'asc';
+            _sortState[tableId] = { col, dir };
+            document.querySelectorAll(`#${tableId} thead th`).forEach(h => h.classList.remove('sort-asc','sort-desc'));
+            th.classList.add(dir === 'asc' ? 'sort-asc' : 'sort-desc');
+            renderFn();
+        });
+    });
+};
+
+const sortData = (data, tableId, colFn) => {
+    const s = _sortState[tableId];
+    if (!s || !s.col) return data;
+    return [...data].sort((a, b) => {
+        const av = colFn(a, s.col) || '';
+        const bv = colFn(b, s.col) || '';
+        const an = parseFloat(av), bn = parseFloat(bv);
+        const cmp = (!isNaN(an) && !isNaN(bn)) ? an - bn : String(av).localeCompare(String(bv), undefined, { sensitivity: 'base' });
+        return s.dir === 'asc' ? cmp : -cmp;
+    });
+};
+
+// ── DASHBOARD ─────────────────────────────────────────────────
+let _charts = {};
+const renderDashboard = () => {
+    const assigned   = _assets.filter(a => a.status === 'Assigned').length;
+    const unassigned = _assets.filter(a => a.status === 'Unassigned').length;
+    const activeEmps = _employees.filter(e => e.status === 'Active').length;
+
+    const kpis = [
+        { icon:'fa-cubes',   label:'Total Assets',     value: _assets.length,   color:'#06B6D4' },
+        { icon:'fa-link',    label:'Assigned',          value: assigned,          color:'#10B981' },
+        { icon:'fa-unlink',  label:'Unassigned',        value: unassigned,        color:'#EF4444' },
+        { icon:'fa-users',   label:'Active Employees',  value: activeEmps,        color:'#F59E0B' },
+    ];
+
+    document.getElementById('kpiGrid').innerHTML = kpis.map(k => `
+        <div class="kpi-card">
+            <div class="kpi-label"><i class="fas ${k.icon}" style="color:${k.color};margin-right:6px;"></i>${k.label}</div>
+            <div class="kpi-value" style="color:${k.color}">${k.value}</div>
+        </div>`).join('');
+
+    // Chart helpers
+    const makeChart = (id, cfg) => {
+        if (_charts[id]) _charts[id].destroy();
+        const ctx = document.getElementById(id);
+        if (ctx) _charts[id] = new Chart(ctx, cfg);
+    };
+
+    const legendBottom = {
+        position: 'bottom',
+        labels: { color: '#F1F5F9', padding: 12 }
+    };
+
+    document.getElementById('chartsGrid').innerHTML = `
+        <div class="chart-card"><div class="chart-title">Assigned vs Unassigned</div><div class="chart-wrap"><canvas id="ch1"></canvas></div></div>
+        <div class="chart-card"><div class="chart-title">Assets by Category</div><div class="chart-wrap"><canvas id="ch2"></canvas></div></div>
+        <div class="chart-card"><div class="chart-title">Assets by Condition</div><div class="chart-wrap"><canvas id="ch3"></canvas></div></div>
+    `;
+
+    setTimeout(() => {
+        const total12 = assigned + unassigned;
+        makeChart('ch1', {
+            type: 'doughnut',
+            data: { labels: ['Assigned','Unassigned'], datasets: [{ data: [assigned, unassigned], backgroundColor: ['#10B981','#EF4444'], borderWidth: 2 }] },
+            options: { responsive:true, maintainAspectRatio:false, plugins: {
+                tooltip: { callbacks: { label: c => ` ${c.label}: ${c.parsed} (${Math.round(c.parsed/total12*100)}%)` } },
+                legend: { ...legendBottom, labels: { ...legendBottom.labels, generateLabels: ch => ch.data.labels.map((l,i) => ({ text: `${l}: ${ch.data.datasets[0].data[i]}`, fillStyle: ch.data.datasets[0].backgroundColor[i], index: i })) } }
+            }}
+        });
+
+        const catData = {};
+        _assets.forEach(a => { catData[a.category] = (catData[a.category]||0)+1; });
+        makeChart('ch2', {
+            type: 'bar',
+            data: { labels: Object.keys(catData), datasets: [{ label:'Count', data: Object.values(catData), backgroundColor: '#06B6D4', borderWidth:1 }] },
+            options: { responsive:true, maintainAspectRatio:false, indexAxis:'y',
+                plugins: { tooltip: { callbacks: { label: c => ` Count: ${c.parsed.x}` } }, legend: legendBottom },
+                scales: { x: { ticks:{color:'#CBD5E1'}, grid:{color:'rgba(203,213,225,.1)'} }, y: { ticks:{color:'#CBD5E1'}, grid:{color:'rgba(203,213,225,.1)'} } }
+            }
+        });
+
+        const condData = {};
+        _assets.forEach(a => { condData[a.condition||'NA'] = (condData[a.condition||'NA']||0)+1; });
+        const condColors = { Good:'#10B981', Bad:'#EF4444', Poor:'#F59E0B', NA:'#64748B' };
+        const condLabels = Object.keys(condData), condVals = Object.values(condData), condTotal = condVals.reduce((s,v)=>s+v,0);
+        makeChart('ch3', {
+            type: 'pie',
+            data: { labels: condLabels, datasets: [{ data: condVals, backgroundColor: condLabels.map(l=>condColors[l]||'#06B6D4'), borderWidth:2 }] },
+            options: { responsive:true, maintainAspectRatio:false, plugins: {
+                tooltip: { callbacks: { label: c => ` ${c.label}: ${c.parsed} (${Math.round(c.parsed/condTotal*100)}%)` } },
+                legend: { ...legendBottom, labels: { ...legendBottom.labels, generateLabels: ch => ch.data.labels.map((l,i) => ({ text: `${l}: ${ch.data.datasets[0].data[i]}`, fillStyle: ch.data.datasets[0].backgroundColor[i], index: i })) } }
+            }}
+        });
+    }, 100);
+};
+
+// ── ASSETS TABLE ──────────────────────────────────────────────
+const catFilterEl    = document.getElementById('catFilter');
+const statusFilterEl = document.getElementById('statusFilter');
+[catFilterEl, statusFilterEl].forEach(el => el.addEventListener('change', renderAssets));
+
+const renderAssets = () => {
+    const catF    = catFilterEl.value;
+    const statusF = statusFilterEl.value;
+
+    let data = _assets.filter(a => {
+        if (catF    && a.category !== catF)    return false;
+        if (statusF && a.status   !== statusF) return false;
+        if (_searchQ) {
+            const haystack = [a.tag, a.category, a.condition, a.location, a.status, resolveAssignee(a)].join(' ').toLowerCase();
+            if (!haystack.includes(_searchQ)) return false;
+        }
+        return true;
+    });
+
+    data = sortData(data, 'assetsTable', (a, col) => {
+        if (col === 'assignedTo') return resolveAssignee(a) || '';
+        return a[col] || '';
+    });
+
+    const tbody = document.getElementById('assetsBody');
+    if (!data.length) { tbody.innerHTML = `<tr><td colspan="7" class="empty" style="padding:2rem;text-align:center;color:var(--text2);">No assets found</td></tr>`; return; }
+    tbody.innerHTML = data.map(a => {
+        const assignee = resolveAssignee(a) || '-';
+        const badge = a.status === 'Assigned'
+            ? '<span class="badge badge-success">Assigned</span>'
+            : '<span class="badge badge-danger">Unassigned</span>';
+        return `<tr>
+            <td><code>${a.tag}</code></td>
+            <td>${a.category||'-'}</td>
+            <td>${a.condition||'-'}</td>
+            <td>${a.location||'-'}</td>
+            <td>${assignee}</td>
+            <td>${a.status==='Assigned' ? fmtDate(a.assignmentDate) : '-'}</td>
+            <td>${badge}</td>
+        </tr>`;
+    }).join('');
+};
+
+// ── EMPLOYEES TABLE ───────────────────────────────────────────
+const renderEmployees = () => {
+    let data = _employees.filter(e => {
+        if (!_searchQ) return true;
+        return [e.name, e.department, e.job_title, e.location, e.status].join(' ').toLowerCase().includes(_searchQ);
+    });
+    data = sortData(data, 'employeesTable', (e, col) => e[col] || e[col === 'jobTitle' ? 'job_title' : col] || '');
+
+    const tbody = document.getElementById('employeesBody');
+    if (!data.length) { tbody.innerHTML = `<tr><td colspan="6" style="padding:2rem;text-align:center;color:var(--text2);">No employees found</td></tr>`; return; }
+    tbody.innerHTML = data.map(e => {
+        const badge = e.status === 'Active'
+            ? '<span class="badge badge-success">Active</span>'
+            : '<span class="badge badge-danger">Inactive</span>';
+        return `<tr>
+            <td>${e.name}</td>
+            <td>${e.department||'-'}</td>
+            <td>${e.job_title||'-'}</td>
+            <td>${e.phone||'-'}</td>
+            <td>${e.location||'-'}</td>
+            <td>${badge}</td>
+        </tr>`;
+    }).join('');
+};
+
+// ── ASSIGNMENTS TABLE ─────────────────────────────────────────
+const renderAssignments = () => {
+    let data = _assignments.filter(a => {
+        if (!_searchQ) return true;
+        return [a.assetName, a.employeeName, a.status].join(' ').toLowerCase().includes(_searchQ);
+    });
+    data = sortData(data, 'assignmentsTable', (a, col) => a[col] || '');
+
+    const tbody = document.getElementById('assignmentsBody');
+    if (!data.length) { tbody.innerHTML = `<tr><td colspan="5" style="padding:2rem;text-align:center;color:var(--text2);">No assignments found</td></tr>`; return; }
+    tbody.innerHTML = data.map(a => {
+        const badge = a.status === 'Active'
+            ? '<span class="badge badge-success">Active</span>'
+            : '<span class="badge badge-danger">Inactive</span>';
+        return `<tr>
+            <td><code>${a.assetName||'-'}</code></td>
+            <td>${a.employeeName||'-'}</td>
+            <td>${fmtDate(a.assignmentDate)}</td>
+            <td>${a.unassignmentDate ? fmtDate(a.unassignmentDate) : '-'}</td>
+            <td>${badge}</td>
+        </tr>`;
+    }).join('');
+};
+
+// ── HISTORY ───────────────────────────────────────────────────
+document.getElementById('historySearch').addEventListener('input', renderHistory);
+
+const renderHistory = () => {
+    const q = document.getElementById('historySearch').value.toLowerCase().trim();
+    const container = document.getElementById('historyResults');
+    if (!q) {
+        container.innerHTML = `<div class="empty"><i class="fas fa-history"></i><p>Search above to see full assignment history</p></div>`;
+        return;
+    }
+
+    // Find matching employees
+    const matchEmp = _employees.filter(e => e.name.toLowerCase().includes(q));
+    // Find matching assets
+    const matchAsset = _assets.filter(a => a.tag.toLowerCase().includes(q) || (a.name||'').toLowerCase().includes(q));
+
+    let html = '';
+
+    matchEmp.forEach(emp => {
+        const history = _assignments
+            .filter(a => a.employeeId === emp.id)
+            .sort((a, b) => new Date(b.assignmentDate||0) - new Date(a.assignmentDate||0));
+        if (!history.length) return;
+        html += `<div class="history-card">
+            <h4><i class="fas fa-user" style="margin-right:8px;"></i>${emp.name} — Assignment History</h4>
+            <div class="timeline">
+                ${history.map(h => `
+                    <div class="timeline-item ${h.status === 'Inactive' ? 'inactive' : ''}">
+                        <div class="tl-name"><code>${h.assetName}</code> <span class="badge ${h.status==='Active'?'badge-success':'badge-danger'}" style="font-size:10px;">${h.status}</span></div>
+                        <div class="tl-dates">Assigned: ${fmtDate(h.assignmentDate)} ${h.unassignmentDate ? '→ Returned: '+fmtDate(h.unassignmentDate) : '(current)'}</div>
+                    </div>`).join('')}
+            </div>
+        </div>`;
+    });
+
+    matchAsset.forEach(asset => {
+        const history = _assignments
+            .filter(a => a.assetId === asset.id)
+            .sort((a, b) => new Date(b.assignmentDate||0) - new Date(a.assignmentDate||0));
+        if (!history.length) return;
+        html += `<div class="history-card">
+            <h4><i class="fas fa-box" style="margin-right:8px;"></i><code>${asset.tag}</code> — Assignment History</h4>
+            <div class="timeline">
+                ${history.map(h => `
+                    <div class="timeline-item ${h.status === 'Inactive' ? 'inactive' : ''}">
+                        <div class="tl-name">${h.employeeName||'Unknown'} <span class="badge ${h.status==='Active'?'badge-success':'badge-danger'}" style="font-size:10px;">${h.status}</span></div>
+                        <div class="tl-dates">Assigned: ${fmtDate(h.assignmentDate)} ${h.unassignmentDate ? '→ Returned: '+fmtDate(h.unassignmentDate) : '(current)'}</div>
+                    </div>`).join('')}
+            </div>
+        </div>`;
+    });
+
+    container.innerHTML = html || `<div class="empty"><i class="fas fa-search"></i><p>No results for "<strong>${q}</strong>"</p></div>`;
+};
+
+// ── POPULATE CATEGORY FILTER ──────────────────────────────────
+const populateCategoryFilter = () => {
+    const cats = [...new Set(_assets.map(a => a.category).filter(Boolean))].sort();
+    catFilterEl.innerHTML = '<option value="">All Categories</option>' + cats.map(c => `<option value="${c}">${c}</option>`).join('');
+};
+
+// ── RENDER ALL ────────────────────────────────────────────────
+const renderAll = () => {
+    renderDashboard();
+    populateCategoryFilter();
+    renderAssets();
+    renderEmployees();
+    renderAssignments();
+    renderHistory();
+};
+
+// ── ATTACH SORT ───────────────────────────────────────────────
+attachSort('assetsTable',      renderAssets);
+attachSort('employeesTable',   renderEmployees);
+attachSort('assignmentsTable', renderAssignments);
+
+// ── INIT + AUTO REFRESH every 30 seconds ─────────────────────
+loadAll();
+setInterval(loadAll, 30000);
+</script>
+</body>
+</html>
