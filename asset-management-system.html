@@ -1647,8 +1647,17 @@
         const initDB        = async () => true;
 
         const getAllRecords  = async (table) => {
-            const rows = await supaFetch('GET', table, null, '?order=id.asc&limit=10000');
-            return Array.isArray(rows) ? rows.map(r => toCamel(r, table)) : [];
+            // Supabase caps at 1000 by default. Fetch in pages of 1000 until exhausted.
+            let all = [], from = 0, pageSize = 1000;
+            while (true) {
+                const rows = await supaFetch('GET', table, null,
+                    `?order=id.asc&limit=${pageSize}&offset=${from}`);
+                if (!Array.isArray(rows) || rows.length === 0) break;
+                all = all.concat(rows.map(r => toCamel(r, table)));
+                if (rows.length < pageSize) break;
+                from += pageSize;
+            }
+            return all;
         };
 
         const addRecord     = async (table, data) => {

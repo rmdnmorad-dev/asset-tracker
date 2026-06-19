@@ -238,14 +238,27 @@ const supaGet = async (table, params = '') => {
     }
 };
 
+// Fetch all rows bypassing Supabase 1000-row default limit
+const supaGetAll = async (table) => {
+    let all = [], from = 0, pageSize = 1000;
+    while (true) {
+        const rows = await supaGet(table, `?order=id.asc&limit=${pageSize}&offset=${from}`);
+        if (!Array.isArray(rows) || rows.length === 0) break;
+        all = all.concat(rows);
+        if (rows.length < pageSize) break;
+        from += pageSize;
+    }
+    return all;
+};
+
 // ── DATA CACHE ────────────────────────────────────────────────
 let _assets = [], _employees = [], _assignments = [], _empMap = {}, _activeMap = {};
 
 const loadAll = async () => {
     [_assets, _employees, _assignments] = await Promise.all([
-        supaGet('assets',      '?order=id.asc&limit=10000'),
-        supaGet('employees',   '?order=id.asc&limit=10000'),
-        supaGet('assignments', '?order=id.asc&limit=10000')
+        supaGetAll('assets'),
+        supaGetAll('employees'),
+        supaGetAll('assignments')
     ]);
     // camelCase FK fields
     _assets      = _assets.map(a => ({ ...a, assignedEmployeeId: a.assigned_employee_id, assignmentDate: a.assignment_date, purchaseDate: a.purchase_date }));
