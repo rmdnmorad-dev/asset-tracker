@@ -1601,7 +1601,7 @@
 
         const FIELD_TO_SQL = {
             assets:      { assignedEmployeeId:'assigned_employee_id', assignmentDate:'assignment_date', purchaseDate:'purchase_date', lastUpdated:'last_updated', createdDate:'created_date' },
-            employees:   { jobTitle:'job_title', createdDate:'created_date' },
+            employees:   { jobTitle:'job_title', createdDate:'created_date', lastUpdated:'last_updated' },
             assignments: { assetId:'asset_id', assetName:'asset_name', employeeId:'employee_id', employeeName:'employee_name', assignmentDate:'assignment_date', unassignmentDate:'unassignment_date', createdDate:'created_date' },
             categories:  { createdDate:'created_date' },
             conditions:  { createdDate:'created_date' }
@@ -1613,6 +1613,10 @@
                 if (js in o) { o[sql] = o[js]; delete o[js]; }
             }
             delete o.id; delete o.created_date; delete o.last_updated;
+            // Clean 'NA' strings to null for date/id fields
+            for (const key of ['assignment_date','purchase_date','assigned_employee_id','unassignment_date']) {
+                if (o[key] === 'NA' || o[key] === '') o[key] = null;
+            }
             return o;
         };
 
@@ -1666,9 +1670,26 @@
             return row ? row.id : null;
         };
 
+        // Batch insert up to 500 records at once — much faster than one-by-one
+        const batchInsert = async (table, records) => {
+            const BATCH = 500;
+            const results = [];
+            for (let i = 0; i < records.length; i += BATCH) {
+                const batch = records.slice(i, i + BATCH).map(r => toSnake({ ...r }, table));
+                const rows  = await supaFetch('POST', table, batch);
+                if (Array.isArray(rows)) results.push(...rows);
+            }
+            return results;
+        };
+
         const updateRecord  = async (table, data) => {
-            await supaFetch('PATCH', table, toSnake({ ...data }, table), `?id=eq.${data.id}`);
-            return data.id;
+            const id = data.id;
+            if (!id) { console.error('updateRecord: no id', table, data); return null; }
+            const body = toSnake({ ...data }, table);
+            // Remove any undefined/null keys that could override good data
+            Object.keys(body).forEach(k => { if (body[k] === undefined) delete body[k]; });
+            await supaFetch('PATCH', table, body, `?id=eq.${id}`);
+            return id;
         };
 
         const deleteRecord  = async (table, id) => {
@@ -2238,13 +2259,11 @@
             const employee = {
                 name,
                 email: name.toLowerCase().replace(/\s+/g, '.') + '@company.com',
-                department: document.getElementById('employeeDepartment').value,
-                jobTitle: document.getElementById('employeeJobTitle').value,
-                phone: document.getElementById('employeePhone').value,
-                location: document.getElementById('employeeLocation').value,
-                status: document.getElementById('employeeStatus').value,
-                createdDate: new Date(),
-                lastUpdated: new Date()
+                department: document.getElementById('employeeDepartment').value || 'NA',
+                jobTitle: document.getElementById('employeeJobTitle').value || 'NA',
+                phone: document.getElementById('employeePhone').value || 'NA',
+                location: document.getElementById('employeeLocation').value || 'NA',
+                status: document.getElementById('employeeStatus').value || 'Active',
             };
 
             try {
@@ -3920,46 +3939,56 @@
                         await clearStore('categories');
                         await clearStore('conditions');
 
-                        // Insert employees first, remap IDs
+                        // ── 1. Insert employees, build old→new ID map ──────────
                         let importedEmployees = 0, skippedEmployees = 0;
                         const empIdMap = {};
-                        for (const emp of (backup.employees || [])) {
+                        const empList  = backup.employees || [];
+                        // Insert one-by-one to capture returned IDs for remapping
+                        for (const emp of empList) {
                             try {
                                 const oldId = emp.id;
                                 const newId = await addRecord('employees', emp);
-                                if (oldId) empIdMap[oldId] = newId;
+                                if (oldId && newId) empIdMap[oldId] = newId;
                                 importedEmployees++;
-                            } catch (err) { skippedEmployees++; console.warn('Skipped emp:', emp.name, err); }
+                            } catch(err) { skippedEmployees++; console.warn('Skipped emp:', emp.name, err); }
                         }
 
-                        // Insert assets, remap assignedEmployeeId
+                        // ── 2. Insert assets, remap assignedEmployeeId ─────────
                         let importedAssets = 0, skippedAssets = 0;
                         const assetIdMap = {};
-                        for (const asset of (backup.assets || [])) {
+                        const assetList  = backup.assets || [];
+                        for (const asset of assetList) {
                             try {
                                 const oldId = asset.id;
-                                if (asset.assignedEmployeeId && empIdMap[asset.assignedEmployeeId])
-                                    asset.assignedEmployeeId = empIdMap[asset.assignedEmployeeId];
-                                const newId = await addRecord('assets', asset);
-                                if (oldId) assetIdMap[oldId] = newId;
+                                const clone = { ...asset };
+                                // Clean NA strings
+                                if (clone.assignmentDate === 'NA') clone.assignmentDate = null;
+                                if (clone.purchaseDate   === 'NA') clone.purchaseDate   = null;
+                                // Remap employee reference
+                                if (clone.assignedEmployeeId && empIdMap[clone.assignedEmployeeId])
+                                    clone.assignedEmployeeId = empIdMap[clone.assignedEmployeeId];
+                                else if (clone.assignedEmployeeId && !empIdMap[clone.assignedEmployeeId])
+                                    clone.assignedEmployeeId = null; // orphaned ref — clear it
+                                const newId = await addRecord('assets', clone);
+                                if (oldId && newId) assetIdMap[oldId] = newId;
                                 importedAssets++;
-                            } catch (err) { skippedAssets++; console.warn('Skipped asset:', asset.tag, err); }
+                            } catch(err) { skippedAssets++; console.warn('Skipped asset:', asset.tag, err); }
                         }
 
-                        // Insert assignments, remap IDs
-                        for (const assign of (backup.assignments || [])) {
-                            try {
-                                if (assign.assetId && assetIdMap[assign.assetId]) assign.assetId = assetIdMap[assign.assetId];
-                                if (assign.employeeId && empIdMap[assign.employeeId]) assign.employeeId = empIdMap[assign.employeeId];
-                                await addRecord('assignments', assign);
-                            } catch (err) { console.warn('Skipped assign:', err); }
-                        }
-                        for (const cat of (backup.categories || [])) {
-                            try { await addRecord('categories', cat); } catch(e) {}
-                        }
-                        for (const cond of (backup.conditions || [])) {
-                            try { await addRecord('conditions', cond); } catch(e) {}
-                        }
+                        // ── 3. Insert assignments in batches, remap IDs ────────
+                        const assignList = (backup.assignments || []).map(a => {
+                            const c = { ...a };
+                            if (c.assetId    && assetIdMap[c.assetId])   c.assetId    = assetIdMap[c.assetId];
+                            if (c.employeeId && empIdMap[c.employeeId])  c.employeeId = empIdMap[c.employeeId];
+                            if (c.unassignmentDate === 'NA') c.unassignmentDate = null;
+                            if (c.assignmentDate   === 'NA') c.assignmentDate   = null;
+                            return c;
+                        });
+                        await batchInsert('assignments', assignList);
+
+                        // ── 4. Categories & conditions ─────────────────────────
+                        for (const cat  of (backup.categories || [])) { try { await addRecord('categories', cat);  } catch(e) {} }
+                        for (const cond of (backup.conditions  || [])) { try { await addRecord('conditions', cond); } catch(e) {} }
 
                         // Just in case some references still don't line up
                         // (e.g. the backup itself had stale ids), try to repair
