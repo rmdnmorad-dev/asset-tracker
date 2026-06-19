@@ -262,9 +262,14 @@ const loadAll = async () => {
 };
 
 const resolveAssignee = (asset) => {
+    // Try direct ID lookup
     if (asset.assignedEmployeeId && _empMap[asset.assignedEmployeeId]) return _empMap[asset.assignedEmployeeId].name;
+    // Fall back to active assignment record
     const aa = _activeMap[asset.id];
-    if (aa) return aa.employeeName;
+    if (aa && aa.employeeName) return aa.employeeName;
+    // Last resort: find any active assignment for this asset
+    const anyActive = _assignments.find(a => a.assetId === asset.id && a.status === 'Active');
+    if (anyActive && anyActive.employeeName) return anyActive.employeeName;
     return null;
 };
 
