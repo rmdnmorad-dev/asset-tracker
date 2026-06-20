@@ -1061,6 +1061,10 @@
             content: "\f185"; /* fa-sun */
         }
 
+        .search-result-highlighted {
+            background: rgba(6,182,212,.15) !important;
+        }
+
         /* ========== SORTABLE TABLE HEADERS ========== */
         .table th.sortable {
             cursor: pointer;
@@ -2325,21 +2329,19 @@
             if (m) return new Date(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]), 12, 0, 0);
             m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
             if (m) return new Date(parseInt(m[3]), parseInt(m[1]) - 1, parseInt(m[2]), 12, 0, 0);
-            const fallback = new Date(str);
-            return isNaN(fallback.getTime()) ? null : fallback;
+            return null;
         };
 
         const formatHistoryDate = (dateStr) => {
             if (!dateStr || dateStr === 'NA') return '-';
             const str = dateStr.toString().trim();
-            // YYYY-MM-DD -> M/D/YYYY
-            const m = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-            if (m) return `${parseInt(m[2])}/${parseInt(m[3])}/${m[1]}`;
+            // YYYY-MM-DD -> M/D/YYYY (pure string, no Date object = no timezone shift)
+            const m1 = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+            if (m1) return `${parseInt(m1[2])}/${parseInt(m1[3])}/${m1[1]}`;
             // Already M/D/YYYY
-            if (str.match(/^\d{1,2}\/\d{1,2}\/\d{4}/)) return str;
-            const d = parseStoredDateSafe(str);
-            if (!d) return dateStr;
-            return `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;
+            const m2 = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+            if (m2) return str;
+            return dateStr;
         };
 
         const calcHistoryDuration = (startStr, endStr) => {
@@ -2480,7 +2482,7 @@
             const myAssignments = assignments.filter(a =>
                 a.employeeId === employee.id ||
                 (a.employeeName && a.employeeName.trim().toLowerCase() === employee.name.trim().toLowerCase())
-            ).sort((a, b) => new Date(b.assignmentDate) - new Date(a.assignmentDate));
+            ).sort((a, b) => (parseStoredDateSafe(b.assignmentDate)||0) - (parseStoredDateSafe(a.assignmentDate)||0));
 
             const currentlyHas = myAssignments.filter(a => a.status === 'Active').length;
             const totalEver = myAssignments.length;
@@ -2562,7 +2564,7 @@
             const myAssignments = assignments.filter(a =>
                 a.assetId === asset.id ||
                 (a.assetName && asset.tag && a.assetName.trim().toLowerCase() === asset.tag.trim().toLowerCase())
-            ).sort((a, b) => new Date(b.assignmentDate) - new Date(a.assignmentDate));
+            ).sort((a, b) => (parseStoredDateSafe(b.assignmentDate)||0) - (parseStoredDateSafe(a.assignmentDate)||0));
 
             let rows = '';
             if (myAssignments.length === 0) {
@@ -3805,20 +3807,128 @@
             // dropdown of results that jump to the Asset History page.
             const globalSearchInput = document.getElementById('globalSearch');
             const globalSearchResults = document.getElementById('globalSearchResults');
+            let _searchHighlightIdx = -1;
 
-            globalSearchInput.addEventListener('input', async (e) => {
-                const query = e.target.value;
+            const getSearchItems = () => globalSearchResults.querySelectorAll('.search-result-item');
+
+            const highlightItem = (idx) => {
+                const items = getSearchItems();
+                items.forEach((item, i) => {
+                    item.classList.toggle('search-result-highlighted', i === idx);
+                    if (i === idx) item.scrollIntoView({ block: 'nearest' });
+                });
+            };
+
+            const pickItem = (item) => {
+                if (!item) return;
+                const type = item.dataset.type;
+                const id   = parseInt(item.dataset.id);
+                globalSearchInput.value = item.querySelector('.sr-title').textContent.replace(/^[^a-zA-Z0-9]*/, '').trim();
+                globalSearchResults.classList.remove('active');
+                _searchHighlightIdx = -1;
+
+                // Navigate to current tab and filter — no history jump
+                const currentPage = document.querySelector('.page.active')?.id;
+                if (type === 'asset') {
+                    if (currentPage !== 'assets') switchPage('assets');
+                    // highlight the asset row
+                    setTimeout(() => {
+                        const rows = document.querySelectorAll('#assetsTableBody tr');
+                        rows.forEach(row => {
+                            row.style.background = '';
+                            if (row.textContent.toLowerCase().includes(item.dataset.tag?.toLowerCase() || '')) {
+                                row.style.background = 'rgba(6,182,212,.15)';
+                                row.scrollIntoView({ block: 'center' });
+                            }
+                        });
+                        // Also filter the search filter input if it exists
+                        const filterInput = document.getElementById('assetSearch');
+                        if (filterInput) { filterInput.value = globalSearchInput.value; filterInput.dispatchEvent(new Event('input')); }
+                    }, 300);
+                } else if (type === 'employee') {
+                    if (currentPage !== 'employees') switchPage('employees');
+                    setTimeout(() => {
+                        const rows = document.querySelectorAll('#employeesTableBody tr');
+                        rows.forEach(row => {
+                            row.style.background = '';
+                            if (row.textContent.toLowerCase().includes(item.dataset.name?.toLowerCase() || '')) {
+                                row.style.background = 'rgba(6,182,212,.15)';
+                                row.scrollIntoView({ block: 'center' });
+                            }
+                        });
+                        const filterInput = document.getElementById('employeeSearch');
+                        if (filterInput) { filterInput.value = globalSearchInput.value; filterInput.dispatchEvent(new Event('input')); }
+                    }, 300);
+                }
+            };
+
+            const renderGlobalSearch = async (query) => {
                 if (!query.trim()) {
                     globalSearchResults.classList.remove('active');
                     globalSearchResults.innerHTML = '';
+                    _searchHighlightIdx = -1;
                     return;
                 }
                 const results = await findHistoryMatches(query);
-                renderSearchDropdown(globalSearchResults, results, (type, id) => {
-                    globalSearchInput.value = '';
-                    globalSearchResults.classList.remove('active');
-                    goToHistory(type, id);
+                const { employees, assets } = results;
+                if (employees.length === 0 && assets.length === 0) {
+                    globalSearchResults.innerHTML = '<div class="search-results-empty">No results found</div>';
+                    globalSearchResults.classList.add('active');
+                    return;
+                }
+                let html = '';
+                if (employees.length > 0) {
+                    html += '<div class="search-results-group-title">Employees</div>';
+                    employees.forEach(emp => {
+                        html += `<div class="search-result-item" data-type="employee" data-id="${emp.id}" data-name="${emp.name}">
+                            <div><div class="sr-title"><i class="fas fa-user me-2"></i>${emp.name}</div>
+                            <div class="sr-sub">${emp.jobTitle || emp.department || 'Employee'}</div></div>
+                            <i class="fas fa-chevron-right text-muted"></i></div>`;
+                    });
+                }
+                if (assets.length > 0) {
+                    html += '<div class="search-results-group-title">Assets</div>';
+                    assets.forEach(a => {
+                        html += `<div class="search-result-item" data-type="asset" data-id="${a.id}" data-tag="${a.tag}">
+                            <div><div class="sr-title"><i class="fas fa-cube me-2"></i>${a.tag}${a.model ? ' — '+a.model : ''}</div>
+                            <div class="sr-sub">${a.category||''}${a.category?' • ':''}${a.status}</div></div>
+                            <i class="fas fa-chevron-right text-muted"></i></div>`;
+                    });
+                }
+                globalSearchResults.innerHTML = html;
+                globalSearchResults.classList.add('active');
+                _searchHighlightIdx = -1;
+                globalSearchResults.querySelectorAll('.search-result-item').forEach(item => {
+                    item.addEventListener('click', () => pickItem(item));
+                    item.addEventListener('mouseenter', () => {
+                        const items = getSearchItems();
+                        items.forEach((it, i) => { if (it === item) _searchHighlightIdx = i; });
+                        highlightItem(_searchHighlightIdx);
+                    });
                 });
+            };
+
+            globalSearchInput.addEventListener('input', (e) => renderGlobalSearch(e.target.value));
+
+            globalSearchInput.addEventListener('keydown', (e) => {
+                const items = getSearchItems();
+                if (!items.length) return;
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    _searchHighlightIdx = Math.min(_searchHighlightIdx + 1, items.length - 1);
+                    highlightItem(_searchHighlightIdx);
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    _searchHighlightIdx = Math.max(_searchHighlightIdx - 1, 0);
+                    highlightItem(_searchHighlightIdx);
+                } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const idx = _searchHighlightIdx >= 0 ? _searchHighlightIdx : 0;
+                    pickItem(items[idx]);
+                } else if (e.key === 'Escape') {
+                    globalSearchResults.classList.remove('active');
+                    _searchHighlightIdx = -1;
+                }
             });
 
             globalSearchInput.addEventListener('focus', () => {
@@ -3865,10 +3975,18 @@
             // page reloads since artifacts can't use localStorage; it stays
             // in effect for the current session.
             document.getElementById('darkModeToggle').addEventListener('click', () => {
-                document.body.classList.toggle('light-theme');
-                const isLight = document.body.classList.contains('light-theme');
-                showToast(isLight ? 'Switched to light theme' : 'Switched to dark theme', 'info');
+                try {
+                    document.body.classList.toggle('light-theme');
+                    const isLight = document.body.classList.contains('light-theme');
+                    // persist preference
+                    try { localStorage.setItem('theme', isLight ? 'light' : 'dark'); } catch(e) {}
+                    try { showToast(isLight ? 'Switched to light theme' : 'Switched to dark theme', 'info'); } catch(e) {}
+                } catch(e) { console.error('theme toggle error', e); }
             });
+            // Restore saved theme
+            try {
+                if (localStorage.getItem('theme') === 'light') document.body.classList.add('light-theme');
+            } catch(e) {}
 
             // Load data after all clicks wired
             setTimeout(async () => {

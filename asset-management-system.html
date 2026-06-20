@@ -2531,25 +2531,24 @@
         const parseStoredDateSafe = (dateStr) => {
             if (!dateStr || dateStr === 'NA') return null;
             const str = dateStr.toString().trim();
+            // YYYY-MM-DD — parse as LOCAL noon to avoid timezone shifts
             let m = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
             if (m) return new Date(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]), 12, 0, 0);
+            // M/D/YYYY
             m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
             if (m) return new Date(parseInt(m[3]), parseInt(m[1]) - 1, parseInt(m[2]), 12, 0, 0);
-            const fallback = new Date(str);
-            return isNaN(fallback.getTime()) ? null : fallback;
+            // Never use new Date(str) directly - it parses as UTC and shifts in UTC+3
+            return null;
         };
 
         const formatHistoryDate = (dateStr) => {
             if (!dateStr || dateStr === 'NA') return '-';
             const str = dateStr.toString().trim();
-            // YYYY-MM-DD -> M/D/YYYY
-            const m = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-            if (m) return `${parseInt(m[2])}/${parseInt(m[3])}/${m[1]}`;
-            // Already M/D/YYYY
-            if (str.match(/^\d{1,2}\/\d{1,2}\/\d{4}/)) return str;
-            const d = parseStoredDateSafe(str);
-            if (!d) return dateStr;
-            return `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;
+            const m1 = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+            if (m1) return `${parseInt(m1[2])}/${parseInt(m1[3])}/${m1[1]}`;
+            const m2 = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+            if (m2) return str;
+            return dateStr;
         };
 
         const calcHistoryDuration = (startStr, endStr) => {
