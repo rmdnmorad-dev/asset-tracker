@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Asset Data Importer</title>
+    <style>
+        :root {
+            --primary-color: #06B6D4;
+            --primary-dark: #0891B2;
+            --bg-dark: #0F172A;
+            --bg-card: #1E293B;
+            --text-primary: #F1F5F9;
+            --text-secondary: #CBD5E1;
+            --border-color: #334155;
+            --success-color: #10B981;
+            --danger-color: #EF4444;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(135deg, var(--bg-dark) 0%, #1a2742 100%);
+            color: var(--text-primary);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .header h1 {
+            font-size: 32px;
+            margin-bottom: 0.5rem;
+            color: var(--primary-color);
+        }
+
+        .header p {
+            color: var(--text-secondary);
+            font-size: 16px;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .textarea {
+            width: 100%;
+            min-height: 300px;
+            background: var(--bg-dark);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 1rem;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            resize: vertical;
+        }
+
+        .textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.1);
+        }
+
+        .button-group {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .button {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+
+        .button-primary {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .button-primary:hover {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+        }
+
+        .button-secondary {
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .button-secondary:hover {
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+        }
+
+        .button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .stat-box {
+            background: var(--bg-dark);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+
+        .alert {
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            display: flex;
+            gap: 1rem;
+        }
+
+        .alert-success {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid var(--success-color);
+            color: var(--success-color);
+        }
+
+        .alert-error {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid var(--danger-color);
+            color: var(--danger-color);
+        }
+
+        .alert-info {
+            background: rgba(6, 182, 212, 0.1);
+            border: 1px solid var(--primary-color);
+            color: var(--primary-color);
+        }
+
+        .processing {
+            display: none;
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .spinner {
+            border: 3px solid var(--border-color);
+            border-top: 3px solid var(--primary-color);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .output-box {
+            background: var(--bg-dark);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 1rem;
+        }
+
+        .success-message {
+            display: none;
+        }
+
+        .download-link {
+            display: inline-block;
+            margin-top: 1rem;
+            padding: 0.75rem 1.5rem;
+            background: var(--success-color);
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .download-link:hover {
+            background: #059669;
+            transform: translateY(-2px);
+        }
+
+        .data-preview {
+            margin-top: 1.5rem;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .preview-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        .preview-table th,
+        .preview-table td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .preview-table th {
+            background: var(--bg-dark);
+            color: var(--primary-color);
+            font-weight: 700;
+        }
+
+        .preview-table tr:hover {
+            background: rgba(6, 182, 212, 0.05);
+        }
+
+        .tag {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            background: rgba(6, 182, 212, 0.2);
+            color: var(--primary-color);
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        @media (max-width: 768px) {
+            .button-group {
+                flex-direction: column;
+            }
+
+            .stats {
+                grid-template-columns: 1fr;
+            }
+
+            .header h1 {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Asset Data Importer</h1>
+            <p>Convert your Excel asset data into the Asset Management System format</p>
+        </div>
+
+        <div class="card">
+            <h2 class="section-title">📋 Step 1: Paste Your Data</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 14px;">
+                Copy your Excel data (all rows including header) and paste it below. The tool supports tab-separated values from Excel.
+            </p>
+            <textarea id="dataInput" class="textarea" placeholder="Paste your Excel data here...&#10;Asset #	Headsets	Owner	Location	Assignment Date	Returned Date	Return Condtion	Notes&#10;ADP-67	Adapters	Zaineh Jamil	F3-A4	1/0/1900..."></textarea>
+            
+            <div class="button-group">
+                <button class="button button-primary" onclick="processData()">
+                    🔄 Process Data
+                </button>
+                <button class="button button-secondary" onclick="clearData()">
+                    🗑️ Clear
+                </button>
+            </div>
+
+            <div id="processingDiv" class="processing">
+                <div class="spinner"></div>
+                <p>Processing data...</p>
+            </div>
+
+            <div id="statsDiv" style="display: none;">
+                <div class="stats">
+                    <div class="stat-box">
+                        <div class="stat-label">Assets Found</div>
+                        <div class="stat-value" id="assetCount">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Unique Employees</div>
+                        <div class="stat-value" id="employeeCount">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Categories Detected</div>
+                        <div class="stat-value" id="categoryCount">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Issues Found</div>
+                        <div class="stat-value" id="issueCount">0</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="alertsDiv"></div>
+
+        <div id="dataPreviewDiv" style="display: none;">
+            <div class="card">
+                <h2 class="section-title">👀 Data Preview</h2>
+                <div class="data-preview">
+                    <table class="preview-table">
+                        <thead id="previewHead"></thead>
+                        <tbody id="previewBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="successDiv" style="display: none;">
+            <div class="card">
+                <div class="alert alert-success">
+                    ✅ Data processed successfully! Your file is ready to download.
+                </div>
+
+                <div class="button-group">
+                    <a id="downloadLink" class="download-link">
+                        ⬇️ Download Backup File (JSON)
+                    </a>
+                    <button class="button button-secondary" onclick="copyInstructions()">
+                        📋 Copy Import Instructions
+                    </button>
+                </div>
+
+                <div style="margin-top: 1.5rem; padding: 1rem; background: var(--bg-dark); border-radius: 8px; border: 1px solid var(--border-color);">
+                    <h3 style="margin-bottom: 0.5rem; color: var(--primary-color);">📌 Next Steps:</h3>
+                    <ol style="margin-left: 1.5rem; color: var(--text-secondary);">
+                        <li>Download the JSON file</li>
+                        <li>Open the Asset Management System</li>
+                        <li>Go to Settings → Import Database</li>
+                        <li>Select the downloaded file</li>
+                        <li>Your data will be imported immediately!</li>
+                    </ol>
+                </div>
+
+                <div class="output-box" id="logOutput"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const DEFAULT_CONDITIONS = ['Good', 'Bad', 'Poor'];
+        const DEFAULT_CATEGORIES = [
+            'Adapters', 'Chairs', 'Desks', 'Cables', 'Headsets',
+            'Keyboards', 'Laptop Stands', 'Monitors', 'Mouse',
+            'Power Extensions', 'Docking Station', 'Dell E-Port Replicator'
+        ];
+
+        let processedData = {
+            assets: [],
+            employees: [],
+            assignments: [],
+            categories: [],
+            conditions: []
+        };
+
+        const log = (message) => {
+            const logDiv = document.getElementById('logOutput');
+            if (logDiv) {
+                logDiv.innerHTML += message + '\n';
+                logDiv.scrollTop = logDiv.scrollHeight;
+            }
+        };
+
+        const clearData = () => {
+            document.getElementById('dataInput').value = '';
+            document.getElementById('statsDiv').style.display = 'none';
+            document.getElementById('dataPreviewDiv').style.display = 'none';
+            document.getElementById('successDiv').style.display = 'none';
+            document.getElementById('alertsDiv').innerHTML = '';
+        };
+
+        const parseDate = (dateStr) => {
+            if (!dateStr || dateStr === '' || dateStr.trim() === '') return null;
+            const s = dateStr.trim();
+            if (s === '0' || s === '1/0/1900') return null;
+            try {
+                // Excel serial number (e.g. 46068, 45703)
+                const serial = parseInt(s);
+                if (!isNaN(serial) && s === String(serial) && serial > 1000) {
+                    const epoch = new Date(Date.UTC(1900, 0, 1));
+                    const offset = serial >= 60 ? serial - 2 : serial - 1;
+                    const date = new Date(epoch.getTime() + offset * 86400000);
+                    return date.toISOString().split('T')[0];
+                }
+                // M/D/YYYY format
+                const parts = s.split('/');
+                if (parts.length === 3) {
+                    const month = parseInt(parts[0]);
+                    const day = parseInt(parts[1]);
+                    const year = parseInt(parts[2]);
+                    if (year >= 1900 && year <= 2100 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+                        return new Date(Date.UTC(year, month - 1, day)).toISOString().split('T')[0];
+                    }
+                }
+                return null;
+            } catch (e) {
+                return null;
+            }
+        };
+
+        const mapCondition = (condition) => {
+            if (!condition || condition.trim() === '') return 'Good';
+            
+            const cond = condition.trim().toLowerCase();
+            if (cond.includes('good') || cond.includes('great') || cond.includes('satisfactory')) {
+                return 'Good';
+            } else if (cond.includes('bad') || cond.includes('poor')) {
+                return 'Bad';
+            } else if (cond.includes('poor')) {
+                return 'Poor';
+            }
+            return 'Good';
+        };
+
+        const mapCategory = (category) => {
+            if (!category) return 'Adapters';
+            const cat = category.trim();
+            if (DEFAULT_CATEGORIES.includes(cat)) return cat;
+            const lower = cat.toLowerCase();
+            if (lower.includes('headset')) return 'Headsets';
+            if (lower.includes('keyboard') || lower.includes('kb')) return 'Keyboards';
+            if (lower.includes('monitor') || lower.includes('mt')) return 'Monitors';
+            if (lower.includes('mouse') || lower.includes('ms')) return 'Mouse';
+            if (lower.includes('cable') || lower.includes('cb')) return 'Cables';
+            if (lower.includes('desk') || lower.includes('dsk')) return 'Desks';
+            if (lower.includes('chair') || lower.includes('ch')) return 'Chairs';
+            if (lower.includes('adapter') || lower.includes('adp')) return 'Adapters';
+            if (lower.includes('laptop stand') || lower.includes('lps')) return 'Laptop Stands';
+            if (lower.includes('power') || lower.includes('extension') || lower.includes('extention') || lower.includes('pe')) return 'Power Extensions';
+            if (lower.includes('dock')) return 'Docking Station';
+            if (lower.includes('dell') || lower.includes('replicator') || lower.includes('dep')) return 'Dell E-Port Replicator';
+            return cat; // keep as-is rather than defaulting to Adapters
+        };
+
+        const processData = async () => {
+            const input = document.getElementById('dataInput').value.trim();
+            if (!input) {
+                showAlert('Please paste data first', 'error');
+                return;
+            }
+
+            document.getElementById('processingDiv').style.display = 'block';
+            document.getElementById('statsDiv').style.display = 'none';
+            document.getElementById('successDiv').style.display = 'none';
+            document.getElementById('dataPreviewDiv').style.display = 'none';
+            document.getElementById('alertsDiv').innerHTML = '';
+
+            try {
+                await new Promise(resolve => setTimeout(resolve, 300));
+
+                const lines = input.split('\n');
+                const headers = lines[0].split('\t').map(h => h.trim());
+
+                log('📖 Parsing headers: ' + headers.join(', '));
+
+                processedData = {
+                    assets: [],
+                    employees: [],
+                    assignments: [],
+                    categories: [],
+                    conditions: []
+                };
+
+                // ── Pass 1: collect all rows grouped by asset tag ──────────────
+                // assetRowsMap: tag → [ {category, owner, location, assignDate, returnDate, returnCondition, notes} ]
+                const assetRowsMap = new Map();
+
+                for (let i = 1; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    if (!line) continue;
+
+                    const cols = line.split('\t');
+                    const assetId = cols[0] ? cols[0].trim() : '';
+                    // Skip blank, formula errors, and "Owned" placeholder rows
+                    if (!assetId || assetId === '#VALUE!' || assetId === 'Owned' || assetId === 'Asset #') continue;
+                    // Must look like a real asset tag (contains a letter and a dash or is alphanumeric)
+                    if (!assetId.match(/[A-Za-z]/) ) continue;
+
+                    const row = {
+                        category:        cols[1] ? cols[1].trim() : 'Adapters',
+                        owner:           cols[2] ? cols[2].trim() : '',
+                        location:        cols[3] ? cols[3].trim() : '',
+                        assignDate:      cols[4] ? cols[4].trim() : '',
+                        returnDate:      cols[5] ? cols[5].trim() : '',
+                        returnCondition: cols[6] ? cols[6].trim() : '',
+                        notes:           cols[7] ? cols[7].trim() : ''
+                    };
+
+                    if (!assetRowsMap.has(assetId)) assetRowsMap.set(assetId, []);
+                    assetRowsMap.get(assetId).push(row);
+                }
+
+                // ── Pass 2: build employees with stable numeric IDs ────────────
+                const employeeMap = new Map(); // name → {id, ...}
+                let empIdCounter = 1;
+
+                for (const rows of assetRowsMap.values()) {
+                    for (const row of rows) {
+                        const name = row.owner;
+                        if (name && name !== 'Conference Room' && !employeeMap.has(name)) {
+                            employeeMap.set(name, {
+                                id: empIdCounter++,
+                                name,
+                                email: name.toLowerCase().replace(/\s+/g, '.') + '@company.com',
+                                status: 'Active',
+                                department: 'NA',
+                                jobTitle: 'NA',
+                                phone: 'NA',
+                                location: 'NA',
+                                createdDate: new Date().toISOString()
+                            });
+                        }
+                    }
+                }
+
+                processedData.employees = Array.from(employeeMap.values());
+
+                // ── RULE: inactive employees set — all their assignments are returned ──
+                const inactiveEmployeeNames = new Set();
+                // We'll collect this from employee data after pass 2
+
+                // ── Pass 3: build one asset + all its assignments ──────────────
+                let assetIdCounter = 1;
+                let assignIdCounter = 1;
+
+                // Helper: clamp date — if year < 2000, replace with 2022-01-01
+                const clampDate = (d) => {
+                    if (!d) return null;
+                    if (d < '2000-01-01') return '2022-01-01';
+                    return d;
+                };
+
+                for (const [tag, rows] of assetRowsMap.entries()) {
+                    const firstRow = rows[0];
+                    const mappedCategory = mapCategory(firstRow.category);
+
+                    // Build enriched rows with parsed + clamped dates
+                    const enriched = rows.map((row, idx) => ({
+                        ...row,
+                        _assignDate: clampDate(parseDate(row.assignDate)),
+                        _returnDate: clampDate(parseDate(row.returnDate)),
+                        _origIdx: idx
+                    }));
+
+                    // RULE: if employee is inactive, their assignment is never "active"
+                    // So treat rows where owner is inactive as if they have a return date
+                    // (we'll set the return date in the resolved pass)
+
+                    // The LAST row with no return date whose owner is ACTIVE = currently assigned
+                    let activeRowIdx = -1;
+                    for (let i = enriched.length - 1; i >= 0; i--) {
+                        const emp = employeeMap.get(enriched[i].owner);
+                        const isActive = emp && emp.status !== 'Inactive';
+                        if (!enriched[i]._returnDate && enriched[i].owner &&
+                            enriched[i].owner !== 'Conference Room' && isActive) {
+                            activeRowIdx = i;
+                            break;
+                        }
+                    }
+
+                    const activeRow    = activeRowIdx >= 0 ? enriched[activeRowIdx] : null;
+                    const activeEmployee = activeRow ? employeeMap.get(activeRow.owner) : null;
+                    let activeAssignDate = activeRow ? activeRow._assignDate : null;
+
+                    // Asset condition
+                    let latestCondition = 'NA';
+                    for (const row of rows) {
+                        if (row.returnCondition && row.returnCondition.trim() !== '') {
+                            latestCondition = mapCondition(row.returnCondition);
+                        }
+                    }
+
+                    const assetNumId = assetIdCounter++;
+                    const asset = {
+                        id: assetNumId,
+                        tag,
+                        name: tag,
+                        category: mappedCategory,
+                        condition: latestCondition,
+                        location: firstRow.location || 'NA',
+                        notes: firstRow.notes || 'NA',
+                        status: activeEmployee ? 'Assigned' : 'Unassigned',
+                        assignedEmployeeId: activeEmployee ? activeEmployee.id : null,
+                        assignmentDate: activeAssignDate || null,
+                        createdDate: activeAssignDate || '2022-01-01',
+                        lastUpdated: new Date().toISOString()
+                    };
+
+                    processedData.assets.push(asset);
+
+                    // ── Resolve dates: chain return→assign between consecutive rows ──
+                    const resolved = enriched.map(row => ({
+                        assignDate: row._assignDate,
+                        returnDate: row._returnDate
+                    }));
+
+                    for (let i = 0; i < enriched.length; i++) {
+                        const isActiveRow = (i === activeRowIdx);
+                        const empI = employeeMap.get(enriched[i].owner);
+                        const ownerIsInactive = empI && empI.status === 'Inactive';
+
+                        // RULE: inactive employee with no return date → return date = their assign date
+                        // Non-active rows (past assignments) → infer from next row
+                        if (!resolved[i].returnDate && (ownerIsInactive || !isActiveRow)) {
+                            if (ownerIsInactive) {
+                                // return date = same as assign date (even if clamped to 2022-01-01)
+                                resolved[i].returnDate = resolved[i].assignDate || '2022-01-01';
+                            } else {
+                                // past assignment, not inactive — infer from next row
+                                let foundDate = null;
+                                for (let j = i + 1; j < enriched.length; j++) {
+                                    if (resolved[j].assignDate) { foundDate = resolved[j].assignDate; break; }
+                                    if (resolved[j].returnDate) { foundDate = resolved[j].returnDate; break; }
+                                }
+                                resolved[i].returnDate = foundDate;
+                            }
+                        }
+
+                        // Chain: if this row has no assign date, use previous row's return date
+                        if (!resolved[i].assignDate && i > 0 && resolved[i - 1].returnDate) {
+                            resolved[i].assignDate = resolved[i - 1].returnDate;
+                        }
+
+                        // Fallback: no assign date but has return date → Jan 1 of return year
+                        // but clamp: if that year < 2000, use 2022-01-01
+                        if (!resolved[i].assignDate && resolved[i].returnDate) {
+                            const yr = parseInt(resolved[i].returnDate.substring(0, 4));
+                            resolved[i].assignDate = yr >= 2000
+                                ? resolved[i].returnDate.substring(0, 4) + '-01-01'
+                                : '2022-01-01';
+                        }
+
+                        // Final clamp: if assign date is still pre-2000 replace with 2022-01-01
+                        if (resolved[i].assignDate && resolved[i].assignDate < '2000-01-01') {
+                            resolved[i].assignDate = '2022-01-01';
+                        }
+                    }
+
+                    // Update asset assignmentDate from resolved
+                    if (activeRowIdx >= 0) {
+                        activeAssignDate = resolved[activeRowIdx].assignDate || null;
+                        asset.assignmentDate = activeAssignDate;
+                    }
+
+                    for (let i = 0; i < enriched.length; i++) {
+                        const row = enriched[i];
+                        const owner = row.owner;
+                        if (!owner || owner === 'Conference Room') continue;
+
+                        const emp = employeeMap.get(owner);
+                        if (!emp) continue;
+
+                        const isActiveRow = (i === activeRowIdx);
+                        const assignDateParsed = resolved[i].assignDate || null;
+                        const returnDateParsed  = resolved[i].returnDate || null;
+                        const isActive = isActiveRow && !returnDateParsed;
+
+                        processedData.assignments.push({
+                            id: assignIdCounter++,
+                            assetId: assetNumId,
+                            assetName: tag,
+                            employeeId: emp.id,
+                            employeeName: owner,
+                            assignmentDate: assignDateParsed,
+                            unassignmentDate: returnDateParsed,
+                            status: isActive ? 'Active' : 'Inactive',
+                            createdDate: new Date().toISOString()
+                        });
+                    }
+                }
+
+                // ── Categories & Conditions ────────────────────────────────────
+                DEFAULT_CATEGORIES.forEach((cat, i) => {
+                    processedData.categories.push({ id: i + 1, name: cat, createdDate: new Date().toISOString() });
+                });
+                DEFAULT_CONDITIONS.forEach((cond, i) => {
+                    processedData.conditions.push({ id: i + 1, name: cond, createdDate: new Date().toISOString() });
+                });
+
+                log(`✅ Parsed ${processedData.assets.length} unique assets`);
+                log(`✅ Extracted ${processedData.employees.length} employees`);
+                log(`✅ Created ${processedData.assignments.length} assignment records (full history)`);
+
+                if (processedData.assets.length === 0) {
+                    throw new Error('No assets found in data');
+                }
+
+                document.getElementById('processingDiv').style.display = 'none';
+                showStats();
+                showPreview();
+                showSuccess();
+
+            } catch (error) {
+                document.getElementById('processingDiv').style.display = 'none';
+                log(`❌ Error: ${error.message}`);
+                showAlert(`Error processing data: ${error.message}`, 'error');
+            }
+        };
+
+        const showStats = () => {
+            document.getElementById('assetCount').textContent = processedData.assets.length;
+            document.getElementById('employeeCount').textContent = processedData.employees.length;
+            document.getElementById('categoryCount').textContent = processedData.categories.length;
+            document.getElementById('issueCount').textContent = '0';
+            document.getElementById('statsDiv').style.display = 'block';
+        };
+
+        const showPreview = () => {
+            const thead = document.getElementById('previewHead');
+            const tbody = document.getElementById('previewBody');
+            
+            thead.innerHTML = `
+                <tr>
+                    <th>Asset Tag</th>
+                    <th>Name</th>
+                    <th>Category</th>
+                    <th>Location</th>
+                    <th>Assigned To</th>
+                    <th>Assignment Date</th>
+                    <th>Return Date</th>
+                    <th>Status</th>
+                </tr>
+            `;
+
+            // build id→name map for display
+            const empIdMap = {};
+            processedData.employees.forEach(e => { empIdMap[e.id] = e.name; });
+
+            tbody.innerHTML = '';
+            // Build assignment lookup: assetId → active assignment
+            const activeAssignMap = {};
+            processedData.assignments.forEach(a => {
+                if (a.status === 'Active') activeAssignMap[a.assetId] = a;
+            });
+            // Build all assignments per asset for return date
+            const returnDateMap = {};
+            processedData.assignments.forEach(a => {
+                if (a.unassignmentDate && a.assetId) {
+                    if (!returnDateMap[a.assetId] || a.unassignmentDate > returnDateMap[a.assetId]) {
+                        returnDateMap[a.assetId] = a.unassignmentDate;
+                    }
+                }
+            });
+
+            processedData.assets.slice(0, 10).forEach(asset => {
+                const assignedTo = asset.assignedEmployeeId
+                    ? (empIdMap[asset.assignedEmployeeId] || '-')
+                    : '-';
+                const assignDate = asset.assignmentDate && asset.assignmentDate !== 'NA'
+                    ? asset.assignmentDate : '-';
+                const returnDate = returnDateMap[asset.id] || '-';
+                tbody.innerHTML += `
+                    <tr>
+                        <td><span class="tag">${asset.tag}</span></td>
+                        <td>${asset.name}</td>
+                        <td>${asset.category}</td>
+                        <td>${asset.location}</td>
+                        <td>${assignedTo}</td>
+                        <td>${assignDate}</td>
+                        <td>${returnDate}</td>
+                        <td><span class="tag">${asset.status}</span></td>
+                    </tr>
+                `;
+            });
+
+            if (processedData.assets.length > 10) {
+                tbody.innerHTML += `<tr><td colspan="8" style="text-align: center; color: var(--text-secondary);">... and ${processedData.assets.length - 10} more assets</td></tr>`;
+            }
+
+            document.getElementById('dataPreviewDiv').style.display = 'block';
+        };
+
+        const showSuccess = () => {
+            const backup = {
+                version: 1,
+                exportDate: new Date().toISOString(),
+                assets: processedData.assets.map(a => ({
+                    id: a.id,
+                    name: a.name,
+                    model: a.category,
+                    tag: a.tag,
+                    category: a.category,
+                    condition: a.condition,
+                    location: a.location,
+                    assignedEmployeeId: a.assignedEmployeeId || null,
+                    notes: a.notes,
+                    status: a.status,
+                    purchaseDate: null,
+                    price: 0,
+                    assignmentDate: a.assignmentDate,
+                    createdDate: a.createdDate,
+                    lastUpdated: a.lastUpdated
+                })),
+                employees: processedData.employees.map(e => ({
+                    id: e.id,
+                    name: e.name,
+                    email: e.email,
+                    status: e.status || 'Active',
+                    department: e.department || 'NA',
+                    jobTitle: e.jobTitle || 'NA',
+                    phone: e.phone || 'NA',
+                    location: e.location || 'NA',
+                    createdDate: e.createdDate
+                })),
+                assignments: processedData.assignments,
+                categories: processedData.categories,
+                conditions: processedData.conditions
+            };
+
+            const json = JSON.stringify(backup, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            const link = document.getElementById('downloadLink');
+            link.href = url;
+            link.download = `asset-import-${new Date().toISOString().split('T')[0]}.json`;
+
+            document.getElementById('successDiv').style.display = 'block';
+        };
+
+        const showAlert = (message, type = 'info') => {
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.innerHTML = `<span>${type === 'error' ? '❌' : '✅'} ${message}</span>`;
+            document.getElementById('alertsDiv').appendChild(alert);
+        };
+
+        const copyInstructions = () => {
+            const text = `Import Instructions:
+1. Download the generated JSON file
+2. Open the Asset Management System
+3. Go to Settings page
+4. Click "Import Database" button
+5. Select the downloaded JSON file
+6. All data will be imported!
+
+Assets imported: ${processedData.assets.length}
+Employees created: ${processedData.employees.length}
+Assignment records: ${processedData.assignments.length}`;
+
+            navigator.clipboard.writeText(text).then(() => {
+                showAlert('Instructions copied to clipboard!', 'success');
+            });
+        };
+    </script>
+</body>
+</html>
