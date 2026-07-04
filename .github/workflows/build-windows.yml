@@ -27,7 +27,7 @@ jobs:
           mkdir -p build
           cp desktop/main.js desktop/package.json VampFrost.html build/
           cd build
-          npx --yes @electron/packager . VampFrost --platform=win32 --arch=x64 --asar --out=dist
+          npx --yes @electron/packager . VampFrost --platform=win32 --arch=x64 --asar --out=dist --electron-version=31.7.7
           cd dist
           7z a -tzip ../../VampFrost-Windows-x64.zip VampFrost-win32-x64/
 
