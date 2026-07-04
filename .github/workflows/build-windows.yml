@@ -1,0 +1,49 @@
+name: Build VampFrost for Windows
+
+on:
+  push:
+    paths:
+      - 'VampFrost.html'
+      - 'desktop/**'
+      - '.github/workflows/build-windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Package VampFrost.exe
+        shell: bash
+        run: |
+          mkdir -p build
+          cp desktop/main.js desktop/package.json VampFrost.html build/
+          cd build
+          npx --yes @electron/packager . VampFrost --platform=win32 --arch=x64 --asar --out=dist --electron-version=31.7.7
+          cd dist
+          7z a -tzip ../../VampFrost-Windows-x64.zip VampFrost-win32-x64/
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VampFrost-Windows-x64
+          path: VampFrost-Windows-x64.zip
+
+      - name: Publish release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="vampfrost-v1.0.${{ github.run_number }}"
+          gh release create "$TAG" VampFrost-Windows-x64.zip \
+            --title "VampFrost $TAG (Windows)" \
+            --notes "Download VampFrost-Windows-x64.zip, extract it, and double-click VampFrost.exe to play." \
+            --target "${{ github.sha }}"
