@@ -1,0 +1,9 @@
+{
+  "name": "vampfrost",
+  "productName": "VampFrost",
+  "version": "1.0.0",
+  "description": "VampFrost - a frozen-blood survivors run",
+  "main": "main.js",
+  "author": "VampFrost",
+  "license": "UNLICENSED"
+}

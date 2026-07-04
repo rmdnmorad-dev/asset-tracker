@@ -1668,6 +1668,7 @@ function enemyTakeDamage(e, dmg, critC, critM, frost, steal, sx, sy) {
   e.hitFlashT = .07;
   Events.emit('hit', crit);
   spawnText(e.x, e.y - .5, Math.round(final).toString(), crit);
+  spawnParts(e.x, e.y, crit ? [1, .85, .3] : mix(e.d.color, WHITE, .5), crit ? 4 : 2, 2.5, .25, .05);
 
   if (steal > 0 && Game.player) Game.player.heal(final * steal);
 
@@ -1690,6 +1691,8 @@ function enemyTakeDamage(e, dmg, critC, critM, frost, steal, sx, sy) {
 function enemyDie(e) {
   if (e.dead) return;
   e.dead = true;
+  spawnParts(e.x, e.y, e.d.color, e.elite ? 18 : 9, 3, .5, .08);
+  if (e.elite) spawnRing(e.x, e.y, [1, .85, .4], 5, .4);
   const wave = Game.wave;
   spawnGem(e.x, e.y, e.d.xp * (1 + wave * .15));
   if (Math.random() < .08) spawnGold(e.x, e.y, 1 + (wave / 5 | 0));
@@ -1801,6 +1804,8 @@ function bossPhaseCheck(b) {
 function bossDie(b) {
   if (b.dead) return;
   b.dead = true;
+  spawnParts(b.x, b.y, b.bd.color, 40, 5, .8, .12);
+  spawnRing(b.x, b.y, mix(b.bd.color, WHITE, .4), 10, .7, .16);
   for (let i = 0; i < (b.mini ? 8 : 20); i++) {
     const a = rand(TAU), r = rand(1.2);
     spawnGem(b.x + Math.cos(a) * r, b.y + Math.sin(a) * r, 6);
@@ -1810,6 +1815,19 @@ function bossDie(b) {
   if (Game.boss === b) Game.boss = null;
   Events.emit('bossDeath', b.mini);
   camShake(.35, .6);
+}
+
+// ---------------- particles & shockwave rings ----------------
+function spawnParts(x, y, col, n, spd = 3, life = .5, size = .07) {
+  for (let i = 0; i < n; i++) {
+    if (Game.parts.length > 400) return;
+    const a = rand(TAU), v = rand(.3, 1) * spd;
+    Game.parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 1,
+      t: rand(.5, 1) * life, life, col, size: rand(.6, 1.3) * size });
+  }
+}
+function spawnRing(x, y, col, vr = 6, t = .45, lw = .1) {
+  Game.rings.push({ x, y, r: .2, vr, t, maxT: t, col, lw });
 }
 
 // ---------------- pickups & floating text ----------------
@@ -1914,6 +1932,7 @@ const Game = {
   MAX_WAVE: 20, WAVE_DUR: 45,
   state: 'menu', map: MAPS[0], wave: 1, runTime: 0, goldRun: 0,
   player: null, enemies: [], projs: [], gems: [], golds: [], hearts: [], chests: [], texts: [], aoes: [],
+  parts: [], rings: [], amb: [],
   boss: null, pendingLevelUps: 0, timeScale: 1, ending: null, persisted: false,
   chunks: new Map(), tiles: [],
   spawn: { t: 0, lastWave: 0, finalBossOut: false, miniOut: false },
@@ -1928,8 +1947,13 @@ const Game = {
     this.timeScale = 1; this.ending = null; this.persisted = false;
     this.enemies = []; this.projs = []; this.gems = []; this.golds = [];
     this.hearts = []; this.chests = []; this.texts = []; this.aoes = [];
+    this.parts = []; this.rings = [];
     this.boss = null; this.pendingLevelUps = 0;
     this.chunks.clear();
+    // ambient atmosphere particles (mist / leaves / fireflies / motes / rain / sand)
+    this.amb = [];
+    for (let i = 0; i < 46; i++)
+      this.amb.push({ x: rand(-12, 12), y: rand(-7, 7), seed: rand(TAU) });
     this.tiles = [
       Sprites.tile(this.map.groundA, this.map.id * 7919 + 13),
       Sprites.tile(this.map.groundB, this.map.id * 7919 + 14),
@@ -2009,6 +2033,27 @@ const Game = {
 
       for (const t of this.texts) { t.t -= rdt; t.y -= 1.4 * rdt; }
       this.texts = this.texts.filter(t => t.t > 0);
+
+      // particles + shockwave rings
+      for (const q of this.parts) { q.t -= dt; q.x += q.vx * dt; q.y += q.vy * dt; q.vy += 2.5 * dt; }
+      this.parts = this.parts.filter(q => q.t > 0);
+      for (const r of this.rings) { r.t -= dt; r.r += r.vr * dt; }
+      this.rings = this.rings.filter(r => r.t > 0);
+
+      // ambient atmosphere drifts with its own motion per map theme
+      const amb = this.map.amb, tnow = performance.now() / 1000;
+      for (const q of this.amb) {
+        switch (amb) {
+          case 'city': q.y += 9 * dt; q.x += 1.5 * dt; break;                       // rain
+          case 'desert': q.x += 3.5 * dt; q.y += .3 * dt; break;                    // sand
+          case 'village': q.x -= .4 * dt; q.y += .35 * dt; break;                   // leaves
+          case 'ruins': q.y -= .15 * dt; q.x += Math.sin(tnow + q.seed) * .1 * dt; break; // motes
+          default: q.x += Math.sin(tnow * .5 + q.seed) * .3 * dt; q.y += Math.cos(tnow * .4 + q.seed) * .2 * dt; // mist / fireflies
+        }
+        // wrap around the camera view
+        if (q.x < cam.x - 13) q.x += 26; if (q.x > cam.x + 13) q.x -= 26;
+        if (q.y < cam.y - 8) q.y += 16; if (q.y > cam.y + 8) q.y -= 16;
+      }
 
       // level-up interrupts (not during an ending)
       if (this.pendingLevelUps > 0 && !this.ending && p && !p.dead) {
@@ -2111,6 +2156,11 @@ Events.on('playerDeath', () => {
   Game.timeScale = .3;
   Events.emit('gameOver');
 });
+Events.on('levelUp', () => {
+  const p = Game.player;
+  if (p) { spawnRing(p.x, p.y, [.55, .88, 1], 8, .5); spawnParts(p.x, p.y, [.7, .92, 1], 14, 3.5, .5, .06); }
+});
+Events.on('bossSpawn', b => spawnRing(b.x, b.y, b.bd.color, 9, .6, .14));
 
 // ================================================================
 //  RENDERING
@@ -2196,7 +2246,16 @@ function render() {
     drawSpr(g2d, Sprites.coin(), g.x, g.y, { sx: Math.max(.15, Math.abs(Math.cos(now * 4 + g.x * 5))) });
   for (const h of Game.hearts)
     drawSpr(g2d, Sprites.heart(), h.x, h.y, { scale: 1 + Math.sin(now * 5) * .12 });
-  for (const c of Game.chests) drawSpr(g2d, Sprites.chest(), c.x, c.y + .3);
+  for (const c of Game.chests) {
+    drawSpr(g2d, Sprites.chest(), c.x, c.y + .3);
+    const gl = Math.sin(now * 2.2 + c.x * 3);            // golden glint
+    if (gl > .82) {
+      const a = (gl - .82) / .18;
+      g2d.fillStyle = css([1, .95, .6], a);
+      g2d.fillRect(c.x + .1, c.y - .18, .07, .22);
+      g2d.fillRect(c.x + .025, c.y - .105, .22, .07);
+    }
+  }
 
   // ---- entities sorted by y ----
   const ents = [];
@@ -2227,6 +2286,14 @@ function render() {
       if (e.elite) {
         g2d.strokeStyle = css([1, .85, .4], .8); g2d.lineWidth = .06;
         g2d.beginPath(); g2d.ellipse(e.x, e.y + e.radius * .9, e.radius * 1.25, e.radius * .45, 0, 0, TAU); g2d.stroke();
+      }
+      if (e.boss) { // pulsing aura
+        g2d.strokeStyle = css(e.bd.color, .3 + .15 * Math.sin(now * 4));
+        g2d.lineWidth = .07;
+        g2d.beginPath();
+        g2d.ellipse(e.x, e.y + e.radius * .9, e.radius * (1.2 + .08 * Math.sin(now * 4)),
+          e.radius * .45, 0, 0, TAU);
+        g2d.stroke();
       }
       let frame;
       if (e.boss) frame = e.chargeT > 0 ? 1 : ((now * 3 + e.animSeed) | 0) % 2;      // menace / raise
@@ -2260,6 +2327,46 @@ function render() {
     drawSpr(g2d, pr.sprite, pr.x, pr.y, {
       scale: (pr.drawScale || 1) * pr.scale, alpha: pr.alpha, rot: pr.rot
     });
+  }
+
+  // ---- particles ----
+  for (const q of Game.parts) {
+    g2d.fillStyle = css(q.col, clamp01(q.t / (q.life * .5)));
+    g2d.fillRect(q.x - q.size / 2, q.y - q.size / 2, q.size, q.size);
+  }
+  // ---- shockwave rings ----
+  for (const r of Game.rings) {
+    g2d.strokeStyle = css(r.col, clamp01(r.t / r.maxT) * .9);
+    g2d.lineWidth = r.lw;
+    g2d.beginPath(); g2d.arc(r.x, r.y, r.r, 0, TAU); g2d.stroke();
+  }
+  // ---- ambient atmosphere ----
+  {
+    const amb = Game.map.amb;
+    for (const q of Game.amb) {
+      switch (amb) {
+        case 'city':   // rain streaks
+          g2d.fillStyle = css([.6, .7, .9], .3);
+          g2d.fillRect(q.x, q.y, .035, .3); break;
+        case 'desert': // sand streaks
+          g2d.fillStyle = css([.85, .7, .4], .3);
+          g2d.fillRect(q.x, q.y, .22, .04); break;
+        case 'village': // drifting leaves
+          g2d.fillStyle = css([.5, .35, .15], .55);
+          g2d.fillRect(q.x, q.y, .09, .06); break;
+        case 'forest': { // pulsing fireflies
+          const a = .25 + .35 * (1 + Math.sin(now * 2 + q.seed * 5)) / 2;
+          g2d.fillStyle = css([.6, 1, .5], a);
+          g2d.fillRect(q.x, q.y, .06, .06); break;
+        }
+        case 'ruins':  // rising arcane motes
+          g2d.fillStyle = css([.7, .5, 1], .3);
+          g2d.fillRect(q.x, q.y, .06, .06); break;
+        default:       // graveyard mist motes
+          g2d.fillStyle = css([.7, .8, .85], .13);
+          g2d.beginPath(); g2d.arc(q.x, q.y, .16, 0, TAU); g2d.fill();
+      }
+    }
   }
 
   // ---- floating damage numbers (screen space for crispness) ----
