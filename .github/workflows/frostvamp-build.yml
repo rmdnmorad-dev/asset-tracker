@@ -1,0 +1,62 @@
+name: FrostVamp - test and export
+
+on:
+  push:
+    paths:
+      - "FrostVamp/**"
+      - ".github/workflows/frostvamp-build.yml"
+  workflow_dispatch:
+
+env:
+  GODOT_VERSION: "4.3"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Godot + export templates
+        run: |
+          curl -sSL -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -q godot.zip
+          sudo mv "Godot_v${GODOT_VERSION}-stable_linux.x86_64" /usr/local/bin/godot
+          curl -sSL -o templates.tpz "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+          mkdir -p "$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
+          unzip -q templates.tpz -d /tmp/templates
+          mv /tmp/templates/templates/* "$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable/"
+
+      - name: Import project
+        run: godot --headless --path FrostVamp --import || true
+
+      - name: Smoke test - menu boots clean
+        run: |
+          godot --headless --path FrostVamp --quit-after 60 2>&1 | tee menu.log
+          ! grep -E "SCRIPT ERROR|Parse Error|Failed to load script" menu.log
+
+      - name: Smoke test - 10s of real gameplay
+        run: |
+          FROSTVAMP_AUTOTEST=1 godot --headless --path FrostVamp --quit-after 600 2>&1 | tee game.log
+          ! grep -E "SCRIPT ERROR|Parse Error|Failed to load script" game.log
+
+      - name: Export Windows build
+        run: |
+          mkdir -p FrostVamp/build/windows
+          godot --headless --path FrostVamp --export-release "Windows" build/windows/FrostVamp.exe
+
+      - name: Export Linux build
+        run: |
+          mkdir -p FrostVamp/build/linux
+          godot --headless --path FrostVamp --export-release "Linux" build/linux/FrostVamp.x86_64
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FrostVamp-windows
+          path: FrostVamp/build/windows/
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FrostVamp-linux
+          path: FrostVamp/build/linux/
