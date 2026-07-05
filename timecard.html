@@ -175,13 +175,15 @@
       <input type="text" id="setSubject"></div>
   </div>
   <div class="hint">
-    <b>How sending works:</b> a web page cannot silently attach files to an email, so each button prepares
-    everything and then opens a new email in your mail app with the To / CC / subject already filled in.<br>
-    📷 <b>Image</b> — the picture of the sheet is <u>copied to your clipboard</u>: click inside the email body and
-    press <b>Ctrl+V</b> to paste it. (Only if the browser blocks the clipboard does it download a PNG instead.)<br>
-    📝 <b>Text</b> — the sheet is written as plain text directly inside the email body (also copied to clipboard).<br>
-    📄 <b>PDF</b> — a PDF of the sheet is downloaded; drag it from the Downloads bar into the email to attach it.
-    Attaching it automatically is impossible — browsers forbid web pages from putting files into an email.
+    <b>How sending works:</b><br>
+    📷 <b>Image</b> / 📄 <b>PDF</b> — the tool builds a <u>ready-to-send email file (.eml)</u> with the picture
+    or PDF <b>already attached</b> and To / CC / subject / message filled in. Click the downloaded file in the
+    Downloads bar and it opens as a draft in Outlook — just press <b>Send</b>. (For the image button the picture
+    is also copied to your clipboard, so Ctrl+V pastes it into any window as a backup.)<br>
+    📝 <b>Text</b> — opens a draft directly with the whole sheet written as text inside the email body.<br>
+    <span style="opacity:.75">The .eml trick needs your computer to open .eml files with a mail app (Outlook does
+    this by default on work PCs). If a draft ever opens read-only, tell the tool's author 🙂 — the older
+    copy-paste flow can be brought back.</span>
   </div>
   <div class="row" style="margin-top:12px;align-items:flex-end">
     <div class="fld"><span>SAVED DROP-DOWN LISTS (values you typed before)</span>
@@ -279,16 +281,8 @@ const JOB_LEGEND = [
   ['2A','DRAFTING'],['2B','POINT LOADS'],['3A','PIPE LAYOUTS'],
   ['N3D','NEW 3D MODELING DRAWINGS'],['PSA','PIPE STRESS ANALYSIS'],['PSE','PIPE SUPPORT ENGINEERING']
 ];
-const SEEDS = {
-  task: TASK_LEGEND.map(t=>t[0]),
-  notes: [], project: [], contractor: [],
-  job: JOB_LEGEND.map(t=>t[0]),
-  tin: ['7:30 AM','8:00 AM','8:15 AM','8:30 AM','9:00 AM','9:30 AM','12:00 PM'],
-  tout:['12:00 PM','3:30 PM','4:00 PM','4:30 PM','5:00 PM','5:30 PM','6:00 PM'],
-  lunch:['0:00','0:30','1:00'],
-  dur: ['0:00','0:30','1:00','2:00','4:00','8:00'],
-  hours:['0.25','0.5','0.75','1','1.5','2','3','4','5','6','7','8']
-};
+// the drop-downs start empty and only contain values the user has typed before
+const HIST_FIELDS = ['task','notes','project','contractor','job','tin','tout','lunch','dur','hours'];
 const HIST_OF = {tin:'tin', tout:'tout', lunch:'lunch', meet:'dur', wfh:'dur', leave:'dur',
                  task:'task', notes:'notes', project:'project', contractor:'contractor',
                  job:'job', h:'hours', ha:'hours'};
@@ -405,7 +399,7 @@ function fmtNum(n){ return String(parseFloat(n.toFixed(2))); }
 /* ---------------- datalists / history ---------------- */
 function dlOptions(field){
   const seen = new Set(), out=[];
-  (state.history[field]||[]).concat(SEEDS[field]||[]).forEach(v=>{
+  (state.history[field]||[]).forEach(v=>{
     const k = String(v).toLowerCase();
     if(!seen.has(k)){ seen.add(k); out.push(v); }
   });
@@ -422,9 +416,8 @@ function refreshDatalist(field){
 function addHistory(field, val){
   val = String(val||'').trim();
   if(!val) return;
-  const seedHit = (SEEDS[field]||[]).some(x=>x.toLowerCase()===val.toLowerCase());
   const arr = state.history[field] || (state.history[field]=[]);
-  if(!seedHit && !arr.some(x=>x.toLowerCase()===val.toLowerCase())){
+  if(!arr.some(x=>x.toLowerCase()===val.toLowerCase())){
     arr.unshift(val);
     if(arr.length>300) arr.pop();
     refreshDatalist(field);
@@ -519,8 +512,8 @@ function buildTable(){
 
   // datalists
   document.getElementById('datalists').innerHTML =
-    Object.keys(SEEDS).map(f=>'<datalist id="dl_'+f+'"></datalist>').join('');
-  Object.keys(SEEDS).forEach(refreshDatalist);
+    HIST_FIELDS.map(f=>'<datalist id="dl_'+f+'"></datalist>').join('');
+  HIST_FIELDS.forEach(refreshDatalist);
 }
 
 /* ---------------- populate / bind ---------------- */
@@ -853,6 +846,58 @@ function jpegToPdf(jpegDataUrl, pxW, pxH){
   return new Blob(parts, {type:'application/pdf'});
 }
 
+/* ---------------- .eml draft builder ----------------
+   An .eml file with "X-Unsent: 1" opens in Outlook as an UNSENT DRAFT
+   with To / CC / subject / body and the attachment already in place —
+   the user only has to press Send. This is the only way a web page can
+   hand a mail client a pre-attached email. */
+async function blobToBase64(blob){
+  const buf = new Uint8Array(await blob.arrayBuffer());
+  let s = '';
+  for(let i=0; i<buf.length; i+=0x8000)
+    s += String.fromCharCode.apply(null, buf.subarray(i, i+0x8000));
+  return btoa(s);
+}
+function b64wrap(b64){ return b64.replace(/(.{76})/g, '$1\r\n'); }
+function encHeader(s){
+  return /^[\x20-\x7E]*$/.test(s) ? s
+    : '=?UTF-8?B?'+btoa(unescape(encodeURIComponent(s)))+'?=';
+}
+function ccList(){
+  return (state.settings.emailCc||'').split(/[,;|]+/).map(x=>x.trim()).filter(Boolean).join(', ');
+}
+function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function buildEml(opt){
+  const nl = '\r\n', b = '=_timecard_'+Date.now();
+  let m = 'X-Unsent: 1'+nl+'To: '+state.settings.emailTo.trim()+nl;
+  const cc = ccList();
+  if(cc) m += 'Cc: '+cc+nl;
+  m += 'Subject: '+encHeader(subjectText())+nl+'MIME-Version: 1.0'+nl;
+  if(opt.inlineImgB64){
+    // image shown INSIDE the email body
+    const html = '<html><body style="font-family:Segoe UI,Arial,sans-serif;font-size:14px">'+
+      '<p>Hi,</p><p>Please find my timecard for '+escHtml(usDate(new Date()))+' below.</p>'+
+      '<img src="cid:timecardimg" width="920" style="max-width:100%;border:1px solid #ccc">'+
+      '<p>Best regards,<br>'+escHtml(state.settings.employee||'')+'</p></body></html>';
+    m += 'Content-Type: multipart/related; boundary="'+b+'"'+nl+nl+
+      '--'+b+nl+'Content-Type: text/html; charset=utf-8'+nl+nl+html+nl+nl+
+      '--'+b+nl+'Content-Type: image/png; name="'+opt.name+'"'+nl+
+      'Content-Transfer-Encoding: base64'+nl+
+      'Content-ID: <timecardimg>'+nl+
+      'Content-Disposition: inline; filename="'+opt.name+'"'+nl+nl+
+      b64wrap(opt.inlineImgB64)+nl+'--'+b+'--'+nl;
+  }else{
+    m += 'Content-Type: multipart/mixed; boundary="'+b+'"'+nl+nl+
+      '--'+b+nl+'Content-Type: text/plain; charset=utf-8'+nl+nl+
+      opt.bodyText.replace(/\n/g, nl)+nl+nl+
+      '--'+b+nl+'Content-Type: '+opt.mime+'; name="'+opt.name+'"'+nl+
+      'Content-Transfer-Encoding: base64'+nl+
+      'Content-Disposition: attachment; filename="'+opt.name+'"'+nl+nl+
+      b64wrap(opt.attachB64)+nl+'--'+b+'--'+nl;
+  }
+  return new Blob([m], {type:'message/rfc822'});
+}
+
 /* ---------------- plain-text rendering ---------------- */
 function buildPlainText(){
   const w = week(), dates = weekDates(), s = state.settings;
@@ -948,12 +993,12 @@ function bindEmailButtons(){
     toast('📷 Taking a picture of the sheet…');
     const canvas = await captureSheet();
     const blob = await canvasBlob(canvas,'image/png');
-    const copied = await tryCopyImage(blob);
-    if(!copied) download(fileBase()+'.png', blob);   // fallback only if the clipboard is blocked
-    setTimeout(()=>openMail(stdBody('image')), 600);
-    toast(copied
-      ? '📷 The timecard picture is <b>on your clipboard</b>.<br>Your email is opening — click inside the message body and press <b>Ctrl+V</b> to paste it.'
-      : '📷 The browser blocked clipboard access, so the image was <b>downloaded</b> instead.<br>Your email is opening — attach the PNG from your Downloads folder.', 14000);
+    tryCopyImage(blob);                       // silent backup: Ctrl+V works too
+    const eml = buildEml({inlineImgB64: await blobToBase64(blob), name: fileBase()+'.png'});
+    download(fileBase()+'.eml', eml);
+    toast('📷 Ready! Click the downloaded <b>.eml</b> file in your Downloads bar.<br>'+
+          'It opens as a draft with the timecard picture <b>already inside the email</b> and To / CC / subject filled — just press <b>Send</b>.<br>'+
+          '<span style="opacity:.8">(The picture is also on your clipboard — Ctrl+V pastes it anywhere.)</span>', 16000);
   });
   document.getElementById('btnTxt').onclick = ev=>withBusy(ev.currentTarget, async ()=>{
     if(!ensureRecipient()) return;
@@ -974,10 +1019,11 @@ function bindEmailButtons(){
     const canvas = await captureSheet();
     const jpeg = canvas.toDataURL('image/jpeg', 0.92);
     const pdf = jpegToPdf(jpeg, canvas.width, canvas.height);
-    download(fileBase()+'.pdf', pdf);
-    setTimeout(()=>openMail(stdBody('PDF')), 600);
-    toast('📄 PDF downloaded.<br>Your email is opening — <b>drag the PDF from the Downloads bar</b> (bottom of the browser) into the message to attach it.<br>'+
-          '<span style="opacity:.8">Web pages are never allowed to attach files to an email by themselves — this is a browser security rule, not a bug.</span>', 16000);
+    const eml = buildEml({attachB64: await blobToBase64(pdf), name: fileBase()+'.pdf',
+                          mime: 'application/pdf', bodyText: stdBody('PDF')});
+    download(fileBase()+'.eml', eml);
+    toast('📄 Ready! Click the downloaded <b>.eml</b> file in your Downloads bar.<br>'+
+          'It opens as a draft with the PDF <b>already attached</b> and To / CC / subject filled — just press <b>Send</b>.', 16000);
   });
 }
 
