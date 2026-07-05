@@ -175,15 +175,18 @@
       <input type="text" id="setSubject"></div>
   </div>
   <div class="hint">
-    <b>How sending works:</b><br>
-    📷 <b>Image</b> / 📄 <b>PDF</b> — the tool builds a <u>ready-to-send email file (.eml)</u> with the picture
-    or PDF <b>already attached</b> and To / CC / subject / message filled in. Click the downloaded file in the
-    Downloads bar and it opens as a draft in Outlook — just press <b>Send</b>. (For the image button the picture
-    is also copied to your clipboard, so Ctrl+V pastes it into any window as a backup.)<br>
-    📝 <b>Text</b> — opens a draft directly with the whole sheet written as text inside the email body.<br>
-    <span style="opacity:.75">The .eml trick needs your computer to open .eml files with a mail app (Outlook does
-    this by default on work PCs). If a draft ever opens read-only, tell the tool's author 🙂 — the older
-    copy-paste flow can be brought back.</span>
+    <b>How sending works:</b> every button builds a <u>ready-to-send email draft (.eml file)</u> —
+    To, CCs, subject, message and the attachment are all already inside it. Opening that file shows the draft
+    in Outlook and you only press <b>Send</b>.<br>
+    📷 <b>Image</b> — the timecard picture appears inside the email body (it is also copied to your clipboard).<br>
+    📝 <b>Text</b> — the whole sheet is written inside the email body as a table, nothing gets cut off.<br>
+    📄 <b>PDF</b> — the PDF is attached to the draft.<br>
+    ⚡ <b>Make it fully automatic (do this once):</b> after pressing a button, find the downloaded file in the
+    browser's download bar or list, <b>right-click it → “Always open files of this type”</b>. From then on,
+    pressing the button makes the ready draft pop open by itself — no downloads bar, no dragging, just Send.<br>
+    <span style="opacity:.75">Why not attach straight into an open Outlook window? Browsers physically cannot touch
+    other programs or send mail themselves — the .eml draft is the one mechanism mail apps accept. If a draft ever
+    opens read-only, set .eml files to open with classic Outlook (right-click → Open with → choose default).</span>
   </div>
   <div class="row" style="margin-top:12px;align-items:flex-end">
     <div class="fld"><span>SAVED DROP-DOWN LISTS (values you typed before)</span>
@@ -880,22 +883,120 @@ function buildEml(opt){
       '<img src="cid:timecardimg" width="920" style="max-width:100%;border:1px solid #ccc">'+
       '<p>Best regards,<br>'+escHtml(state.settings.employee||'')+'</p></body></html>';
     m += 'Content-Type: multipart/related; boundary="'+b+'"'+nl+nl+
-      '--'+b+nl+'Content-Type: text/html; charset=utf-8'+nl+nl+html+nl+nl+
+      '--'+b+nl+'Content-Type: text/html; charset=utf-8'+nl+'Content-Transfer-Encoding: 8bit'+nl+nl+html+nl+nl+
       '--'+b+nl+'Content-Type: image/png; name="'+opt.name+'"'+nl+
       'Content-Transfer-Encoding: base64'+nl+
       'Content-ID: <timecardimg>'+nl+
       'Content-Disposition: inline; filename="'+opt.name+'"'+nl+nl+
       b64wrap(opt.inlineImgB64)+nl+'--'+b+'--'+nl;
-  }else{
+  }else if(opt.attachB64){
     m += 'Content-Type: multipart/mixed; boundary="'+b+'"'+nl+nl+
-      '--'+b+nl+'Content-Type: text/plain; charset=utf-8'+nl+nl+
+      '--'+b+nl+'Content-Type: text/plain; charset=utf-8'+nl+'Content-Transfer-Encoding: 8bit'+nl+nl+
       opt.bodyText.replace(/\n/g, nl)+nl+nl+
       '--'+b+nl+'Content-Type: '+opt.mime+'; name="'+opt.name+'"'+nl+
       'Content-Transfer-Encoding: base64'+nl+
       'Content-Disposition: attachment; filename="'+opt.name+'"'+nl+nl+
       b64wrap(opt.attachB64)+nl+'--'+b+'--'+nl;
+  }else{
+    // sheet as a real table in the body + plain-text fallback (never truncated)
+    m += 'Content-Type: multipart/alternative; boundary="'+b+'"'+nl+nl+
+      '--'+b+nl+'Content-Type: text/plain; charset=utf-8'+nl+'Content-Transfer-Encoding: 8bit'+nl+nl+
+      opt.bodyText.replace(/\n/g, nl)+nl+nl+
+      '--'+b+nl+'Content-Type: text/html; charset=utf-8'+nl+'Content-Transfer-Encoding: 8bit'+nl+nl+
+      opt.bodyHtml+nl+'--'+b+'--'+nl;
   }
   return new Blob([m], {type:'message/rfc822'});
+}
+
+/* ---------------- sheet as an HTML table (email body) ---------------- */
+function buildHtmlEmail(){
+  const w = week(), dates = weekDates(), s = state.settings;
+  const B = 'border:1px solid #000;font-family:Arial;';
+  const dayVals = [], dayTaskTot = [0,0,0,0,0,0,0];
+  let weekMin = 0, grand = 0;
+  for(let d=0; d<7; d++){
+    const dd = w.days[d];
+    const tin = parseClock(dd.tin), tout = parseClock(dd.tout);
+    let tot = 0;
+    if(tin!=null && tout!=null) tot = tout - tin;
+    tot += -(parseDur(dd.lunch)||0)+(parseDur(dd.meet)||0)+(parseDur(dd.wfh)||0)+(parseDur(dd.leave)||0);
+    weekMin += tot; dayVals.push(tot);
+  }
+  let h = '<html><body><div style="font-family:Arial">';
+  // header zone
+  h += '<table cellspacing="0" cellpadding="2" style="border-collapse:collapse;width:960px;margin-bottom:4px"><tr>'+
+    '<td style="width:290px;vertical-align:top;font-family:Arial"><span style="font-size:20px;font-weight:bold">'+escHtml(s.co1||'')+'</span>'+
+    '<br><span style="font-size:9px;color:#8a8a8a">'+escHtml(s.co2||'')+'<br>'+escHtml(s.co3||'')+'</span></td>'+
+    '<td style="text-align:center;vertical-align:top;font-family:Arial"><span style="font-size:20px;font-weight:bold;color:#BFBFBF">Weekly Time Sheet</span>'+
+    '<br><span style="font-size:11px"><span style="color:#FF0000">'+usDate(fromIso(weekKey))+'</span> <b>SUNDAY</b></span></td>'+
+    '<td style="width:250px;vertical-align:top;font-size:10px;color:#8a8a8a;font-family:Arial">'+
+    'Employee: <b style="color:#111">'+escHtml(s.employee||'')+'</b><br>Manager: <b style="color:#111">'+escHtml(s.manager||'')+'</b><br>'+
+    'Phone: <b style="color:#111">'+escHtml(s.phone||'')+'</b><br>E-mail: <span style="color:#0563c1;text-decoration:underline">'+escHtml(s.email||'')+'</span></td></tr></table>';
+  // main sheet table: 5 info columns + 7 day columns + total column
+  h += '<table cellspacing="0" cellpadding="2" style="border-collapse:collapse;width:960px">';
+  h += '<tr><td colspan="5" style="border:none;width:440px"></td>';
+  for(let d=0; d<7; d++) h += '<td style="'+B+'background:#BFBFBF;font-weight:bold;font-size:10px;text-align:center;width:60px">'+DAYS[d]+'</td>';
+  h += '<td rowspan="8" style="'+B+'background:#FDFDA3;text-align:center;font-size:11px;width:60px">'+escHtml(s.totalHoursLabel||'Total Hours')+'</td></tr>';
+  const lblStyle = B+'background:#D9D9D9;font-weight:bold;font-size:11px;text-align:center;';
+  const valCell = (txt,bg,col)=> '<td style="'+B+'background:'+bg+';color:'+col+';font-size:11px;text-align:center">'+escHtml(txt||'')+'</td>';
+  h += '<tr><td colspan="5" style="'+lblStyle+'">DATE</td>';
+  for(let d=0; d<7; d++) h += valCell(usDate(dates[d]),'#FFFFFF','#111111');
+  h += '</tr>';
+  const timeRows = [
+    ['TIME IN','tin','#FBD5B5','#FF0000',''],['LUNCH BREAK','lunch','#DCE5F1','#111111',''],
+    ['TIME OUT','tout','#FBD5B5','#FF0000',''],['MEETING FROM HOME','meet','#DBEEF3','#00B0F0',''],
+    ['WORKING FROM HOME','wfh','#DBEEF3','#00B0F0',''],
+    ['LEAVES, VACATIONS, SICK LEAVES, HOLIDAYS','leave','#F2F2F2','#FF0000','color:#FF0000;']
+  ];
+  for(const [lbl,f,bg,col,lblExtra] of timeRows){
+    h += '<tr><td colspan="5" style="'+lblStyle+lblExtra+'">'+lbl+'</td>';
+    for(let d=0; d<7; d++) h += valCell(w.days[d][f],bg,col);
+    h += '</tr>';
+  }
+  h += '<tr><td colspan="5" style="'+lblStyle+'">TOTAL WORK HOURS</td>';
+  for(let d=0; d<7; d++) h += '<td rowspan="2" style="'+B+'background:#FBD5B5;font-size:11px;text-align:center">'+fmtDur(dayVals[d])+'</td>';
+  h += '<td rowspan="2" style="'+B+'background:#FBD5B5;font-size:11px;text-align:center">'+fmtDur(weekMin)+'</td></tr>';
+  h += '<tr>';
+  for(const c of ['TASK #','NOTES','PROJECT','CONTRACTOR','JOB TYPE'])
+    h += '<td style="'+lblStyle+'font-size:10px">'+c+'</td>';
+  h += '</tr>';
+  // task sections
+  let ri = 0;
+  for(let si=0; si<SECTIONS.length; si++){
+    h += '<tr><td colspan="13" style="'+B+'background:#FFFFFF;color:#0070C0;font-weight:bold;font-size:15px;text-align:center;padding:4px">'+
+         escHtml(s.sectionNames[si]||SECTIONS[si].name)+'</td></tr>';
+    for(let k=0; k<w.secRows[si]; k++, ri++){
+      const r = w.rows[ri];
+      let rowTot = 0;
+      h += '<tr>';
+      for(const f of ['task','notes','project','contractor','job'])
+        h += '<td style="'+B+'background:#D9D9D9;color:#FF0000;font-size:11px;text-align:center;height:22px">'+escHtml(r[f]||'')+'</td>';
+      for(let d=0; d<7; d++){
+        const v = num(r.ha[d]) + num(r.h[d]);
+        rowTot += v; dayTaskTot[d] += v;
+        h += '<td style="'+B+'background:#D7E3BC;color:#FF0000;font-size:11px;text-align:center">'+(v ? fmtNum(v) : '')+'</td>';
+      }
+      grand += rowTot;
+      h += '<td style="'+B+'background:#D7E3BC;font-size:11px;text-align:center">'+fmtNum(rowTot)+'</td></tr>';
+    }
+  }
+  // per-day task totals
+  h += '<tr><td colspan="5" style="border:none;text-align:right;font-size:10px;color:#666;padding-right:6px">DAILY TASK TOTALS</td>';
+  for(let d=0; d<7; d++) h += '<td style="border:none;font-size:11px;text-align:center">'+fmtNum(dayTaskTot[d])+'</td>';
+  h += '<td style="border:none;font-size:11px;text-align:center;font-weight:bold">'+fmtNum(grand)+'</td></tr>';
+  h += '</table>';
+  // legends
+  const legRow = (code,desc,wd)=> '<tr><td style="'+B+'background:#B7DDE8;color:#FF0000;font-size:10px;text-align:center;width:70px">'+code+
+                 '</td><td style="'+B+'background:#E5E0EC;font-size:10px;width:'+wd+'px">'+escHtml(desc)+'</td></tr>';
+  h += '<table cellspacing="0" cellpadding="1" style="border-collapse:collapse;margin-top:14px"><tr><td style="vertical-align:top;border:none;padding-right:30px">'+
+       '<div style="'+B+'background:#D9D9D9;font-weight:bold;font-size:11px;padding:1px 8px;width:90px">TASKS :</div>'+
+       '<table cellspacing="0" cellpadding="1" style="border-collapse:collapse">';
+  for(const t of TASK_LEGEND) h += legRow(t[0], t[1], 260);
+  h += '</table></td><td style="vertical-align:top;border:none"><table cellspacing="0" cellpadding="1" style="border-collapse:collapse">';
+  for(const t of JOB_LEGEND) h += legRow(t[0], t[1], 210);
+  h += '</table></td></tr></table>';
+  h += '</div></body></html>';
+  return h;
 }
 
 /* ---------------- plain-text rendering ---------------- */
@@ -962,18 +1063,6 @@ function ensureRecipient(){
   toast('✉ First set the <b>SEND TO</b> email (and CCs) in Settings — they are saved for next time.');
   return false;
 }
-function openMail(body){
-  const s=state.settings;
-  let url='mailto:'+encodeURIComponent(s.emailTo.trim());
-  const q=[];
-  // people separate CCs with commas, semicolons or | — accept all of them
-  if(s.emailCc && s.emailCc.trim())
-    q.push('cc='+encodeURIComponent(s.emailCc.split(/[,;|]+/).map(x=>x.trim()).filter(Boolean).join(',')));
-  q.push('subject='+encodeURIComponent(subjectText()));
-  q.push('body='+encodeURIComponent(body));
-  url+='?'+q.join('&');
-  window.location.href=url;
-}
 function fileBase(){
   return 'Timecard_'+(state.settings.employee||'').replace(/[^\w]+/g,'')+'_'+weekKey;
 }
@@ -981,6 +1070,8 @@ function stdBody(kind){
   return 'Hi,\n\nPlease find my timecard ('+kind+') for '+usDate(new Date())+
          '.\n\nBest regards,\n'+(state.settings.employee||'');
 }
+const AUTOTIP = '<br><span style="opacity:.85">💡 <b>Make it one-click:</b> in the downloads bar/list, right-click the file → '+
+  '<b>“Always open files of this type”</b>. From then on the draft pops open by itself every time you press the button.</span>';
 async function withBusy(btn, fn){
   btn.disabled=true;
   try{ await fn(); }
@@ -996,22 +1087,17 @@ function bindEmailButtons(){
     tryCopyImage(blob);                       // silent backup: Ctrl+V works too
     const eml = buildEml({inlineImgB64: await blobToBase64(blob), name: fileBase()+'.png'});
     download(fileBase()+'.eml', eml);
-    toast('📷 Ready! Click the downloaded <b>.eml</b> file in your Downloads bar.<br>'+
-          'It opens as a draft with the timecard picture <b>already inside the email</b> and To / CC / subject filled — just press <b>Send</b>.<br>'+
-          '<span style="opacity:.8">(The picture is also on your clipboard — Ctrl+V pastes it anywhere.)</span>', 16000);
+    toast('📷 Ready! Open the downloaded <b>.eml</b> — the draft has the timecard picture <b>already inside the email</b> '+
+          'and To / CC / subject filled. Just press <b>Send</b>.'+AUTOTIP, 16000);
   });
   document.getElementById('btnTxt').onclick = ev=>withBusy(ev.currentTarget, async ()=>{
     if(!ensureRecipient()) return;
     const txt = buildPlainText();
-    await tryCopyText(txt);
-    const enc = encodeURIComponent(txt);
-    if(enc.length < 5500){
-      openMail(txt);
-      toast('📝 Email opening with the timecard text inside the body (also copied to clipboard).', 10000);
-    }else{
-      openMail('(The timecard text was copied to the clipboard - press Ctrl+V here to paste it.)');
-      toast('📝 The text is too long for an email link, so it was <b>copied to your clipboard</b> — press <b>Ctrl+V</b> inside the email body.', 14000);
-    }
+    tryCopyText(txt);
+    const eml = buildEml({bodyText: txt, bodyHtml: buildHtmlEmail()});
+    download(fileBase()+'.eml', eml);
+    toast('📝 Ready! Open the downloaded <b>.eml</b> — the draft has the whole sheet written inside the email as a table, '+
+          'with To / CC / subject filled. Nothing gets cut off any more. Just press <b>Send</b>.'+AUTOTIP, 16000);
   });
   document.getElementById('btnPdf').onclick = ev=>withBusy(ev.currentTarget, async ()=>{
     if(!ensureRecipient()) return;
@@ -1022,8 +1108,8 @@ function bindEmailButtons(){
     const eml = buildEml({attachB64: await blobToBase64(pdf), name: fileBase()+'.pdf',
                           mime: 'application/pdf', bodyText: stdBody('PDF')});
     download(fileBase()+'.eml', eml);
-    toast('📄 Ready! Click the downloaded <b>.eml</b> file in your Downloads bar.<br>'+
-          'It opens as a draft with the PDF <b>already attached</b> and To / CC / subject filled — just press <b>Send</b>.', 16000);
+    toast('📄 Ready! Open the downloaded <b>.eml</b> — the draft has the PDF <b>already attached</b> '+
+          'and To / CC / subject filled. Just press <b>Send</b>.'+AUTOTIP, 16000);
   });
 }
 
