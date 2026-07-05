@@ -206,8 +206,9 @@
       <input type="text" id="setCc" placeholder="hr@company.com, boss@company.com, team@company.com"></div>
   </div>
   <div class="row">
-    <div class="fld" style="flex:1;min-width:300px"><span>EMAIL SUBJECT — you can use {employee}, {date}, {day}, {weekending}</span>
-      <input type="text" id="setSubject"></div>
+    <div class="fld" style="flex:1;min-width:300px">
+      <span>EMAIL SUBJECT — {type} becomes “Daily” (Mon–Sat) or “Weekly” (Sunday); also {date}, {day}, {employee}, {weekending}</span>
+      <input type="text" id="setSubject" placeholder="{type} Timecard-{date}"></div>
   </div>
   <div class="hint">
     <b>How sending works:</b> every button opens a new email with your To / CC / subject already filled.<br>
@@ -331,7 +332,8 @@ function defaultState(){
     version:1,
     settings:{
       emailTo:'', emailCc:'',
-      subject:'{employee} - Timecard - {date}',
+      subject:'{type} Timecard-{date}',
+      subjectV2:true,
       employee:'Morad Ramadan', manager:'C. Hattar',
       phone:'962-788530881', email:'mramadan@isatts.com',
       co1:'JORDAN ISAT', co2:'SHMEISANI-AMMAN JORDAN', co3:'OFFICE# 714.927.0635 (MAJIC)',
@@ -349,6 +351,11 @@ try{
 }catch(e){ state = defaultState(); }
 // upgrade data saved by an older version of this tool
 if(!state.settings.sectionNames) state.settings.sectionNames = SECTIONS.map(s=>s.name);
+if(!state.settings.subjectV2){
+  // one-time switch to the automatic Daily/Weekly subject
+  state.settings.subject = '{type} Timecard-{date}';
+  state.settings.subjectV2 = true;
+}
 
 let saveTimer = null;
 function save(){
@@ -1202,7 +1209,8 @@ function buildPlainText(){
 /* ---------------- email actions ---------------- */
 function subjectText(){
   const s=state.settings, now=new Date();
-  return (s.subject||'{employee} - Timecard - {date}')
+  return (s.subject||'{type} Timecard-{date}')
+    .replace(/{type}/gi, now.getDay()===0 ? 'Weekly' : 'Daily')   // Sundays = weekly send
     .replace(/{employee}/gi, s.employee||'')
     .replace(/{date}/gi, usDate(now))
     .replace(/{day}/gi, DAYS[(now.getDay()+6)%7])
