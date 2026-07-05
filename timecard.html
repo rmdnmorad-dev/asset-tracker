@@ -117,6 +117,42 @@
   .tasksHdr{border:1px solid #000;background:var(--gray);font-weight:bold;font-size:12px;
     padding:1px 8px;display:inline-block;margin-bottom:0px;width:110px}
 
+  /* custom drop-down with per-item delete */
+  #combo{position:fixed;z-index:120;background:#fff;border:1px solid #cbd5e1;border-radius:8px;
+    box-shadow:0 8px 26px rgba(0,0,0,.28);max-height:250px;overflow:auto;display:none;min-width:170px}
+  #combo.show{display:block}
+  .citem{display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:13px;cursor:pointer;font-family:Arial}
+  .citem.sel,.citem:hover{background:#e8efff}
+  .citem .cv{flex:1;white-space:nowrap}
+  .citem .cl{color:#94a3b8;font-size:11px;white-space:nowrap}
+  .citem .cx{color:#b91c1c;font-weight:bold;padding:0 6px;border-radius:4px;font-size:13px}
+  .citem .cx:hover{background:#fee2e2}
+  .cempty{padding:8px 12px;font-size:12px;color:#94a3b8;font-family:Arial}
+
+  /* iOS-style time wheel */
+  #wheel{position:fixed;z-index:120;background:#fff;border-radius:16px;
+    box-shadow:0 12px 44px rgba(0,0,0,.35);padding:12px 16px 12px;display:none;user-select:none}
+  #wheel.show{display:block}
+  #wheel .wtitle{text-align:center;font-size:13px;font-weight:600;color:#333;margin-bottom:6px;font-family:Arial}
+  #wheel .wcols{display:flex;justify-content:center;gap:2px;position:relative;
+    -webkit-mask-image:linear-gradient(transparent,#000 25%,#000 75%,transparent);
+    mask-image:linear-gradient(transparent,#000 25%,#000 75%,transparent)}
+  .wcol{height:160px;overflow-y:auto;scroll-snap-type:y mandatory;width:58px;position:relative;
+    scrollbar-width:none}
+  .wcol::-webkit-scrollbar{display:none}
+  .wcol div{height:32px;line-height:32px;text-align:center;scroll-snap-align:center;
+    font-size:17px;color:#222;font-family:Arial}
+  .wcol .wpad{height:64px}
+  .wsep{line-height:160px;font-size:17px;font-weight:bold;color:#555}
+  #wheel .wband{position:absolute;left:-4px;right:-4px;top:64px;height:32px;border:1px solid #cfcfcf;
+    border-radius:9px;pointer-events:none;background:rgba(120,120,128,.08)}
+  #wheel .wbtns{display:flex;justify-content:space-between;margin-top:10px;gap:10px}
+  #wheel .wbtns button{flex:1;padding:7px 0;border-radius:8px;font-size:13.5px;cursor:pointer;font-family:Arial}
+  #wheel .wcancel{background:#fff;border:1px solid #d1d5db;color:#333}
+  #wheel .wcancel:hover{background:#f3f4f6}
+  #wheel .wsave{background:#2563eb;border:1px solid #2563eb;color:#fff;font-weight:600}
+  #wheel .wsave:hover{background:#1d4ed8}
+
   /* toast */
   #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);max-width:640px;
     background:#111827;color:#fff;border-radius:10px;padding:13px 20px;font-size:13.5px;
@@ -155,10 +191,8 @@
   </div>
   <div class="sep"></div>
   <div class="grp">
+    <button class="btn" id="btnSavePdf" title="Save a PDF of the sheet to your computer">⬇ Save PDF</button>
     <button class="btn" id="btnSettings">⚙ Settings</button>
-    <button class="btn" id="btnBackup" title="Download a JSON backup of all saved data">💾 Backup</button>
-    <button class="btn" id="btnRestore" title="Restore data from a backup file">📥 Restore</button>
-    <input type="file" id="restoreFile" accept=".json,application/json" style="display:none">
   </div>
 </div>
 
@@ -175,31 +209,21 @@
       <input type="text" id="setSubject"></div>
   </div>
   <div class="hint">
-    <b>How sending works:</b> every button builds a <u>ready-to-send email draft (.eml file)</u> —
-    To, CCs, subject, message and the attachment are all already inside it. Opening that file shows the draft
-    in Outlook and you only press <b>Send</b>.<br>
-    📷 <b>Image</b> — the timecard picture appears inside the email body (it is also copied to your clipboard).<br>
-    📝 <b>Text</b> — the whole sheet is written inside the email body as a table, nothing gets cut off.<br>
-    📄 <b>PDF</b> — the PDF is attached to the draft.<br>
-    ⚡ <b>Make it fully automatic (do this once):</b> after pressing a button, find the downloaded file in the
-    browser's download bar or list, <b>right-click it → “Always open files of this type”</b>. From then on,
-    pressing the button makes the ready draft pop open by itself — no downloads bar, no dragging, just Send.<br>
-    <span style="opacity:.75">Why not attach straight into an open Outlook window? Browsers physically cannot touch
-    other programs or send mail themselves — the .eml draft is the one mechanism mail apps accept. If a draft ever
-    opens read-only, set .eml files to open with classic Outlook (right-click → Open with → choose default).</span>
+    <b>How sending works:</b><br>
+    📷 <b>Image</b> / 📄 <b>PDF</b> — the browser opens the <b>Windows share window</b>; pick Outlook and the
+    .png / .pdf is <b>attached automatically</b>, nothing is downloaded. Windows does not pass To/CC through
+    that window, so add the recipients (Outlook remembers them after the first send). The image is also copied
+    to your clipboard so Ctrl+V pastes it into any email.<br>
+    📝 <b>Text</b> — a ready email draft is downloaded: open it and the whole sheet is written inside the email
+    as a table with To / CC / subject filled — just press Send. <i>One-time tip:</i> right-click that download →
+    <b>“Always open files of this type”</b> and from then on the draft pops open by itself.<br>
+    <span style="opacity:.75">If the share window is not available on your browser, the Image/PDF buttons fall
+    back to the same ready-draft file with everything (including the attachment) already inside.</span>
   </div>
-  <div class="row" style="margin-top:12px;align-items:flex-end">
-    <div class="fld"><span>SAVED DROP-DOWN LISTS (values you typed before)</span>
-      <select id="histField">
-        <option value="task">Task #</option><option value="notes">Notes</option>
-        <option value="project">Project</option><option value="contractor">Contractor</option>
-        <option value="job">Job Type</option><option value="tin">Time In</option>
-        <option value="tout">Time Out</option><option value="lunch">Lunch Break</option>
-        <option value="dur">Home / Leave hours</option><option value="hours">Task hours</option>
-      </select></div>
-    <div style="font-size:11px;color:#777;padding-bottom:6px">click ✕ on a value to remove it from the drop-down</div>
+  <div class="hint" style="margin-top:10px">
+    🧠 <b>Drop-down memory:</b> every value you type in the sheet is remembered and offered as a drop-down
+    next time. To forget a value, open the drop-down and click the <b style="color:#b91c1c">✕</b> next to it.
   </div>
-  <div id="histChips"></div>
 </div>
 
 <div id="sheetWrap">
@@ -228,7 +252,8 @@
 </div>
 
 <div id="toast"></div>
-<div id="datalists" style="display:none"></div>
+<div id="combo"></div>
+<div id="wheel"></div>
 
 <script>
 /* html2canvas 1.4.1 | MIT License | https://html2canvas.hertzen.com */
@@ -285,9 +310,9 @@ const JOB_LEGEND = [
   ['N3D','NEW 3D MODELING DRAWINGS'],['PSA','PIPE STRESS ANALYSIS'],['PSE','PIPE SUPPORT ENGINEERING']
 ];
 // the drop-downs start empty and only contain values the user has typed before
-const HIST_FIELDS = ['task','notes','project','contractor','job','tin','tout','lunch','dur','hours'];
-const HIST_OF = {tin:'tin', tout:'tout', lunch:'lunch', meet:'dur', wfh:'dur', leave:'dur',
-                 task:'task', notes:'notes', project:'project', contractor:'contractor',
+const HIST_FIELDS = ['task','notes','project','contractor','job','hours'];
+const TIME_FIELDS = ['tin','tout','lunch','meet','wfh','leave'];   // these get the time wheel instead
+const HIST_OF = {task:'task', notes:'notes', project:'project', contractor:'contractor',
                  job:'job', h:'hours', ha:'hours'};
 // descriptions shown next to the codes inside the drop-downs
 const DL_LABELS = {task:Object.fromEntries(TASK_LEGEND), job:Object.fromEntries(JOB_LEGEND)};
@@ -399,7 +424,7 @@ function fmtDur(min){ const s=min<0?'-':''; min=Math.abs(min); return s+Math.flo
 function num(s){ const n=parseFloat(s); return isNaN(n)?0:n; }
 function fmtNum(n){ return String(parseFloat(n.toFixed(2))); }
 
-/* ---------------- datalists / history ---------------- */
+/* ---------------- learned drop-down memory ---------------- */
 function dlOptions(field){
   const seen = new Set(), out=[];
   (state.history[field]||[]).forEach(v=>{
@@ -408,24 +433,20 @@ function dlOptions(field){
   });
   return out;
 }
-function refreshDatalist(field){
-  const dl = document.getElementById('dl_'+field);
-  if(!dl) return;
-  dl.innerHTML = dlOptions(field).map(v=>{
-    const lab = DL_LABELS[field] && DL_LABELS[field][v];
-    return '<option value="'+esc(v)+'"'+(lab ? ' label="'+esc(lab)+'"' : '')+'>';
-  }).join('');
-}
 function addHistory(field, val){
+  if(!field) return;                       // time boxes use the wheel, no memory needed
   val = String(val||'').trim();
   if(!val) return;
   const arr = state.history[field] || (state.history[field]=[]);
   if(!arr.some(x=>x.toLowerCase()===val.toLowerCase())){
     arr.unshift(val);
     if(arr.length>300) arr.pop();
-    refreshDatalist(field);
-    renderHistChips();
   }
+}
+function forgetHistory(field, val){
+  const arr = state.history[field]||[];
+  const i = arr.findIndex(x=>x.toLowerCase()===String(val).toLowerCase());
+  if(i>=0){ arr.splice(i,1); save(); }
 }
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
 
@@ -461,7 +482,7 @@ function buildTable(){
     h += '<tr><td class="b lbl '+r.lblCls+'" colspan="5">'+r.lbl+'</td>';
     for(let d=0; d<7; d++){
       h += '<td class="b '+r.cls+'" colspan="2">'+
-           '<input class="cell '+r.tx+'" data-day="'+d+'" data-f="'+r.f+'" list="dl_'+HIST_OF[r.f]+'" spellcheck="false" autocomplete="off"></td>';
+           '<input class="cell '+r.tx+'" data-day="'+d+'" data-f="'+r.f+'" spellcheck="false" autocomplete="off"></td>';
     }
     h += '</tr>';
   }
@@ -487,11 +508,11 @@ function buildTable(){
     for(let k=0; k<w.secRows[si]; k++, ri++){
       h += '<tr class="taskrow'+(SECTIONS[si].tall?' tall':'')+'">';
       for(const f of ['task','notes','project','contractor','job']){
-        h += '<td class="b tinfo"><input class="cell task redtx" data-row="'+ri+'" data-f="'+f+'" list="dl_'+HIST_OF[f]+'" spellcheck="false" autocomplete="off"></td>';
+        h += '<td class="b tinfo"><input class="cell task redtx" data-row="'+ri+'" data-f="'+f+'" spellcheck="false" autocomplete="off"></td>';
       }
       for(let d=0; d<7; d++){
-        h += '<td class="b tgreen"><input class="cell redtx" data-row="'+ri+'" data-f="ha" data-di="'+d+'" list="dl_hours" spellcheck="false" autocomplete="off"></td>'+
-             '<td class="b tgreen"><input class="cell redtx" data-row="'+ri+'" data-f="h" data-di="'+d+'" list="dl_hours" spellcheck="false" autocomplete="off"></td>';
+        h += '<td class="b tgreen"><input class="cell redtx" data-row="'+ri+'" data-f="ha" data-di="'+d+'" spellcheck="false" autocomplete="off"></td>'+
+             '<td class="b tgreen"><input class="cell redtx" data-row="'+ri+'" data-f="h" data-di="'+d+'" spellcheck="false" autocomplete="off"></td>';
       }
       h += '<td class="b rowtot" id="rt'+ri+'">0</td></tr>';
     }
@@ -512,11 +533,6 @@ function buildTable(){
 
   h += '</table>';
   document.getElementById('tblhost').innerHTML = h;
-
-  // datalists
-  document.getElementById('datalists').innerHTML =
-    HIST_FIELDS.map(f=>'<datalist id="dl_'+f+'"></datalist>').join('');
-  HIST_FIELDS.forEach(refreshDatalist);
 }
 
 /* ---------------- populate / bind ---------------- */
@@ -578,10 +594,21 @@ function recalc(){
 
 function bindSheetInputs(){
   const host = document.getElementById('tblhost');
+  host.addEventListener('focusin', e=>{
+    const t = e.target;
+    if(!t.classList || !t.classList.contains('cell')) return;
+    if(TIME_FIELDS.includes(t.dataset.f)) openWheel(t);
+    else if(HIST_OF[t.dataset.f]) openCombo(t);
+  });
   host.addEventListener('input', e=>{
     const t = e.target;
     if(!t.classList) return;
-    if(t.classList.contains('cell')) return commitValue(t, false);
+    if(t.classList.contains('cell')){
+      commitValue(t, false);
+      if(comboInp===t) renderCombo();       // live-filter the drop-down
+      if(wheelInp===t) syncWheel();         // typing a custom time moves the wheel
+      return;
+    }
     if(t.classList.contains('secname')){
       state.settings.sectionNames[+t.dataset.sec] = t.textContent; save(); return;
     }
@@ -684,7 +711,6 @@ function bindSettings(){
   document.getElementById('btnSettings').onclick = ()=>{
     const p = document.getElementById('settings');
     p.hidden = !p.hidden;
-    if(!p.hidden) renderHistChips();
   };
   const map = [['setTo','emailTo'],['setCc','emailCc'],['setSubject','subject']];
   for(const [id,key] of map){
@@ -692,43 +718,126 @@ function bindSettings(){
     el.value = state.settings[key]||'';
     el.addEventListener('input', ()=>{ state.settings[key]=el.value; save(); });
   }
-  document.getElementById('histField').addEventListener('change', renderHistChips);
+}
 
-  document.getElementById('btnBackup').onclick = ()=>{
-    const blob = new Blob([JSON.stringify(state,null,1)], {type:'application/json'});
-    download('Timecard_backup_'+isoDate(new Date())+'.json', blob);
-    toast('💾 Backup downloaded. Keep it somewhere safe — you can restore it with 📥 Restore.');
+/* ---------------- custom drop-down (learned values, ✕ to forget) ---------------- */
+const combo = document.getElementById('combo');
+let comboInp = null;
+function openCombo(inp){
+  comboInp = inp;
+  renderCombo();
+}
+function renderCombo(){
+  if(!comboInp) return;
+  const field = HIST_OF[comboInp.dataset.f];
+  const typed = comboInp.value.trim().toLowerCase();
+  const items = dlOptions(field).filter(v=>!typed || v.toLowerCase().includes(typed));
+  if(!items.length){
+    combo.innerHTML = '<div class="cempty">'+(dlOptions(field).length
+      ? 'No saved value matches.' : 'Values you type here are remembered for next time.')+'</div>';
+  }else{
+    combo.innerHTML = items.slice(0,60).map(v=>{
+      const lab = DL_LABELS[field] && DL_LABELS[field][v];
+      return '<div class="citem" data-v="'+esc(v)+'"><span class="cv">'+esc(v)+'</span>'+
+             (lab?'<span class="cl">'+esc(lab)+'</span>':'')+
+             '<b class="cx" title="Forget this value">✕</b></div>';
+    }).join('');
+  }
+  const r = comboInp.getBoundingClientRect();
+  combo.style.minWidth = Math.max(r.width, 170)+'px';
+  combo.style.left = Math.min(r.left, window.innerWidth-260)+'px';
+  combo.classList.add('show');
+  const ch = combo.offsetHeight;
+  combo.style.top = (r.bottom+ch+6 > window.innerHeight ? r.top-ch-4 : r.bottom+2)+'px';
+}
+combo.addEventListener('mousedown', e=>{
+  e.preventDefault();                       // keep focus in the cell
+  const item = e.target.closest('.citem');
+  if(!item || !comboInp) return;
+  const field = HIST_OF[comboInp.dataset.f];
+  if(e.target.classList.contains('cx')){
+    forgetHistory(field, item.dataset.v);
+    renderCombo();                          // stay open so several can be removed
+  }else{
+    comboInp.value = item.dataset.v;
+    commitValue(comboInp, true);
+    closeCombo();
+  }
+});
+function closeCombo(){ combo.classList.remove('show'); comboInp = null; }
+
+/* ---------------- iOS-style time wheel ---------------- */
+const wheel = document.getElementById('wheel');
+let wheelInp = null, wheelMode = null;
+const ITEM_H = 32;
+function wheelCol(values){
+  return '<div class="wcol"><div class="wpad"></div>'+
+         values.map(v=>'<div>'+v+'</div>').join('')+'<div class="wpad"></div></div>';
+}
+function openWheel(inp){
+  wheelInp = inp;
+  wheelMode = (inp.dataset.f==='tin'||inp.dataset.f==='tout') ? 'clock' : 'dur';
+  const two = n=>pad2(n);
+  let cols;
+  if(wheelMode==='clock'){
+    cols = wheelCol(Array.from({length:12},(_,i)=>two(i+1)))+
+           '<div class="wsep">:</div>'+
+           wheelCol(Array.from({length:60},(_,i)=>two(i)))+
+           wheelCol(['AM','PM']);
+  }else{
+    cols = wheelCol(Array.from({length:13},(_,i)=>i))+   // 0-12 hours
+           '<div class="wsep">:</div>'+
+           wheelCol(Array.from({length:60},(_,i)=>two(i)));
+  }
+  wheel.innerHTML = '<div class="wtitle">'+(wheelMode==='clock'?'Select time':'Select duration (h : mm)')+'</div>'+
+    '<div class="wcols">'+cols+'<div class="wband"></div></div>'+
+    '<div class="wbtns"><button type="button" class="wcancel">Cancel</button>'+
+    '<button type="button" class="wsave">Save</button></div>';
+  const r = inp.getBoundingClientRect();
+  wheel.classList.add('show');
+  const ww = wheel.offsetWidth, wh = wheel.offsetHeight;
+  wheel.style.left = Math.max(8, Math.min(r.left, window.innerWidth-ww-10))+'px';
+  wheel.style.top  = (r.bottom+wh+8 > window.innerHeight ? Math.max(8, r.top-wh-4) : r.bottom+3)+'px';
+  syncWheel();
+  wheel.querySelector('.wcancel').onclick = closeWheel;
+  wheel.querySelector('.wsave').onclick = ()=>{
+    const c = wheel.querySelectorAll('.wcol');
+    const idx = el=>Math.max(0, Math.round(el.scrollTop/ITEM_H));
+    let v;
+    if(wheelMode==='clock'){
+      v = (idx(c[0])+1)+':'+pad2(idx(c[1]))+' '+(idx(c[2])===0?'AM':'PM');
+    }else{
+      v = idx(c[0])+':'+pad2(idx(c[1]));
+    }
+    if(wheelInp){ wheelInp.value = v; commitValue(wheelInp, true); }
+    closeWheel();
   };
-  document.getElementById('btnRestore').onclick = ()=>document.getElementById('restoreFile').click();
-  document.getElementById('restoreFile').addEventListener('change', e=>{
-    const f = e.target.files[0]; if(!f) return;
-    const rd = new FileReader();
-    rd.onload = ()=>{
-      try{
-        const data = JSON.parse(rd.result);
-        if(!data.settings || !data.weeks) throw new Error('not a timecard backup');
-        localStorage.setItem(LS_KEY, JSON.stringify(data));
-        location.reload();
-      }catch(err){ toast('⚠ That file is not a valid timecard backup.'); }
-      e.target.value='';
-    };
-    rd.readAsText(f);
-  });
 }
-function renderHistChips(){
-  const field = document.getElementById('histField').value;
-  const box = document.getElementById('histChips');
-  const arr = state.history[field]||[];
-  box.innerHTML = arr.length
-    ? arr.map((v,i)=>'<span class="chip">'+esc(v)+'<b data-i="'+i+'" title="Remove from drop-down">✕</b></span>').join('')
-    : '<span style="font-size:12px;color:#999">Nothing saved yet — values are added automatically as you type them in the sheet.</span>';
-  box.querySelectorAll('.chip b').forEach(b=>{
-    b.onclick = ()=>{
-      state.history[field].splice(+b.dataset.i,1);
-      save(); refreshDatalist(field); renderHistChips();
-    };
-  });
+function syncWheel(){
+  if(!wheelInp) return;
+  const c = wheel.querySelectorAll('.wcol');
+  const go = (el,i)=>{ el.scrollTop = i*ITEM_H; };
+  if(wheelMode==='clock'){
+    const m = parseClock(wheelInp.value);
+    const min = m==null ? 12*60 : m;                    // default 12:00 PM
+    const h24 = Math.floor(min/60), mm = min%60;
+    go(c[0], (h24%12===0?12:h24%12)-1); go(c[1], mm); go(c[2], h24>=12?1:0);
+  }else{
+    const m = parseDur(wheelInp.value)||0;
+    go(c[0], Math.min(12, Math.floor(m/60))); go(c[1], m%60);
+  }
 }
+function closeWheel(){ wheel.classList.remove('show'); wheelInp = null; }
+
+// one place that closes popups when clicking anywhere else
+document.addEventListener('mousedown', e=>{
+  if(wheel.classList.contains('show') && !wheel.contains(e.target) && e.target!==wheelInp) closeWheel();
+  if(combo.classList.contains('show') && !combo.contains(e.target) && e.target!==comboInp) closeCombo();
+}, true);
+document.addEventListener('keydown', e=>{
+  if(e.key==='Escape'){ closeWheel(); closeCombo(); }
+});
+function closePopups(){ closeWheel(); closeCombo(); }
 
 /* ---------------- toast ---------------- */
 let toastTimer=null;
@@ -750,6 +859,7 @@ function download(name, blob){
   setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 4000);
 }
 async function captureSheet(){
+  closePopups();
   if(document.activeElement) document.activeElement.blur();
   document.body.classList.add('capturing');
   await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
@@ -877,11 +987,10 @@ function buildEml(opt){
   if(cc) m += 'Cc: '+cc+nl;
   m += 'Subject: '+encHeader(subjectText())+nl+'MIME-Version: 1.0'+nl;
   if(opt.inlineImgB64){
-    // image shown INSIDE the email body
-    const html = '<html><body style="font-family:Segoe UI,Arial,sans-serif;font-size:14px">'+
-      '<p>Hi,</p><p>Please find my timecard for '+escHtml(usDate(new Date()))+' below.</p>'+
+    // image shown INSIDE the email body, no filler text
+    const html = '<html><body>'+
       '<img src="cid:timecardimg" width="920" style="max-width:100%;border:1px solid #ccc">'+
-      '<p>Best regards,<br>'+escHtml(state.settings.employee||'')+'</p></body></html>';
+      '</body></html>';
     m += 'Content-Type: multipart/related; boundary="'+b+'"'+nl+nl+
       '--'+b+nl+'Content-Type: text/html; charset=utf-8'+nl+'Content-Transfer-Encoding: 8bit'+nl+nl+html+nl+nl+
       '--'+b+nl+'Content-Type: image/png; name="'+opt.name+'"'+nl+
@@ -1066,9 +1175,19 @@ function ensureRecipient(){
 function fileBase(){
   return 'Timecard_'+(state.settings.employee||'').replace(/[^\w]+/g,'')+'_'+weekKey;
 }
-function stdBody(kind){
-  return 'Hi,\n\nPlease find my timecard ('+kind+') for '+usDate(new Date())+
-         '.\n\nBest regards,\n'+(state.settings.employee||'');
+/* Web Share: hands the real .png/.pdf file to the mail app — no download.
+   Returns 'shared' | 'cancelled' | 'failed' | 'unsupported'. */
+async function shareFile(blob, name, type){
+  try{
+    const file = new File([blob], name, {type});
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({files:[file], title: subjectText()});
+      return 'shared';
+    }
+  }catch(e){
+    return (e && e.name==='AbortError') ? 'cancelled' : 'failed';
+  }
+  return 'unsupported';
 }
 const AUTOTIP = '<br><span style="opacity:.85">💡 <b>Make it one-click:</b> in the downloads bar/list, right-click the file → '+
   '<b>“Always open files of this type”</b>. From then on the draft pops open by itself every time you press the button.</span>';
@@ -1084,11 +1203,20 @@ function bindEmailButtons(){
     toast('📷 Taking a picture of the sheet…');
     const canvas = await captureSheet();
     const blob = await canvasBlob(canvas,'image/png');
-    tryCopyImage(blob);                       // silent backup: Ctrl+V works too
-    const eml = buildEml({inlineImgB64: await blobToBase64(blob), name: fileBase()+'.png'});
-    download(fileBase()+'.eml', eml);
-    toast('📷 Ready! Open the downloaded <b>.eml</b> — the draft has the timecard picture <b>already inside the email</b> '+
-          'and To / CC / subject filled. Just press <b>Send</b>.'+AUTOTIP, 16000);
+    tryCopyImage(blob);                       // silent backup: Ctrl+V pastes it anywhere
+    const r = await shareFile(blob, fileBase()+'.png', 'image/png');
+    if(r==='shared'){
+      toast('📷 Pick <b>Outlook</b> in the window that opened — the picture (.png) is attached automatically. '+
+            'Add the recipients and press Send.<br><span style="opacity:.8">(Windows does not pass To/CC through — '+
+            'the picture is also on your clipboard: Ctrl+V pastes it into any email.)</span>', 15000);
+    }else if(r==='cancelled'){
+      toast('📷 Cancelled. The picture is still on your clipboard — Ctrl+V pastes it into any email.', 8000);
+    }else{
+      const eml = buildEml({inlineImgB64: await blobToBase64(blob), name: fileBase()+'.png'});
+      download(fileBase()+'.eml', eml);
+      toast('📷 This browser cannot hand files to Outlook directly, so a ready email draft was downloaded instead — '+
+            'open it and the picture is already inside, with To / CC / subject filled. Just press <b>Send</b>.'+AUTOTIP, 16000);
+    }
   });
   document.getElementById('btnTxt').onclick = ev=>withBusy(ev.currentTarget, async ()=>{
     if(!ensureRecipient()) return;
@@ -1096,8 +1224,8 @@ function bindEmailButtons(){
     tryCopyText(txt);
     const eml = buildEml({bodyText: txt, bodyHtml: buildHtmlEmail()});
     download(fileBase()+'.eml', eml);
-    toast('📝 Ready! Open the downloaded <b>.eml</b> — the draft has the whole sheet written inside the email as a table, '+
-          'with To / CC / subject filled. Nothing gets cut off any more. Just press <b>Send</b>.'+AUTOTIP, 16000);
+    toast('📝 Ready! Open the downloaded draft — the whole sheet is written inside the email as a table, '+
+          'with To / CC / subject filled. Just press <b>Send</b>.'+AUTOTIP, 16000);
   });
   document.getElementById('btnPdf').onclick = ev=>withBusy(ev.currentTarget, async ()=>{
     if(!ensureRecipient()) return;
@@ -1105,11 +1233,26 @@ function bindEmailButtons(){
     const canvas = await captureSheet();
     const jpeg = canvas.toDataURL('image/jpeg', 0.92);
     const pdf = jpegToPdf(jpeg, canvas.width, canvas.height);
-    const eml = buildEml({attachB64: await blobToBase64(pdf), name: fileBase()+'.pdf',
-                          mime: 'application/pdf', bodyText: stdBody('PDF')});
-    download(fileBase()+'.eml', eml);
-    toast('📄 Ready! Open the downloaded <b>.eml</b> — the draft has the PDF <b>already attached</b> '+
-          'and To / CC / subject filled. Just press <b>Send</b>.'+AUTOTIP, 16000);
+    const r = await shareFile(pdf, fileBase()+'.pdf', 'application/pdf');
+    if(r==='shared'){
+      toast('📄 Pick <b>Outlook</b> in the window that opened — the <b>.pdf</b> is attached automatically. '+
+            'Add the recipients and press Send.', 14000);
+    }else if(r==='cancelled'){
+      toast('📄 Cancelled — nothing was sent.', 6000);
+    }else{
+      const eml = buildEml({attachB64: await blobToBase64(pdf), name: fileBase()+'.pdf',
+                            mime: 'application/pdf', bodyText: ''});
+      download(fileBase()+'.eml', eml);
+      toast('📄 This browser cannot hand files to Outlook directly, so a ready email draft was downloaded instead — '+
+            'open it and the <b>.pdf is already attached</b>, with To / CC / subject filled. Just press <b>Send</b>.'+AUTOTIP, 16000);
+    }
+  });
+  document.getElementById('btnSavePdf').onclick = ev=>withBusy(ev.currentTarget, async ()=>{
+    toast('⬇ Building the PDF…');
+    const canvas = await captureSheet();
+    const jpeg = canvas.toDataURL('image/jpeg', 0.92);
+    download(fileBase()+'.pdf', jpegToPdf(jpeg, canvas.width, canvas.height));
+    toast('⬇ <b>'+fileBase()+'.pdf</b> saved to your Downloads folder.', 8000);
   });
 }
 
