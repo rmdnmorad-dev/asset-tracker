@@ -155,7 +155,7 @@ func _fire_straight(wid: String, w: Dictionary, dmg: float, count: int) -> void:
 			for i in range(count):
 				dirs.append(facing.rotated((i - (count - 1) * 0.5) * 0.25))
 		"shadow_scythe":
-			var n := max(count, 4)
+			var n := maxi(count, 4)
 			for i in range(n):
 				dirs.append(Vector2.RIGHT.rotated(TAU * i / n))
 		"throwing_stars":

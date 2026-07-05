@@ -64,5 +64,5 @@ func report_run(map_id: String, time_survived: float, gold_earned: int, won: boo
 		for i in range(Data.MAPS.size()):
 			if Data.MAPS[i]["id"] == map_id:
 				idx = i
-		unlocked_maps = max(unlocked_maps, min(idx + 2, Data.MAPS.size()))
+		unlocked_maps = maxi(unlocked_maps, mini(idx + 2, Data.MAPS.size()))
 	save_game()
