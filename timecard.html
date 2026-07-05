@@ -85,6 +85,12 @@
   .colhdr{background:var(--gray);font-weight:bold;text-align:center;font-size:11.5px}
   .section{background:#fff;color:var(--secblue);font-weight:bold;font-size:17px;
     text-align:center;font-family:var(--cg);height:30px !important}
+  .secname{outline:none;padding:0 8px;min-width:140px;display:inline-block}
+  .secname:focus{background:#fffbe6;border-radius:3px}
+  .rowbtns{float:left;display:flex;gap:5px;margin:3px 0 0 8px}
+  .rowbtn{width:23px;height:23px;border-radius:50%;border:1px solid #94a3b8;background:#f1f5f9;
+    color:#334155;font-size:15px;line-height:1;cursor:pointer;padding:0;font-family:Arial}
+  .rowbtn:hover{background:#2563eb;color:#fff;border-color:#2563eb}
   .tinfo{background:var(--gray)} .tgreen{background:var(--green)}
   .rowtot{background:var(--green);text-align:center}
   .btot{text-align:center;font-size:12px}
@@ -121,9 +127,10 @@
   body.capturing input.cell:focus{background:transparent;box-shadow:none}
   body.capturing .todayhl{box-shadow:none}
   body.capturing .hz-date .rd{border-bottom-color:transparent}
+  body.capturing .rowbtns{display:none}
 
   @media print{
-    #toolbar,#settings,#toast{display:none !important}
+    #toolbar,#settings,#toast,.rowbtns{display:none !important}
     #sheetWrap{padding:0;overflow:visible}
     #sheet{box-shadow:none;border:none;margin:0}
     body{background:#fff}
@@ -160,8 +167,8 @@
   <div class="row">
     <div class="fld" style="flex:1;min-width:240px"><span>SEND TO (email)</span>
       <input type="text" id="setTo" placeholder="manager@company.com"></div>
-    <div class="fld" style="flex:2;min-width:300px"><span>CC (separate several with commas)</span>
-      <input type="text" id="setCc" placeholder="hr@company.com, boss@company.com"></div>
+    <div class="fld" style="flex:2;min-width:300px"><span>CC — as many as you need, separated with commas, ; or |</span>
+      <input type="text" id="setCc" placeholder="hr@company.com, boss@company.com, team@company.com"></div>
   </div>
   <div class="row">
     <div class="fld" style="flex:1;min-width:300px"><span>EMAIL SUBJECT — you can use {employee}, {date}, {day}, {weekending}</span>
@@ -170,10 +177,11 @@
   <div class="hint">
     <b>How sending works:</b> a web page cannot silently attach files to an email, so each button prepares
     everything and then opens a new email in your mail app with the To / CC / subject already filled in.<br>
-    📷 <b>Image</b> — the picture of the sheet is <u>copied to your clipboard</u> (press <b>Ctrl+V</b> inside the
-    email body to paste it) and also downloaded as a PNG in case you prefer attaching the file.<br>
+    📷 <b>Image</b> — the picture of the sheet is <u>copied to your clipboard</u>: click inside the email body and
+    press <b>Ctrl+V</b> to paste it. (Only if the browser blocks the clipboard does it download a PNG instead.)<br>
     📝 <b>Text</b> — the sheet is written as plain text directly inside the email body (also copied to clipboard).<br>
-    📄 <b>PDF</b> — a PDF of the sheet is downloaded; just drag it from your Downloads bar into the email.
+    📄 <b>PDF</b> — a PDF of the sheet is downloaded; drag it from the Downloads bar into the email to attach it.
+    Attaching it automatically is impossible — browsers forbid web pages from putting files into an email.
   </div>
   <div class="row" style="margin-top:12px;align-items:flex-end">
     <div class="fld"><span>SAVED DROP-DOWN LISTS (values you typed before)</span>
@@ -283,14 +291,19 @@ const SEEDS = {
 };
 const HIST_OF = {tin:'tin', tout:'tout', lunch:'lunch', meet:'dur', wfh:'dur', leave:'dur',
                  task:'task', notes:'notes', project:'project', contractor:'contractor',
-                 job:'job', h:'hours'};
+                 job:'job', h:'hours', ha:'hours'};
+// descriptions shown next to the codes inside the drop-downs
+const DL_LABELS = {task:Object.fromEntries(TASK_LEGEND), job:Object.fromEntries(JOB_LEGEND)};
 
 /* ---------------- state ---------------- */
 function defaultDay(){ return {tin:'12:00 PM', lunch:'0:00', tout:'12:00 PM', meet:'0:00', wfh:'0:00', leave:'0:00'}; }
+function defaultRow(){ return {task:'',notes:'',project:'',contractor:'',job:'',
+                               ha:['','','','','','',''], h:['','','','','','','']}; }
 function defaultWeek(){
   return {
+    secRows: SECTIONS.map(s=>s.rows),
     days: Array.from({length:7}, defaultDay),
-    rows: Array.from({length:N_ROWS}, ()=>({task:'',notes:'',project:'',contractor:'',job:'',h:['','','','','','','']}))
+    rows: Array.from({length:N_ROWS}, defaultRow)
   };
 }
 function defaultState(){
@@ -302,7 +315,8 @@ function defaultState(){
       employee:'Morad Ramadan', manager:'C. Hattar',
       phone:'962-788530881', email:'mramadan@isatts.com',
       co1:'JORDAN ISAT', co2:'SHMEISANI-AMMAN JORDAN', co3:'OFFICE# 714.927.0635 (MAJIC)',
-      totalHoursLabel:'Total Hours'
+      totalHoursLabel:'Total Hours',
+      sectionNames: SECTIONS.map(s=>s.name)
     },
     history:{task:[],notes:[],project:[],contractor:[],job:[],tin:[],tout:[],lunch:[],dur:[],hours:[]},
     weeks:{}
@@ -313,6 +327,8 @@ try{
   state = JSON.parse(localStorage.getItem(LS_KEY)) || defaultState();
   if(!state.settings || !state.weeks) state = defaultState();
 }catch(e){ state = defaultState(); }
+// upgrade data saved by an older version of this tool
+if(!state.settings.sectionNames) state.settings.sectionNames = SECTIONS.map(s=>s.name);
 
 let saveTimer = null;
 function save(){
@@ -336,8 +352,13 @@ function weekEndingSunday(d){
 }
 let weekKey = isoDate(weekEndingSunday(new Date()));
 function week(){
-  if(!state.weeks[weekKey]) state.weeks[weekKey] = defaultWeek();
-  return state.weeks[weekKey];
+  let w = state.weeks[weekKey];
+  if(!w) w = state.weeks[weekKey] = defaultWeek();
+  if(!w.secRows) w.secRows = SECTIONS.map(s=>s.rows);
+  const need = w.secRows.reduce((a,b)=>a+b,0);
+  while(w.rows.length < need) w.rows.push(defaultRow());
+  w.rows.forEach(r=>{ if(!r.ha) r.ha=['','','','','','','']; });
+  return w;
 }
 function weekDates(){
   const end = fromIso(weekKey), out=[];
@@ -392,7 +413,11 @@ function dlOptions(field){
 }
 function refreshDatalist(field){
   const dl = document.getElementById('dl_'+field);
-  if(dl) dl.innerHTML = dlOptions(field).map(v=>'<option value="'+esc(v)+'">').join('');
+  if(!dl) return;
+  dl.innerHTML = dlOptions(field).map(v=>{
+    const lab = DL_LABELS[field] && DL_LABELS[field][v];
+    return '<option value="'+esc(v)+'"'+(lab ? ' label="'+esc(lab)+'"' : '')+'>';
+  }).join('');
 }
 function addHistory(field, val){
   val = String(val||'').trim();
@@ -419,7 +444,8 @@ function buildTable(){
   // day headers ---------------------------------------------------------
   h += '<tr><td class="nb" colspan="5"></td>';
   for(let d=0; d<7; d++) h += '<td class="b dayhdr" colspan="2" id="dh'+d+'">'+DAYS[d]+'</td>';
-  h += '<td class="b yellow" rowspan="8" id="thLabel" contenteditable="true" spellcheck="false">Total Hours</td></tr>';
+  h += '<td class="b yellow" rowspan="8" id="thLabel" contenteditable="true" spellcheck="false">'+
+       esc(state.settings.totalHoursLabel||'Total Hours')+'</td></tr>';
 
   // DATE row -------------------------------------------------------------
   h += '<tr><td class="b lbl" colspan="5">DATE</td>';
@@ -452,16 +478,23 @@ function buildTable(){
        '<td class="b colhdr">CONTRACTOR</td><td class="b colhdr">JOB TYPE</td></tr>';
 
   // task sections ----------------------------------------------------------
+  const w = week(), names = state.settings.sectionNames;
   let ri = 0;
-  for(const sec of SECTIONS){
-    h += '<tr><td class="b section" colspan="20">'+sec.name+'</td></tr>';
-    for(let k=0; k<sec.rows; k++, ri++){
-      h += '<tr class="taskrow'+(sec.tall?' tall':'')+'">';
+  for(let si=0; si<SECTIONS.length; si++){
+    h += '<tr><td class="b section" colspan="20">'+
+         '<span class="rowbtns">'+
+         '<button type="button" class="rowbtn rowadd" data-sec="'+si+'" title="Add a row to this section">+</button>'+
+         '<button type="button" class="rowbtn rowdel" data-sec="'+si+'" title="Remove the last row of this section">−</button>'+
+         '</span>'+
+         '<span class="secname" contenteditable="true" spellcheck="false" data-sec="'+si+'">'+
+         esc(names[si]||SECTIONS[si].name)+'</span></td></tr>';
+    for(let k=0; k<w.secRows[si]; k++, ri++){
+      h += '<tr class="taskrow'+(SECTIONS[si].tall?' tall':'')+'">';
       for(const f of ['task','notes','project','contractor','job']){
         h += '<td class="b tinfo"><input class="cell task redtx" data-row="'+ri+'" data-f="'+f+'" list="dl_'+HIST_OF[f]+'" spellcheck="false" autocomplete="off"></td>';
       }
       for(let d=0; d<7; d++){
-        h += '<td class="b tgreen"></td>'+
+        h += '<td class="b tgreen"><input class="cell redtx" data-row="'+ri+'" data-f="ha" data-di="'+d+'" list="dl_hours" spellcheck="false" autocomplete="off"></td>'+
              '<td class="b tgreen"><input class="cell redtx" data-row="'+ri+'" data-f="h" data-di="'+d+'" list="dl_hours" spellcheck="false" autocomplete="off"></td>';
       }
       h += '<td class="b rowtot" id="rt'+ri+'">0</td></tr>';
@@ -491,8 +524,10 @@ function buildTable(){
 }
 
 /* ---------------- populate / bind ---------------- */
-function loadWeekIntoUI(){
-  const w = week(), dates = weekDates(), todayIso = isoDate(new Date());
+function renderWeek(){
+  const w = week();               // normalizes the week data first
+  buildTable();                   // row count can differ per week
+  const dates = weekDates(), todayIso = isoDate(new Date());
   document.getElementById('sheetDate').textContent = usDate(fromIso(weekKey));
   document.getElementById('weekPick').value = weekKey;
   for(let d=0; d<7; d++){
@@ -503,8 +538,8 @@ function loadWeekIntoUI(){
     inp.value = w.days[+inp.dataset.day][inp.dataset.f] || '';
   });
   document.querySelectorAll('input.cell[data-row]').forEach(inp=>{
-    const r = w.rows[+inp.dataset.row];
-    inp.value = inp.dataset.f==='h' ? (r.h[+inp.dataset.di]||'') : (r[inp.dataset.f]||'');
+    const r = w.rows[+inp.dataset.row], f = inp.dataset.f;
+    inp.value = (f==='h'||f==='ha') ? (r[f][+inp.dataset.di]||'') : (r[f]||'');
   });
   recalc();
 }
@@ -531,14 +566,15 @@ function recalc(){
 
   const dayTaskTot = [0,0,0,0,0,0,0];
   let grand = 0;
-  for(let r=0; r<N_ROWS; r++){
+  for(let r=0; r<w.rows.length; r++){
     let rowTot = 0;
     for(let d=0; d<7; d++){
-      const v = num(w.rows[r].h[d]);
+      const v = num(w.rows[r].ha[d]) + num(w.rows[r].h[d]);   // both sub-cells count
       rowTot += v; dayTaskTot[d] += v;
     }
     grand += rowTot;
-    document.getElementById('rt'+r).textContent = fmtNum(rowTot);
+    const el = document.getElementById('rt'+r);
+    if(el) el.textContent = fmtNum(rowTot);
   }
   for(let d=0; d<7; d++) document.getElementById('bt'+d).textContent = fmtNum(dayTaskTot[d]);
   document.getElementById('btAll').textContent = fmtNum(grand);
@@ -547,9 +583,13 @@ function recalc(){
 function bindSheetInputs(){
   const host = document.getElementById('tblhost');
   host.addEventListener('input', e=>{
-    const inp = e.target;
-    if(!inp.classList || !inp.classList.contains('cell')) return;
-    commitValue(inp, false);
+    const t = e.target;
+    if(!t.classList) return;
+    if(t.classList.contains('cell')) return commitValue(t, false);
+    if(t.classList.contains('secname')){
+      state.settings.sectionNames[+t.dataset.sec] = t.textContent; save(); return;
+    }
+    if(t.id === 'thLabel'){ state.settings.totalHoursLabel = t.textContent; save(); }
   });
   host.addEventListener('change', e=>{
     const inp = e.target;
@@ -561,10 +601,28 @@ function bindSheetInputs(){
     if(!inp.classList || !inp.classList.contains('cell')) return;
     commitValue(inp, true);
   });
-  // yellow Total Hours label
-  const th = document.getElementById('thLabel');
-  th.textContent = state.settings.totalHoursLabel || 'Total Hours';
-  th.addEventListener('input', ()=>{ state.settings.totalHoursLabel = th.textContent; save(); });
+  // + / − row buttons in the section headers
+  host.addEventListener('click', e=>{
+    const btn = e.target.closest('button.rowbtn');
+    if(!btn) return;
+    const sec = +btn.dataset.sec, w = week();
+    let start = 0;
+    for(let i=0; i<sec; i++) start += w.secRows[i];
+    const end = start + w.secRows[sec];
+    if(btn.classList.contains('rowadd')){
+      w.rows.splice(end, 0, defaultRow());
+      w.secRows[sec]++;
+    }else{
+      if(w.secRows[sec] <= 1){ toast('A section must keep at least one row.'); return; }
+      const last = w.rows[end-1];
+      const hasData = last.task||last.notes||last.project||last.contractor||last.job||
+                      last.ha.some(x=>x)||last.h.some(x=>x);
+      if(hasData && !confirm('The last row of this section contains data. Delete it anyway?')) return;
+      w.rows.splice(end-1, 1);
+      w.secRows[sec]--;
+    }
+    renderWeek(); save();
+  });
 }
 
 function commitValue(inp, finalize){
@@ -581,8 +639,8 @@ function commitValue(inp, finalize){
   }
   if(inp.dataset.day!==undefined){
     w.days[+inp.dataset.day][inp.dataset.f] = v;
-  }else if(inp.dataset.f==='h'){
-    w.rows[+inp.dataset.row].h[+inp.dataset.di] = v;
+  }else if(inp.dataset.f==='h' || inp.dataset.f==='ha'){
+    w.rows[+inp.dataset.row][inp.dataset.f][+inp.dataset.di] = v;
   }else{
     w.rows[+inp.dataset.row][inp.dataset.f] = v;
   }
@@ -611,7 +669,7 @@ function bindHeader(){
 /* ---------------- week navigation ---------------- */
 function setWeek(key){
   weekKey = key;
-  loadWeekIntoUI();
+  renderWeek();
   save();
 }
 function bindWeekNav(){
@@ -821,22 +879,22 @@ function buildPlainText(){
   const abbr=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   let ri=0;
   const dayTot=[0,0,0,0,0,0,0]; let grand=0;
-  for(const sec of SECTIONS){
+  for(let si=0; si<SECTIONS.length; si++){
     const lines=[];
-    for(let k=0;k<sec.rows;k++,ri++){
+    for(let k=0;k<w.secRows[si];k++,ri++){
       const r=w.rows[ri];
       const hasInfo=r.task||r.notes||r.project||r.contractor||r.job;
       let rowTot=0; const hrs=[];
       for(let d=0;d<7;d++){
-        const v=num(r.h[d]); rowTot+=v; dayTot[d]+=v;
-        if(r.h[d]&&v!==0) hrs.push(abbr[d]+': '+fmtNum(v));
+        const v=num(r.ha[d])+num(r.h[d]); rowTot+=v; dayTot[d]+=v;
+        if(v!==0) hrs.push(abbr[d]+': '+fmtNum(v));
       }
       grand+=rowTot;
       if(!hasInfo && rowTot===0) continue;
       const info=[r.task,r.notes,r.project,r.contractor,r.job].filter(x=>x&&String(x).trim()).join(' | ');
       lines.push('  * '+(info||'(no description)')+'  —  '+(hrs.join(', ')||'no hours')+'  =  '+fmtNum(rowTot));
     }
-    if(lines.length){ L.push('['+sec.name+']'); L.push.apply(L,lines); }
+    if(lines.length){ L.push('['+(s.sectionNames[si]||SECTIONS[si].name)+']'); L.push.apply(L,lines); }
   }
   L.push('');
   L.push('DAILY TASK TOTALS: '+abbr.map((a,d)=>a+': '+fmtNum(dayTot[d])).join(', ')+'  |  GRAND TOTAL: '+fmtNum(grand));
@@ -863,8 +921,9 @@ function openMail(body){
   const s=state.settings;
   let url='mailto:'+encodeURIComponent(s.emailTo.trim());
   const q=[];
+  // people separate CCs with commas, semicolons or | — accept all of them
   if(s.emailCc && s.emailCc.trim())
-    q.push('cc='+encodeURIComponent(s.emailCc.split(',').map(x=>x.trim()).filter(Boolean).join(',')));
+    q.push('cc='+encodeURIComponent(s.emailCc.split(/[,;|]+/).map(x=>x.trim()).filter(Boolean).join(',')));
   q.push('subject='+encodeURIComponent(subjectText()));
   q.push('body='+encodeURIComponent(body));
   url+='?'+q.join('&');
@@ -890,11 +949,11 @@ function bindEmailButtons(){
     const canvas = await captureSheet();
     const blob = await canvasBlob(canvas,'image/png');
     const copied = await tryCopyImage(blob);
-    download(fileBase()+'.png', blob);
+    if(!copied) download(fileBase()+'.png', blob);   // fallback only if the clipboard is blocked
     setTimeout(()=>openMail(stdBody('image')), 600);
     toast(copied
-      ? '📷 Image <b>copied to clipboard</b> and downloaded.<br>Your email is opening — click inside the message and press <b>Ctrl+V</b> to paste the timecard, or attach the downloaded PNG.'
-      : '📷 Image downloaded.<br>Your email is opening — attach the PNG from your Downloads folder (clipboard copy was blocked by the browser).', 14000);
+      ? '📷 The timecard picture is <b>on your clipboard</b>.<br>Your email is opening — click inside the message body and press <b>Ctrl+V</b> to paste it.'
+      : '📷 The browser blocked clipboard access, so the image was <b>downloaded</b> instead.<br>Your email is opening — attach the PNG from your Downloads folder.', 14000);
   });
   document.getElementById('btnTxt').onclick = ev=>withBusy(ev.currentTarget, async ()=>{
     if(!ensureRecipient()) return;
@@ -917,18 +976,18 @@ function bindEmailButtons(){
     const pdf = jpegToPdf(jpeg, canvas.width, canvas.height);
     download(fileBase()+'.pdf', pdf);
     setTimeout(()=>openMail(stdBody('PDF')), 600);
-    toast('📄 PDF downloaded.<br>Your email is opening — drag the PDF from the Downloads bar into the message to attach it.', 14000);
+    toast('📄 PDF downloaded.<br>Your email is opening — <b>drag the PDF from the Downloads bar</b> (bottom of the browser) into the message to attach it.<br>'+
+          '<span style="opacity:.8">Web pages are never allowed to attach files to an email by themselves — this is a browser security rule, not a bug.</span>', 16000);
   });
 }
 
 /* ---------------- init ---------------- */
-buildTable();
 bindSheetInputs();
 bindHeader();
 bindWeekNav();
 bindSettings();
 bindEmailButtons();
-loadWeekIntoUI();
+renderWeek();
 if(!state.settings.emailTo){
   toast('👋 Welcome! Open <b>⚙ Settings</b> once to save the email address and CCs you send your timecard to. Everything you type in the sheet is saved automatically in this browser.', 12000);
 }
