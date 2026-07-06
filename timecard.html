@@ -29,6 +29,7 @@
   #weekPick{border:1px solid #4b5563;background:#111827;color:#fff;border-radius:6px;
     padding:6px 8px;font-size:13px;color-scheme:dark}
   #toolbar label{font-size:12px;color:#9ca3af}
+  .credit{margin-left:auto;color:#9ca3af;font-size:12.5px;font-style:italic;padding-right:6px;align-self:center}
 
   /* ---------- Settings panel ---------- */
   #settings{max-width:1000px;margin:14px auto 0;background:#fff;border:1px solid #cbd5e1;
@@ -162,6 +163,30 @@
   #wheel .wsave{background:#2563eb;border:1px solid #2563eb;color:#fff;font-weight:600}
   #wheel .wsave:hover{background:#1d4ed8}
 
+  /* search across all timecards */
+  #searchWrap{position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:150;
+    backdrop-filter:blur(2px)}
+  #searchBox{width:660px;max-width:94vw;margin:9vh auto 0;background:#fff;border-radius:14px;
+    box-shadow:0 20px 60px rgba(0,0,0,.4);overflow:hidden;font-family:Arial}
+  .shead{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid #e2e8f0}
+  #searchInp{flex:1;border:none;outline:none;font-size:16px;font-family:Arial}
+  .sclose{border:none;background:#f1f5f9;border-radius:6px;width:28px;height:28px;cursor:pointer;
+    color:#64748b;font-size:14px}
+  .sclose:hover{background:#e2e8f0;color:#0f172a}
+  #searchInfo{padding:6px 16px;font-size:12px;color:#64748b;background:#f8fafc}
+  #searchRes{max-height:56vh;overflow:auto}
+  .sweek{position:sticky;top:0;background:#eef2ff;color:#3730a3;font-size:12px;font-weight:bold;
+    padding:5px 16px;border-top:1px solid #e2e8f0}
+  .sres{display:flex;gap:10px;align-items:baseline;padding:8px 16px;cursor:pointer;font-size:13px;
+    border-top:1px solid #f1f5f9}
+  .sres:hover{background:#f0f7ff}
+  .sres .swhere{color:#64748b;font-size:12px;min-width:230px}
+  .sres .sval{color:#0f172a;font-weight:600}
+  .sres mark{background:#fde047;padding:0 1px;border-radius:2px}
+  .flash{animation:flashcell 2.4s ease-out}
+  @keyframes flashcell{0%{background:#fde047;box-shadow:0 0 0 3px #f59e0b}
+    60%{background:#fde047;box-shadow:0 0 0 3px #f59e0b}100%{background:transparent;box-shadow:none}}
+
   /* toast */
   #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);max-width:640px;
     background:#111827;color:#fff;border-radius:10px;padding:13px 20px;font-size:13.5px;
@@ -201,8 +226,10 @@
   <div class="sep"></div>
   <div class="grp">
     <button class="btn" id="btnSavePdf" title="Save a PDF of the sheet to your computer">⬇ Save PDF</button>
+    <button class="btn" id="btnSearch" title="Search every timecard (Ctrl+F)">🔍 Search</button>
     <button class="btn" id="btnSettings">⚙ Settings</button>
   </div>
+  <div class="credit">Made by m0rad.</div>
 </div>
 
 <div id="settings" hidden>
@@ -216,7 +243,8 @@
   <div class="row" style="align-items:flex-end">
     <div class="fld" style="flex:1;min-width:300px">
       <span>EMAIL SUBJECT — {type} follows the boxes on the right; also {date}, {day}, {employee}, {weekending}</span>
-      <input type="text" id="setSubject" placeholder="{type} Timecard-{date}"></div>
+      <input type="text" id="setSubject" placeholder="{type} Timecard-{date}">
+      <span id="subjPreview" style="font-weight:normal;color:#2563eb;font-size:12px"></span></div>
     <div class="fld"><span>TIMECARD TYPE</span>
       <div class="subchecks">
         <label><input type="checkbox" id="subDaily"> Daily timecard</label>
@@ -229,10 +257,13 @@
       <textarea id="setMessage" placeholder="Hi, hope you are all doing well.&#10;Please find my timecard below."></textarea></div>
   </div>
   <div class="hint">
-    <b>How sending works:</b> every button builds the complete email — To, CCs, subject, <u>your message on
-    top</u> and the timecard already attached under it (📷 picture / 📝 colored table / 📄 .pdf file). You only
-    confirm where to save that one file, then <b>open it</b>: it appears in Outlook as a ready draft — press
-    <b>Send</b>. No attaching, no Ctrl+V, nothing else to do.
+    <b>How sending works:</b> every button silently creates the complete email — To, CCs, subject, <u>your
+    message on top</u> and the timecard already inside it (📷 picture / 📝 colored table / 📄 .pdf attached).
+    No dialogs, nothing to attach, no Ctrl+V. Open the created file and it appears in Outlook as a ready
+    draft — press <b>Send</b>.<br>
+    ⚡ <b>Make it 100% automatic — do this once:</b> after the first click, <b>right-click the file in the
+    browser's download bar → “Always open files of this type”</b>. From then on every click makes the finished
+    email <b>pop open by itself</b>, attached and addressed — you only press Send.
   </div>
   <div class="hint" style="margin-top:10px">
     🧠 <b>Drop-down memory:</b> every value you type in the sheet is remembered and offered as a drop-down
@@ -274,6 +305,18 @@
 <div id="toast"></div>
 <div id="combo"></div>
 <div id="wheel"></div>
+
+<div id="searchWrap" hidden>
+  <div id="searchBox">
+    <div class="shead">
+      <span style="font-size:17px">🔍</span>
+      <input id="searchInp" placeholder="Search every timecard — tasks, projects, contractors, notes, times, hours…" spellcheck="false" autocomplete="off">
+      <button class="sclose" id="searchClose" title="Close (Esc)">✕</button>
+    </div>
+    <div id="searchInfo">Type to search all saved weeks…</div>
+    <div id="searchRes"></div>
+  </div>
+</div>
 
 <script>
 /* html2canvas 1.4.1 | MIT License | https://html2canvas.hertzen.com */
@@ -558,12 +601,15 @@ function buildTable(){
   const legRow = (leg, i, t)=>'<tr>'+
     '<td class="code legcell" contenteditable="true" spellcheck="false" data-leg="'+leg+'" data-i="'+i+'" data-k="0">'+esc(t[0])+'</td>'+
     '<td class="desc legcell" contenteditable="true" spellcheck="false" data-leg="'+leg+'" data-i="'+i+'" data-k="1">'+esc(t[1])+'</td></tr>';
+  const legBtns = leg=>'<span class="rowbtns" style="float:none;display:inline-flex;margin:0 0 2px 8px;vertical-align:middle">'+
+    '<button type="button" class="rowbtn legadd" data-leg="'+leg+'" title="Add a row to this legend">+</button>'+
+    '<button type="button" class="rowbtn legdel" data-leg="'+leg+'" title="Remove the last row of this legend">−</button></span>';
   h += '<tr><td class="nb" colspan="20"><div class="legendwrap"><div>'+
-       '<div class="tasksHdr">TASKS :</div><table class="leg">';
+       '<div><span class="tasksHdr">TASKS :</span>'+legBtns('task')+'</div><table class="leg">';
   state.settings.taskLegend.forEach((t,i)=>{ h += legRow('task', i, t); });
-  h += '</table></div><table class="leg leg2">';
+  h += '</table></div><div><div style="height:21px">'+legBtns('job')+'</div><table class="leg leg2">';
   state.settings.jobLegend.forEach((t,i)=>{ h += legRow('job', i, t); });
-  h += '</table></div></td></tr>';
+  h += '</table></div></div></td></tr>';
 
   // bottom per-day task totals ----------------------------------------------
   h += '<tr><td class="nb" colspan="5"></td>';
@@ -667,10 +713,23 @@ function bindSheetInputs(){
     if(!inp.classList || !inp.classList.contains('cell')) return;
     commitValue(inp, true);
   });
-  // + / − row buttons in the section headers
+  // + / − row buttons in the section headers and legends
   host.addEventListener('click', e=>{
     const btn = e.target.closest('button.rowbtn');
     if(!btn) return;
+    if(btn.classList.contains('legadd') || btn.classList.contains('legdel')){
+      const legs = btn.dataset.leg==='task' ? state.settings.taskLegend : state.settings.jobLegend;
+      if(btn.classList.contains('legadd')){
+        legs.push(['','']);
+      }else{
+        if(legs.length<=1){ toast('The legend must keep at least one row.'); return; }
+        const last = legs[legs.length-1];
+        if((last[0]||last[1]) && !confirm('The last legend row contains text. Delete it anyway?')) return;
+        legs.pop();
+      }
+      renderWeek(); save();
+      return;
+    }
     const sec = +btn.dataset.sec, w = week();
     let start = 0;
     for(let i=0; i<sec; i++) start += w.secRows[i];
@@ -759,15 +818,16 @@ function bindSettings(){
     const p = document.getElementById('settings');
     p.hidden = !p.hidden;
   };
+  const updPreview = ()=>{ document.getElementById('subjPreview').textContent = '→  '+subjectText(); };
   const map = [['setTo','emailTo'],['setCc','emailCc'],['setSubject','subject'],['setMessage','message']];
   for(const [id,key] of map){
     const el = document.getElementById(id);
     el.value = state.settings[key]||'';
-    el.addEventListener('input', ()=>{ state.settings[key]=el.value; save(); });
+    el.addEventListener('input', ()=>{ state.settings[key]=el.value; save(); updPreview(); });
   }
   // Daily / Weekly checkboxes: pick one, or untick to follow the calendar again
   const cd = document.getElementById('subDaily'), cw = document.getElementById('subWeekly');
-  const reflect = ()=>{ const w = resolvedWeekly(); cd.checked = !w; cw.checked = w; };
+  const reflect = ()=>{ const w = resolvedWeekly(); cd.checked = !w; cw.checked = w; updPreview(); };
   cd.addEventListener('change', ()=>{ state.settings.subjectMode = cd.checked ? 'daily' : 'auto'; save(); reflect(); });
   cw.addEventListener('change', ()=>{ state.settings.subjectMode = cw.checked ? 'weekly' : 'auto'; save(); reflect(); });
   reflect();
@@ -969,6 +1029,124 @@ document.addEventListener('keydown', e=>{
   if(e.key==='Escape'){ closeWheel(); closeCombo(); }
 });
 function closePopups(){ closeWheel(); closeCombo(); }
+
+/* ---------------- search across every saved timecard (Ctrl+F) ---------------- */
+const DAY_NAMES = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const DAYFIELD_LABEL = {tin:'Time in', lunch:'Lunch break', tout:'Time out',
+                        meet:'Meeting from home', wfh:'Working from home', leave:'Leaves / vacations'};
+const ROWFIELD_LABEL = {task:'Task #', notes:'Notes', project:'Project', contractor:'Contractor', job:'Job type'};
+let lastResults = [];
+function weekDatesOf(key){
+  const end = fromIso(key), out=[];
+  for(let i=6;i>=0;i--){ const d=new Date(end); d.setDate(d.getDate()-i); out.push(d); }
+  return out;
+}
+function searchAll(q){
+  q = q.toLowerCase();
+  const out = [];
+  const keys = Object.keys(state.weeks).sort().reverse();
+  for(const wk of keys){
+    const w = state.weeks[wk];
+    if(!w || !w.days || !w.rows) continue;
+    const dates = weekDatesOf(wk);
+    for(let d=0; d<7; d++){
+      for(const f of Object.keys(DAYFIELD_LABEL)){
+        const v = String(w.days[d][f]||'');
+        if(v && v.toLowerCase().includes(q))
+          out.push({wk, where: DAYFIELD_LABEL[f]+' · '+DAY_NAMES[d]+' '+usDate(dates[d]), value: v, sel: {day:d, f}});
+      }
+    }
+    const secRows = w.secRows || SECTIONS.map(s=>s.rows);
+    let ri = 0;
+    for(let si=0; si<secRows.length; si++){
+      const secName = (state.settings.sectionNames||[])[si] || (SECTIONS[si]&&SECTIONS[si].name) || ('Section '+(si+1));
+      for(let k=0; k<secRows[si]; k++, ri++){
+        const r = w.rows[ri]; if(!r) continue;
+        for(const f of Object.keys(ROWFIELD_LABEL)){
+          const v = String(r[f]||'');
+          if(v && v.toLowerCase().includes(q))
+            out.push({wk, where: ROWFIELD_LABEL[f]+' · '+secName+' row '+(k+1), value: v, sel: {row:ri, f}});
+        }
+        for(let d=0; d<7; d++){
+          const code = String((r.ha||[])[d]||'');
+          if(code && code.toLowerCase().includes(q))
+            out.push({wk, where:'Job code · '+secName+' row '+(k+1)+' · '+DAY_NAMES[d]+' '+usDate(dates[d]), value: code, sel:{row:ri, f:'ha', di:d}});
+          const hrs = String((r.h||[])[d]||'');
+          if(hrs && hrs.toLowerCase().includes(q))
+            out.push({wk, where:'Hours · '+secName+' row '+(k+1)+' · '+DAY_NAMES[d]+' '+usDate(dates[d]), value: hrs, sel:{row:ri, f:'h', di:d}});
+        }
+      }
+    }
+    if(out.length > 400) break;
+  }
+  return out;
+}
+function markMatch(v, q){
+  const i = v.toLowerCase().indexOf(q.toLowerCase());
+  if(i<0) return esc(v);
+  return esc(v.slice(0,i))+'<mark>'+esc(v.slice(i,i+q.length))+'</mark>'+esc(v.slice(i+q.length));
+}
+function renderSearch(){
+  const q = document.getElementById('searchInp').value.trim();
+  const info = document.getElementById('searchInfo'), res = document.getElementById('searchRes');
+  if(!q){ info.textContent = 'Type to search all saved weeks…'; res.innerHTML=''; lastResults=[]; return; }
+  lastResults = searchAll(q);
+  const weeks = [...new Set(lastResults.map(r=>r.wk))];
+  info.textContent = lastResults.length
+    ? lastResults.length+' match'+(lastResults.length===1?'':'es')+' in '+weeks.length+' week'+(weeks.length===1?'':'s')+' — click one to jump to it'
+    : 'No matches in any saved timecard.';
+  let html = '', cur = null;
+  lastResults.forEach((r,i)=>{
+    if(r.wk!==cur){
+      cur = r.wk;
+      html += '<div class="sweek">Week ending '+usDate(fromIso(r.wk))+(r.wk===weekKey?'  ·  (open now)':'')+'</div>';
+    }
+    html += '<div class="sres" data-i="'+i+'"><span class="swhere">'+esc(r.where)+'</span>'+
+            '<span class="sval">'+markMatch(r.value, q)+'</span></div>';
+  });
+  res.innerHTML = html;
+}
+function jumpToResult(r){
+  closeSearch();
+  if(r.wk!==weekKey) setWeek(r.wk);
+  let el;
+  if(r.sel.day!==undefined){
+    el = document.querySelector('input.cell[data-day="'+r.sel.day+'"][data-f="'+r.sel.f+'"]');
+  }else if(r.sel.di!==undefined){
+    el = document.querySelector('input.cell[data-row="'+r.sel.row+'"][data-f="'+r.sel.f+'"][data-di="'+r.sel.di+'"]');
+  }else{
+    el = document.querySelector('input.cell[data-row="'+r.sel.row+'"][data-f="'+r.sel.f+'"]');
+  }
+  if(!el) return;
+  el.scrollIntoView({block:'center', behavior:'smooth'});
+  el.classList.add('flash');
+  setTimeout(()=>el.classList.remove('flash'), 2500);
+}
+function openSearch(){
+  closePopups();
+  const sw = document.getElementById('searchWrap');
+  sw.hidden = false;
+  const si = document.getElementById('searchInp');
+  si.select(); si.focus();
+  renderSearch();
+}
+function closeSearch(){ document.getElementById('searchWrap').hidden = true; }
+function bindSearch(){
+  document.getElementById('btnSearch').onclick = openSearch;
+  document.getElementById('searchClose').onclick = closeSearch;
+  document.getElementById('searchInp').addEventListener('input', renderSearch);
+  document.getElementById('searchWrap').addEventListener('mousedown', e=>{
+    if(e.target.id==='searchWrap') closeSearch();
+  });
+  document.getElementById('searchRes').addEventListener('click', e=>{
+    const item = e.target.closest('.sres');
+    if(item) jumpToResult(lastResults[+item.dataset.i]);
+  });
+  document.addEventListener('keydown', e=>{
+    if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='f'){ e.preventDefault(); openSearch(); }
+    if(e.key==='Escape') closeSearch();
+  });
+}
 
 /* ---------------- toast ---------------- */
 let toastTimer=null;
@@ -1314,15 +1492,12 @@ function msgParts(){
                                    (escHtml(l)||'&nbsp;')+'</p>').join('')+'<br>' : ''
   };
 }
-async function deliverEml(blob, icon, what){
-  const r = await saveFileConfirmed(fileBase()+'.eml', blob, 'message/rfc822', 'Ready email draft');
-  if(r==='cancelled'){ toast(icon+' Cancelled — nothing was saved.', 6000); return; }
-  toast(icon+' Done — now <b>open the file you just saved</b> (double-click it): the email appears with '+
-        'To / CC / subject, your message on top and '+what+'. Press <b>Send</b> and that\'s it.'+
-        (r==='downloaded' ? AUTOTIP : ''), 16000);
+function deliverEml(blob, icon, what){
+  download(fileBase()+'.eml', blob);           // silent — no dialogs
+  toast(icon+' The finished email was created with '+what+', addressed and ready — press <b>Send</b> when it opens.'+AUTOTIP, 18000);
 }
-const AUTOTIP = '<br><span style="opacity:.85">💡 <b>Make it one-click:</b> in the downloads bar/list, right-click the file → '+
-  '<b>“Always open files of this type”</b>. From then on the draft pops open by itself every time you press the button.</span>';
+const AUTOTIP = '<br><span style="opacity:.9">⚡ <b>Make it 100% automatic (one time):</b> right-click that file in the downloads bar → '+
+  '<b>“Always open files of this type”</b>. From then on: click the button → the finished email pops open by itself → Send.</span>';
 async function withBusy(btn, fn){
   btn.disabled=true;
   try{ await fn(); }
@@ -1370,6 +1545,7 @@ bindHeader();
 bindWeekNav();
 bindSettings();
 bindEmailButtons();
+bindSearch();
 renderWeek();
 if(!state.settings.emailTo){
   toast('👋 Welcome! Open <b>⚙ Settings</b> once to save the email address and CCs you send your timecard to. Everything you type in the sheet is saved automatically in this browser.', 12000);
