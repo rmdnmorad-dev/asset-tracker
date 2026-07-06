@@ -38,6 +38,14 @@
   #settings .fld{display:flex;flex-direction:column;gap:3px}
   #settings .fld span{font-size:11px;color:#555;font-weight:bold}
   #settings input,#settings select{border:1px solid #94a3b8;border-radius:5px;padding:6px 8px;font-size:13px}
+  #settings textarea{border:1px solid #94a3b8;border-radius:5px;padding:6px 8px;font-size:13px;
+    font-family:inherit;min-height:64px;resize:vertical}
+  .subchecks{display:flex;flex-direction:column;gap:4px;padding:4px 2px;font-size:13px}
+  .subchecks label{display:flex;gap:6px;align-items:center;cursor:pointer}
+  .btn2{background:#f1f5f9;border:1px solid #94a3b8;border-radius:6px;padding:7px 12px;
+    font-size:13px;cursor:pointer}
+  .btn2:hover{background:#e2e8f0}
+  .legcell:focus{background:#fffbe6;outline:1px solid #2563eb}
   #settings .hint{font-size:11.5px;color:#666;background:#f1f5f9;border-radius:6px;padding:8px 10px;line-height:1.5}
   #histChips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;max-height:130px;overflow:auto}
   .chip{background:#e2e8f0;border-radius:14px;padding:3px 8px;font-size:12px;display:flex;gap:5px;align-items:center}
@@ -46,7 +54,7 @@
 
   /* ---------- Sheet ---------- */
   #sheetWrap{overflow:auto;padding:18px 14px 40px}
-  #sheet{background:#fff;width:1392px;padding:10px 14px 16px;border:1px solid #8ea0b5;
+  #sheet{background:#fff;width:1452px;padding:10px 14px 16px;border:1px solid #8ea0b5;
     box-shadow:0 3px 14px rgba(0,0,0,.18);margin:0 auto}
 
   /* header zone */
@@ -70,7 +78,7 @@
   .hz-right input.mail{color:#0563c1;text-decoration:underline}
 
   /* main table */
-  table.tc{border-collapse:collapse;table-layout:fixed;width:1364px;font-size:13px}
+  table.tc{border-collapse:collapse;table-layout:fixed;width:1424px;font-size:13px}
   .tc td{padding:0;overflow:hidden;height:24px;vertical-align:middle}
   .tc td.b{border:1px solid #000}
   .tc td.nb{border:none;background:#fff}
@@ -200,28 +208,41 @@
 <div id="settings" hidden>
   <h3>⚙ Settings <span style="font-weight:normal;font-size:11px;color:#888">(everything is saved automatically in this browser)</span></h3>
   <div class="row">
-    <div class="fld" style="flex:1;min-width:240px"><span>SEND TO (email)</span>
-      <input type="text" id="setTo" placeholder="manager@company.com"></div>
+    <div class="fld" style="flex:1;min-width:260px"><span>SEND TO — one or more, separated with commas, ; or |</span>
+      <input type="text" id="setTo" placeholder="manager@company.com, lead@company.com"></div>
     <div class="fld" style="flex:2;min-width:300px"><span>CC — as many as you need, separated with commas, ; or |</span>
       <input type="text" id="setCc" placeholder="hr@company.com, boss@company.com, team@company.com"></div>
   </div>
+  <div class="row" style="align-items:flex-end">
+    <div class="fld" style="flex:1;min-width:300px">
+      <span>EMAIL SUBJECT — {type} follows the boxes on the right; also {date}, {day}, {employee}, {weekending}</span>
+      <input type="text" id="setSubject" placeholder="{type} Timecard-{date}"></div>
+    <div class="fld"><span>TIMECARD TYPE</span>
+      <div class="subchecks">
+        <label><input type="checkbox" id="subDaily"> Daily timecard</label>
+        <label><input type="checkbox" id="subWeekly"> Weekly timecard</label>
+      </div></div>
+  </div>
   <div class="row">
     <div class="fld" style="flex:1;min-width:300px">
-      <span>EMAIL SUBJECT — {type} becomes “Daily” (Mon–Sat) or “Weekly” (Sunday); also {date}, {day}, {employee}, {weekending}</span>
-      <input type="text" id="setSubject" placeholder="{type} Timecard-{date}"></div>
+      <span>EMAIL MESSAGE — written at the top of every email, above the timecard</span>
+      <textarea id="setMessage" placeholder="Hi, hope you are all doing well.&#10;Please find my timecard below."></textarea></div>
   </div>
   <div class="hint">
-    <b>How sending works:</b> every button opens a new email with your To / CC / subject already filled.<br>
-    📷 <b>Image</b> — the timecard picture is put on your clipboard: click inside the email and press
-    <b>Ctrl+V</b>, then Send. Nothing is downloaded.<br>
-    📝 <b>Text</b> — the whole sheet is put on your clipboard as a colored table: <b>Ctrl+V</b> inside the
-    email, then Send. Nothing is downloaded.<br>
-    📄 <b>PDF</b> — the .pdf is saved to Downloads and the email opens; add it with Outlook's 📎 attach button
-    or drag it in. (A PDF cannot travel through the clipboard — that is a Windows/browser limit, not the tool.)
+    <b>How sending works:</b> every button builds the complete email — To, CCs, subject, <u>your message on
+    top</u> and the timecard already attached under it (📷 picture / 📝 colored table / 📄 .pdf file). You only
+    confirm where to save that one file, then <b>open it</b>: it appears in Outlook as a ready draft — press
+    <b>Send</b>. No attaching, no Ctrl+V, nothing else to do.
   </div>
   <div class="hint" style="margin-top:10px">
     🧠 <b>Drop-down memory:</b> every value you type in the sheet is remembered and offered as a drop-down
     next time. To forget a value, open the drop-down and click the <b style="color:#b91c1c">✕</b> next to it.
+  </div>
+  <div class="row" style="margin-top:12px">
+    <button class="btn2" id="btnBackup">💾 Save settings &amp; memory (backup)</button>
+    <button class="btn2" id="btnImport">📥 Import a backup</button>
+    <input type="file" id="importFile" accept=".json,application/json" style="display:none">
+    <span style="font-size:11px;color:#777;align-self:center">The backup file holds everything: settings, drop-down memory and all saved weeks. Import it on another computer to move the tool.</span>
   </div>
 </div>
 
@@ -312,9 +333,13 @@ const JOB_LEGEND = [
 const HIST_FIELDS = ['task','notes','project','contractor','job','hours'];
 const TIME_FIELDS = ['tin','tout','lunch','meet','wfh','leave'];   // these get the time wheel instead
 const HIST_OF = {task:'task', notes:'notes', project:'project', contractor:'contractor',
-                 job:'job', h:'hours', ha:'hours'};
-// descriptions shown next to the codes inside the drop-downs
-const DL_LABELS = {task:Object.fromEntries(TASK_LEGEND), job:Object.fromEntries(JOB_LEGEND)};
+                 job:'job', h:'hours'};
+// descriptions shown next to the codes inside the drop-downs (legends are editable)
+function dlLabels(field){
+  if(field==='task') return Object.fromEntries(state.settings.taskLegend);
+  if(field==='job')  return Object.fromEntries(state.settings.jobLegend);
+  return {};
+}
 
 /* ---------------- state ---------------- */
 function defaultDay(){ return {tin:'12:00 PM', lunch:'0:00', tout:'12:00 PM', meet:'0:00', wfh:'0:00', leave:'0:00'}; }
@@ -331,9 +356,11 @@ function defaultState(){
   return {
     version:1,
     settings:{
-      emailTo:'', emailCc:'',
+      emailTo:'', emailCc:'', message:'',
       subject:'{type} Timecard-{date}',
-      subjectV2:true,
+      subjectV2:true, subjectMode:'auto',
+      taskLegend: TASK_LEGEND.map(t=>[t[0],t[1]]),
+      jobLegend: JOB_LEGEND.map(t=>[t[0],t[1]]),
       employee:'Morad Ramadan', manager:'C. Hattar',
       phone:'962-788530881', email:'mramadan@isatts.com',
       co1:'JORDAN ISAT', co2:'SHMEISANI-AMMAN JORDAN', co3:'OFFICE# 714.927.0635 (MAJIC)',
@@ -356,6 +383,10 @@ if(!state.settings.subjectV2){
   state.settings.subject = '{type} Timecard-{date}';
   state.settings.subjectV2 = true;
 }
+if(!state.settings.taskLegend) state.settings.taskLegend = TASK_LEGEND.map(t=>[t[0],t[1]]);
+if(!state.settings.jobLegend)  state.settings.jobLegend  = JOB_LEGEND.map(t=>[t[0],t[1]]);
+if(state.settings.message===undefined) state.settings.message = '';
+if(!state.settings.subjectMode) state.settings.subjectMode = 'auto';
 
 let saveTimer = null;
 function save(){
@@ -457,7 +488,7 @@ function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').rep
 
 /* ---------------- build the sheet table ---------------- */
 function buildTable(){
-  let cg = '<colgroup><col style="width:112px"><col style="width:88px"><col style="width:154px"><col style="width:148px"><col style="width:94px">';
+  let cg = '<colgroup><col style="width:112px"><col style="width:88px"><col style="width:154px"><col style="width:148px"><col style="width:154px">';
   for(let d=0; d<7; d++) cg += '<col style="width:39px"><col style="width:58px">';
   cg += '<col style="width:89px"></colgroup>';
 
@@ -466,7 +497,7 @@ function buildTable(){
   // day headers ---------------------------------------------------------
   h += '<tr><td class="nb" colspan="5"></td>';
   for(let d=0; d<7; d++) h += '<td class="b dayhdr" colspan="2" id="dh'+d+'">'+DAYS[d]+'</td>';
-  h += '<td class="b yellow" rowspan="8" id="thLabel" contenteditable="true" spellcheck="false">'+
+  h += '<td class="b yellow" rowspan="8" id="thLabel">'+
        esc(state.settings.totalHoursLabel||'Total Hours')+'</td></tr>';
 
   // DATE row -------------------------------------------------------------
@@ -516,19 +547,22 @@ function buildTable(){
         h += '<td class="b tinfo"><input class="cell task redtx" data-row="'+ri+'" data-f="'+f+'" spellcheck="false" autocomplete="off"></td>';
       }
       for(let d=0; d<7; d++){
-        h += '<td class="b tgreen"><input class="cell redtx" data-row="'+ri+'" data-f="ha" data-di="'+d+'" spellcheck="false" autocomplete="off"></td>'+
+        h += '<td class="b tgreen"><input class="cell redtx jobpick" readonly title="Pick a job code" data-row="'+ri+'" data-f="ha" data-di="'+d+'"></td>'+
              '<td class="b tgreen"><input class="cell redtx" data-row="'+ri+'" data-f="h" data-di="'+d+'" spellcheck="false" autocomplete="off"></td>';
       }
       h += '<td class="b rowtot" id="rt'+ri+'">0</td></tr>';
     }
   }
 
-  // legend -----------------------------------------------------------------
+  // legend (editable — the drop-downs read from it) --------------------------
+  const legRow = (leg, i, t)=>'<tr>'+
+    '<td class="code legcell" contenteditable="true" spellcheck="false" data-leg="'+leg+'" data-i="'+i+'" data-k="0">'+esc(t[0])+'</td>'+
+    '<td class="desc legcell" contenteditable="true" spellcheck="false" data-leg="'+leg+'" data-i="'+i+'" data-k="1">'+esc(t[1])+'</td></tr>';
   h += '<tr><td class="nb" colspan="20"><div class="legendwrap"><div>'+
        '<div class="tasksHdr">TASKS :</div><table class="leg">';
-  for(const t of TASK_LEGEND) h += '<tr><td class="code">'+t[0]+'</td><td class="desc">'+t[1]+'</td></tr>';
+  state.settings.taskLegend.forEach((t,i)=>{ h += legRow('task', i, t); });
   h += '</table></div><table class="leg leg2">';
-  for(const t of JOB_LEGEND) h += '<tr><td class="code">'+t[0]+'</td><td class="desc">'+t[1]+'</td></tr>';
+  state.settings.jobLegend.forEach((t,i)=>{ h += legRow('job', i, t); });
   h += '</table></div></td></tr>';
 
   // bottom per-day task totals ----------------------------------------------
@@ -603,7 +637,7 @@ function bindSheetInputs(){
     const t = e.target;
     if(!t.classList || !t.classList.contains('cell')) return;
     if(TIME_FIELDS.includes(t.dataset.f)) openWheel(t);
-    else if(HIST_OF[t.dataset.f]) openCombo(t);
+    else if(t.classList.contains('jobpick') || HIST_OF[t.dataset.f]) openCombo(t);
   });
   host.addEventListener('input', e=>{
     const t = e.target;
@@ -617,7 +651,11 @@ function bindSheetInputs(){
     if(t.classList.contains('secname')){
       state.settings.sectionNames[+t.dataset.sec] = t.textContent; save(); return;
     }
-    if(t.id === 'thLabel'){ state.settings.totalHoursLabel = t.textContent; save(); }
+    if(t.classList.contains('legcell')){    // editable legend feeds the drop-downs
+      const legs = t.dataset.leg==='task' ? state.settings.taskLegend : state.settings.jobLegend;
+      legs[+t.dataset.i][+t.dataset.k] = t.textContent.trim();
+      save();
+    }
   });
   host.addEventListener('change', e=>{
     const inp = e.target;
@@ -712,17 +750,49 @@ function bindWeekNav(){
 }
 
 /* ---------------- settings panel ---------------- */
+function resolvedWeekly(){
+  const m = state.settings.subjectMode||'auto';
+  return m==='weekly' || (m!=='daily' && new Date().getDay()===0);
+}
 function bindSettings(){
   document.getElementById('btnSettings').onclick = ()=>{
     const p = document.getElementById('settings');
     p.hidden = !p.hidden;
   };
-  const map = [['setTo','emailTo'],['setCc','emailCc'],['setSubject','subject']];
+  const map = [['setTo','emailTo'],['setCc','emailCc'],['setSubject','subject'],['setMessage','message']];
   for(const [id,key] of map){
     const el = document.getElementById(id);
     el.value = state.settings[key]||'';
     el.addEventListener('input', ()=>{ state.settings[key]=el.value; save(); });
   }
+  // Daily / Weekly checkboxes: pick one, or untick to follow the calendar again
+  const cd = document.getElementById('subDaily'), cw = document.getElementById('subWeekly');
+  const reflect = ()=>{ const w = resolvedWeekly(); cd.checked = !w; cw.checked = w; };
+  cd.addEventListener('change', ()=>{ state.settings.subjectMode = cd.checked ? 'daily' : 'auto'; save(); reflect(); });
+  cw.addEventListener('change', ()=>{ state.settings.subjectMode = cw.checked ? 'weekly' : 'auto'; save(); reflect(); });
+  reflect();
+  // backup / import
+  document.getElementById('btnBackup').onclick = async ()=>{
+    const blob = new Blob([JSON.stringify(state,null,1)], {type:'application/json'});
+    const r = await saveFileConfirmed('Timecard_backup_'+isoDate(new Date())+'.json', blob,
+                                      'application/json', 'Timecard backup');
+    if(r!=='cancelled') toast('💾 Backup saved — it holds your settings, drop-down memory and every week.');
+  };
+  document.getElementById('btnImport').onclick = ()=>document.getElementById('importFile').click();
+  document.getElementById('importFile').addEventListener('change', e=>{
+    const f = e.target.files[0]; if(!f) return;
+    const rd = new FileReader();
+    rd.onload = ()=>{
+      try{
+        const data = JSON.parse(rd.result);
+        if(!data.settings || !data.weeks) throw new Error('bad');
+        localStorage.setItem(LS_KEY, JSON.stringify(data));
+        location.reload();
+      }catch(err){ toast('⚠ That file is not a valid timecard backup.'); }
+      e.target.value = '';
+    };
+    rd.readAsText(f);
+  });
 }
 
 /* ---------------- custom drop-down (learned values, ✕ to forget) ---------------- */
@@ -734,19 +804,31 @@ function openCombo(inp){
 }
 function renderCombo(){
   if(!comboInp) return;
-  const field = HIST_OF[comboInp.dataset.f];
-  const typed = comboInp.value.trim().toLowerCase();
-  const items = dlOptions(field).filter(v=>!typed || v.toLowerCase().includes(typed));
-  if(!items.length){
-    combo.innerHTML = '<div class="cempty">'+(dlOptions(field).length
-      ? 'No saved value matches.' : 'Values you type here are remembered for next time.')+'</div>';
+  const isJobPick = comboInp.classList.contains('jobpick');
+  let rows = '';
+  if(isJobPick){
+    // codes-only picker fed by the editable job-type legend
+    const codes = state.settings.jobLegend.filter(l=>String(l[0]).trim());
+    rows = (comboInp.value ? '<div class="citem" data-v=""><span class="cv" style="color:#94a3b8">✕ clear this box</span></div>' : '')+
+      codes.map(l=>'<div class="citem" data-v="'+esc(l[0])+'"><span class="cv">'+esc(l[0])+'</span>'+
+                   '<span class="cl">'+esc(l[1]||'')+'</span></div>').join('');
+    combo.innerHTML = rows || '<div class="cempty">The job legend at the bottom of the sheet is empty.</div>';
   }else{
-    combo.innerHTML = items.slice(0,60).map(v=>{
-      const lab = DL_LABELS[field] && DL_LABELS[field][v];
-      return '<div class="citem" data-v="'+esc(v)+'"><span class="cv">'+esc(v)+'</span>'+
-             (lab?'<span class="cl">'+esc(lab)+'</span>':'')+
-             '<b class="cx" title="Forget this value">✕</b></div>';
-    }).join('');
+    const field = HIST_OF[comboInp.dataset.f];
+    const typed = comboInp.value.trim().toLowerCase();
+    const labs = dlLabels(field);
+    const items = dlOptions(field).filter(v=>!typed || v.toLowerCase().includes(typed));
+    if(!items.length){
+      combo.innerHTML = '<div class="cempty">'+(dlOptions(field).length
+        ? 'No saved value matches.' : 'Values you type here are remembered for next time.')+'</div>';
+    }else{
+      combo.innerHTML = items.slice(0,60).map(v=>{
+        const lab = labs[v];
+        return '<div class="citem" data-v="'+esc(v)+'"><span class="cv">'+esc(v)+'</span>'+
+               (lab?'<span class="cl">'+esc(lab)+'</span>':'')+
+               '<b class="cx" title="Forget this value">✕</b></div>';
+      }).join('');
+    }
   }
   const r = comboInp.getBoundingClientRect();
   combo.style.minWidth = Math.max(r.width, 170)+'px';
@@ -759,9 +841,8 @@ combo.addEventListener('mousedown', e=>{
   e.preventDefault();                       // keep focus in the cell
   const item = e.target.closest('.citem');
   if(!item || !comboInp) return;
-  const field = HIST_OF[comboInp.dataset.f];
   if(e.target.classList.contains('cx')){
-    forgetHistory(field, item.dataset.v);
+    forgetHistory(HIST_OF[comboInp.dataset.f], item.dataset.v);
     renderCombo();                          // stay open so several can be removed
   }else{
     comboInp.value = item.dataset.v;
@@ -952,25 +1033,6 @@ async function captureSheet(){
 function canvasBlob(canvas, type, q){
   return new Promise(res=>canvas.toBlob(res, type, q));
 }
-async function tryCopyImage(blob){
-  try{
-    if(navigator.clipboard && window.ClipboardItem){
-      await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
-      return true;
-    }
-  }catch(e){}
-  return false;
-}
-async function tryCopyText(txt){
-  try{ await navigator.clipboard.writeText(txt); return true; }
-  catch(e){
-    try{
-      const ta=document.createElement('textarea');
-      ta.value=txt; document.body.appendChild(ta); ta.select();
-      const ok=document.execCommand('copy'); ta.remove(); return ok;
-    }catch(e2){ return false; }
-  }
-}
 
 /* ---------------- tiny PDF writer (JPEG page) ---------------- */
 function jpegToPdf(jpegDataUrl, pxW, pxH){
@@ -1026,19 +1088,19 @@ function encHeader(s){
   return /^[\x20-\x7E]*$/.test(s) ? s
     : '=?UTF-8?B?'+btoa(unescape(encodeURIComponent(s)))+'?=';
 }
-function ccList(){
-  return (state.settings.emailCc||'').split(/[,;|]+/).map(x=>x.trim()).filter(Boolean).join(', ');
-}
+function splitEmails(s){ return (s||'').split(/[,;|]+/).map(x=>x.trim()).filter(Boolean); }
+function toList(){ return splitEmails(state.settings.emailTo).join(', '); }
+function ccList(){ return splitEmails(state.settings.emailCc).join(', '); }
 function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function buildEml(opt){
   const nl = '\r\n', b = '=_timecard_'+Date.now();
-  let m = 'X-Unsent: 1'+nl+'To: '+state.settings.emailTo.trim()+nl;
+  let m = 'X-Unsent: 1'+nl+'To: '+toList()+nl;
   const cc = ccList();
   if(cc) m += 'Cc: '+cc+nl;
   m += 'Subject: '+encHeader(subjectText())+nl+'MIME-Version: 1.0'+nl;
   if(opt.inlineImgB64){
-    // image shown INSIDE the email body, no filler text
-    const html = '<html><body>'+
+    // saved message on top, timecard picture under it
+    const html = '<html><body>'+(opt.msgHtml||'')+
       '<img src="cid:timecardimg" width="920" style="max-width:100%;border:1px solid #ccc">'+
       '</body></html>';
     m += 'Content-Type: multipart/related; boundary="'+b+'"'+nl+nl+
@@ -1068,7 +1130,7 @@ function buildEml(opt){
 }
 
 /* ---------------- sheet as an HTML table (email body) ---------------- */
-function buildHtmlEmail(){
+function buildHtmlEmail(prefixHtml){
   const w = week(), dates = weekDates(), s = state.settings;
   const B = 'border:1px solid #000;font-family:Arial;';
   const dayVals = [], dayTaskTot = [0,0,0,0,0,0,0];
@@ -1081,7 +1143,7 @@ function buildHtmlEmail(){
     tot += -(parseDur(dd.lunch)||0)+(parseDur(dd.meet)||0)+(parseDur(dd.wfh)||0)+(parseDur(dd.leave)||0);
     weekMin += tot; dayVals.push(tot);
   }
-  let h = '<html><body><div style="font-family:Arial">';
+  let h = '<html><body>'+(prefixHtml||'')+'<div style="font-family:Arial">';
   // header zone
   h += '<table cellspacing="0" cellpadding="2" style="border-collapse:collapse;width:960px;margin-bottom:4px"><tr>'+
     '<td style="width:290px;vertical-align:top;font-family:Arial"><span style="font-size:20px;font-weight:bold">'+escHtml(s.co1||'')+'</span>'+
@@ -1150,9 +1212,9 @@ function buildHtmlEmail(){
   h += '<table cellspacing="0" cellpadding="1" style="border-collapse:collapse;margin-top:14px"><tr><td style="vertical-align:top;border:none;padding-right:30px">'+
        '<div style="'+B+'background:#D9D9D9;font-weight:bold;font-size:11px;padding:1px 8px;width:90px">TASKS :</div>'+
        '<table cellspacing="0" cellpadding="1" style="border-collapse:collapse">';
-  for(const t of TASK_LEGEND) h += legRow(t[0], t[1], 260);
+  for(const t of state.settings.taskLegend) h += legRow(t[0], t[1], 260);
   h += '</table></td><td style="vertical-align:top;border:none"><table cellspacing="0" cellpadding="1" style="border-collapse:collapse">';
-  for(const t of JOB_LEGEND) h += legRow(t[0], t[1], 210);
+  for(const t of state.settings.jobLegend) h += legRow(t[0], t[1], 210);
   h += '</table></td></tr></table>';
   h += '</div></body></html>';
   return h;
@@ -1210,14 +1272,14 @@ function buildPlainText(){
 function subjectText(){
   const s=state.settings, now=new Date();
   return (s.subject||'{type} Timecard-{date}')
-    .replace(/{type}/gi, now.getDay()===0 ? 'Weekly' : 'Daily')   // Sundays = weekly send
+    .replace(/{type}/gi, resolvedWeekly() ? 'Weekly' : 'Daily')
     .replace(/{employee}/gi, s.employee||'')
     .replace(/{date}/gi, usDate(now))
     .replace(/{day}/gi, DAYS[(now.getDay()+6)%7])
     .replace(/{weekending}/gi, usDate(fromIso(weekKey)));
 }
 function ensureRecipient(){
-  if(state.settings.emailTo && state.settings.emailTo.trim()) return true;
+  if(splitEmails(state.settings.emailTo).length) return true;
   document.getElementById('settings').hidden=false;
   document.getElementById('setTo').focus();
   toast('✉ First set the <b>SEND TO</b> email (and CCs) in Settings — they are saved for next time.');
@@ -1226,23 +1288,38 @@ function ensureRecipient(){
 function fileBase(){
   return 'Timecard_'+(state.settings.employee||'').replace(/[^\w]+/g,'')+'_'+weekKey;
 }
-/* opens a new pre-addressed email in the default mail app */
-function openDraft(body){
-  const q = ['subject='+encodeURIComponent(subjectText())];
-  const cc = ccList();
-  if(cc) q.push('cc='+encodeURIComponent(cc.replace(/,\s+/g, ',')));
-  if(body) q.push('body='+encodeURIComponent(body));
-  location.href = 'mailto:'+encodeURIComponent(state.settings.emailTo.trim())+'?'+q.join('&');
+/* asks the user where to save (native Save-As confirmation); falls back to a plain download */
+async function saveFileConfirmed(name, blob, mime, desc){
+  if(window.showSaveFilePicker){
+    try{
+      const ext = '.'+name.split('.').pop();
+      const h = await showSaveFilePicker({suggestedName: name, types: [{description: desc, accept: {[mime]: [ext]}}]});
+      const w = await h.createWritable();
+      await w.write(blob); await w.close();
+      return 'saved';
+    }catch(e){
+      if(e && e.name==='AbortError') return 'cancelled';
+      // picker unavailable/blocked -> plain download below
+    }
+  }
+  download(name, blob);
+  return 'downloaded';
 }
-/* copies rich HTML (with a plain-text fallback) so Ctrl+V pastes the sheet as a table */
-async function tryCopyHtml(html, text){
-  try{
-    await navigator.clipboard.write([new ClipboardItem({
-      'text/html':  new Blob([html], {type:'text/html'}),
-      'text/plain': new Blob([text], {type:'text/plain'})
-    })]);
-    return true;
-  }catch(e){ return false; }
+/* the saved EMAIL MESSAGE, as plain text and as html paragraphs */
+function msgParts(){
+  const m = (state.settings.message||'').trim();
+  return {
+    text: m ? m+'\n\n' : '',
+    html: m ? m.split(/\n/).map(l=>'<p style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;margin:0 0 6px">'+
+                                   (escHtml(l)||'&nbsp;')+'</p>').join('')+'<br>' : ''
+  };
+}
+async function deliverEml(blob, icon, what){
+  const r = await saveFileConfirmed(fileBase()+'.eml', blob, 'message/rfc822', 'Ready email draft');
+  if(r==='cancelled'){ toast(icon+' Cancelled — nothing was saved.', 6000); return; }
+  toast(icon+' Done — now <b>open the file you just saved</b> (double-click it): the email appears with '+
+        'To / CC / subject, your message on top and '+what+'. Press <b>Send</b> and that\'s it.'+
+        (r==='downloaded' ? AUTOTIP : ''), 16000);
 }
 const AUTOTIP = '<br><span style="opacity:.85">💡 <b>Make it one-click:</b> in the downloads bar/list, right-click the file → '+
   '<b>“Always open files of this type”</b>. From then on the draft pops open by itself every time you press the button.</span>';
@@ -1258,41 +1335,25 @@ function bindEmailButtons(){
     toast('📷 Taking a picture of the sheet…');
     const canvas = await captureSheet();
     const blob = await canvasBlob(canvas,'image/png');
-    if(await tryCopyImage(blob)){
-      setTimeout(()=>openDraft(''), 300);
-      toast('📷 Your email is opening with To / CC / subject filled.<br>'+
-            'Click inside the message and press <b>Ctrl+V</b> — the timecard picture drops straight in. Then <b>Send</b>.', 14000);
-    }else{
-      const eml = buildEml({inlineImgB64: await blobToBase64(blob), name: fileBase()+'.png'});
-      download(fileBase()+'.eml', eml);
-      toast('📷 The browser blocked the clipboard, so a ready draft was downloaded instead — open it and the picture '+
-            'is already inside, with To / CC / subject filled. Just press <b>Send</b>.'+AUTOTIP, 16000);
-    }
+    const eml = buildEml({inlineImgB64: await blobToBase64(blob), name: fileBase()+'.png',
+                          msgHtml: msgParts().html});
+    await deliverEml(eml, '📷', 'the timecard picture already inside the email');
   });
   document.getElementById('btnTxt').onclick = ev=>withBusy(ev.currentTarget, async ()=>{
     if(!ensureRecipient()) return;
-    const txt = buildPlainText();
-    if(await tryCopyHtml(buildHtmlEmail(), txt)){
-      setTimeout(()=>openDraft(''), 300);
-      toast('📝 Your email is opening with To / CC / subject filled.<br>'+
-            'Click inside the message and press <b>Ctrl+V</b> — the whole sheet pastes in as a table. Then <b>Send</b>.', 14000);
-    }else{
-      const eml = buildEml({bodyText: txt, bodyHtml: buildHtmlEmail()});
-      download(fileBase()+'.eml', eml);
-      toast('📝 The browser blocked the clipboard, so a ready draft was downloaded instead — open it and the sheet '+
-            'is already written inside as a table. Just press <b>Send</b>.'+AUTOTIP, 16000);
-    }
+    const mp = msgParts();
+    const eml = buildEml({bodyText: mp.text+buildPlainText(), bodyHtml: buildHtmlEmail(mp.html)});
+    await deliverEml(eml, '📝', 'the whole sheet written inside as a table');
   });
   document.getElementById('btnPdf').onclick = ev=>withBusy(ev.currentTarget, async ()=>{
     if(!ensureRecipient()) return;
     toast('📄 Building the PDF…');
     const canvas = await captureSheet();
     const jpeg = canvas.toDataURL('image/jpeg', 0.92);
-    download(fileBase()+'.pdf', jpegToPdf(jpeg, canvas.width, canvas.height));
-    setTimeout(()=>openDraft(''), 500);
-    toast('📄 <b>'+fileBase()+'.pdf</b> was saved and your email is opening with To / CC / subject filled.<br>'+
-          'Click the 📎 attach button (or drag the PDF from the Downloads bar) to add it, then <b>Send</b>.<br>'+
-          '<span style="opacity:.8">A PDF cannot travel through the clipboard — the 📷 Image and 📝 Text buttons are fully paste-in.</span>', 16000);
+    const pdf = jpegToPdf(jpeg, canvas.width, canvas.height);
+    const eml = buildEml({attachB64: await blobToBase64(pdf), name: fileBase()+'.pdf',
+                          mime: 'application/pdf', bodyText: msgParts().text});
+    await deliverEml(eml, '📄', 'the .pdf already attached');
   });
   document.getElementById('btnSavePdf').onclick = ev=>withBusy(ev.currentTarget, async ()=>{
     toast('⬇ Building the PDF…');
