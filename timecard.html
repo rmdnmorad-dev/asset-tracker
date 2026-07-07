@@ -264,7 +264,9 @@
     📝 <b>Text</b> — same, but Ctrl+V pastes the whole sheet as a colored table.<br>
     📄 <b>PDF</b> — the complete email file is created with the <b>.pdf already attached</b> and your message on
     top; open it and press Send. ⚡ <i>One time:</i> right-click that file in the downloads bar →
-    <b>“Always open files of this type”</b> — after that it pops open by itself.
+    <b>“Always open files of this type”</b> — after that it pops open by itself.<br>
+    <span style="opacity:.8">Using <b>new Outlook</b>? It has a bug that shows “couldn’t be attached”. Turn the
+    <b>“New Outlook”</b> switch (top-right of Outlook) <b>off</b> once — classic Outlook attaches the PDF for you.</span>
   </div>
   <div class="hint" style="margin-top:10px">
     🧠 <b>Drop-down memory:</b> every value you type in the sheet is remembered and offered as a drop-down
@@ -1271,9 +1273,21 @@ function splitEmails(s){ return (s||'').split(/[,;|]+/).map(x=>x.trim()).filter(
 function toList(){ return splitEmails(state.settings.emailTo).join(', '); }
 function ccList(){ return splitEmails(state.settings.emailCc).join(', '); }
 function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function rfc2822Date(d){
+  const dn=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'], mn=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const tz=-d.getTimezoneOffset(), sg=tz>=0?'+':'-', a=Math.abs(tz);
+  return dn[d.getDay()]+', '+pad2(d.getDate())+' '+mn[d.getMonth()]+' '+d.getFullYear()+' '+
+         pad2(d.getHours())+':'+pad2(d.getMinutes())+':'+pad2(d.getSeconds())+' '+sg+pad2(Math.floor(a/60))+pad2(a%60);
+}
 function buildEml(opt){
   const nl = '\r\n', b = '=_timecard_'+Date.now();
-  let m = 'X-Unsent: 1'+nl+'To: '+toList()+nl;
+  // full RFC-5322 headers — new Outlook rejects/re-composes drafts that lack Date/From/Message-ID
+  const from = (state.settings.email||'').trim() || (splitEmails(state.settings.emailTo)[0]||'me@localhost');
+  let m = 'X-Unsent: 1'+nl+
+          'Date: '+rfc2822Date(new Date())+nl+
+          'Message-ID: <timecard.'+Date.now()+'.'+Math.random().toString(36).slice(2)+'@timecard.local>'+nl+
+          'From: '+from+nl+
+          'To: '+toList()+nl;
   const cc = ccList();
   if(cc) m += 'Cc: '+cc+nl;
   m += 'Subject: '+encHeader(subjectText())+nl+'MIME-Version: 1.0'+nl;
@@ -1495,7 +1509,11 @@ function msgParts(){
 }
 function deliverEml(blob, icon, what){
   download(fileBase()+'.eml', blob);           // silent — no dialogs
-  toast(icon+' The finished email was created with '+what+', addressed and ready — press <b>Send</b> when it opens.'+AUTOTIP, 18000);
+  const newOutlookNote = icon==='📄'
+    ? '<br><span style="opacity:.9">⚠ If <b>new Outlook</b> says “couldn’t be attached”, that’s its known bug with drafts. '+
+      'Flip the <b>“New Outlook”</b> switch (top-right of Outlook) <b>off</b> once — classic Outlook opens this with the PDF attached automatically.</span>'
+    : '';
+  toast(icon+' The finished email was created with '+what+', addressed and ready — press <b>Send</b> when it opens.'+AUTOTIP+newOutlookNote, 20000);
 }
 
 /* opens a new pre-addressed email (with the saved message as the body) in the mail app */
