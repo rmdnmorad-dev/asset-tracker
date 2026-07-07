@@ -120,13 +120,15 @@
 
   /* legend */
   .legendwrap{display:flex;gap:36px;align-items:flex-start;padding:26px 2px 10px}
+  .legcol{display:flex;flex-direction:column}
+  .leghead{height:23px;display:flex;align-items:center;gap:8px;margin-bottom:2px}
   .leg{border-collapse:collapse;font-size:11.5px}
-  .leg td{border:1px solid #000;padding:1px 6px;height:19px}
+  .leg td{border:1px solid #000;padding:1px 6px;height:19px;vertical-align:middle}
   .leg .code{background:var(--legcyan);color:var(--red);text-align:center;width:104px}
   .leg .desc{background:var(--leglav);width:376px}
   .leg2 .desc{width:300px}
   .tasksHdr{border:1px solid #000;background:var(--gray);font-weight:bold;font-size:12px;
-    padding:1px 8px;display:inline-block;margin-bottom:0px;width:110px}
+    padding:1px 8px;display:inline-block;width:110px}
 
   /* custom drop-down with per-item delete */
   #combo{position:fixed;z-index:120;background:#fff;border:1px solid #cbd5e1;border-radius:8px;
@@ -200,11 +202,10 @@
   body.capturing .todayhl{box-shadow:none}
   body.capturing .hz-date .rd{border-bottom-color:transparent}
   body.capturing .rowbtns{display:none !important}
-  /* daily view: keep only the current day's column when capturing (drop other days + the week-total column) */
-  #sheet.dailyonly td[data-daycol]:not(.daykeep){display:none}
-  #sheet.dailyonly col[data-daycol]:not(.daykeep){width:0}
-  #sheet.dailyonly td[data-totcol]{display:none}
-  #sheet.dailyonly col[data-totcol]{width:0}
+  /* daily view: keep only the current day's column when capturing (drop other days + the
+     week-total column). Column widths are collapsed in JS; here we only hide the cells. */
+  #sheet.dailyonly td[data-daycol]:not(.daykeep){display:none !important}
+  #sheet.dailyonly td[data-totcol]{display:none !important}
 
   @media print{
     #toolbar,#settings,#toast{display:none !important}
@@ -266,13 +267,15 @@
   </div>
 
   <div class="hint">
-    <b>How sending works:</b> every button builds the whole email — To, CCs, subject, <u>your message on top</u>,
-    and the timecard already placed under it (📷 picture / 📝 colored table / 📄 searchable PDF attached). Nothing
-    to attach, no Ctrl+V. Open the created file → it appears in Outlook as a ready draft → press <b>Send</b>.<br>
-    ⚡ <b>Make it one-click (do once):</b> right-click the file in the download bar → <b>“Always open files of this
-    type”</b> — after that the finished email pops open by itself.<br>
-    <span style="opacity:.8">Only the 📄 PDF path needs classic Outlook: if <b>new Outlook</b> shows “couldn’t be
-    attached”, flip its <b>“New Outlook”</b> switch (top-right) off once — classic Outlook attaches it automatically.</span>
+    <b>How sending works:</b> every button opens a new email with To / CC / subject and <u>your message</u> already
+    inside.<br>
+    📷 <b>Image</b> — nothing downloads: the picture is on your clipboard, click under the message and press
+    <b>Ctrl+V</b>, then Send.<br>
+    📝 <b>Text</b> — nothing downloads: <b>Ctrl+V</b> pastes the whole sheet as a colored table, then Send.<br>
+    📄 <b>PDF</b> — a ready email file is created with the <b>searchable .pdf already attached</b> and your message;
+    open it and press Send. ⚡ <i>One time:</i> right-click it in the download bar → <b>“Always open files of this
+    type”</b> so it pops open by itself. If <b>new Outlook</b> says “couldn’t be attached”, flip its <b>“New
+    Outlook”</b> switch (top-right) off once — classic Outlook attaches it automatically.
   </div>
   <div class="hint" style="margin-top:10px">
     🧠 <b>Drop-down memory:</b> every value you type in the sheet is remembered and offered as a drop-down
@@ -981,27 +984,27 @@ function buildTable(){
         h += '<td class="b tgreen" data-daycol="'+d+'"><input class="cell redtx jobpick" readonly title="Pick a job code" data-row="'+ri+'" data-f="ha" data-di="'+d+'"></td>'+
              '<td class="b tgreen" data-daycol="'+d+'"><input class="cell redtx" data-row="'+ri+'" data-f="h" data-di="'+d+'" spellcheck="false" autocomplete="off"></td>';
       }
-      h += '<td class="b rowtot" id="rt'+ri+'">0</td></tr>';
+      h += '<td class="b rowtot" data-totcol id="rt'+ri+'">0</td></tr>';
     }
   }
 
-  // legend (editable — the drop-downs read from it) --------------------------
-  const legRow = (leg, i, t)=>'<tr>'+
+  // legend (editable — the drop-downs read from it). Both tables are made the
+  // same total height by scaling the shorter one's row height (no blank rows).
+  const taskLeg = state.settings.taskLegend, jobLeg = state.settings.jobLegend;
+  const baseH = 19, maxLeg = Math.max(taskLeg.length, jobLeg.length), targetH = maxLeg*baseH;
+  const rowH = len => Math.max(baseH, Math.round(targetH/len));
+  const legRow = (leg, i, t, rh)=>'<tr style="height:'+rh+'px">'+
     '<td class="code legcell" contenteditable="true" spellcheck="false" data-leg="'+leg+'" data-i="'+i+'" data-k="0">'+esc(t[0])+'</td>'+
     '<td class="desc legcell" contenteditable="true" spellcheck="false" data-leg="'+leg+'" data-i="'+i+'" data-k="1">'+esc(t[1])+'</td></tr>';
-  const legBtns = leg=>'<span class="rowbtns" style="float:none;display:inline-flex;margin:0 0 2px 8px;vertical-align:middle">'+
+  const legBtns = leg=>'<span class="rowbtns" style="float:none;display:inline-flex;margin:0">'+
     '<button type="button" class="rowbtn legadd" data-leg="'+leg+'" title="Add a row to this legend">+</button>'+
     '<button type="button" class="rowbtn legdel" data-leg="'+leg+'" title="Remove the last row of this legend">−</button></span>';
-  // pad the shorter legend with blank rows so both tables end at the same height
-  const maxLeg = Math.max(state.settings.taskLegend.length, state.settings.jobLegend.length);
-  const fillRows = n => { let s=''; for(let i=0;i<n;i++) s+='<tr class="legfill"><td class="code"></td><td class="desc"></td></tr>'; return s; };
-  h += '<tr><td class="nb" colspan="20"><div class="legendwrap"><div>'+
-       '<div><span class="tasksHdr">TASKS :</span>'+legBtns('task')+'</div><table class="leg">';
-  state.settings.taskLegend.forEach((t,i)=>{ h += legRow('task', i, t); });
-  h += fillRows(maxLeg - state.settings.taskLegend.length);
-  h += '</table></div><div><div style="height:21px">'+legBtns('job')+'</div><table class="leg leg2">';
-  state.settings.jobLegend.forEach((t,i)=>{ h += legRow('job', i, t); });
-  h += fillRows(maxLeg - state.settings.jobLegend.length);
+  const tRH = rowH(taskLeg.length), jRH = rowH(jobLeg.length);
+  h += '<tr><td class="nb" colspan="20"><div class="legendwrap">'+
+       '<div class="legcol"><div class="leghead"><span class="tasksHdr">TASKS :</span>'+legBtns('task')+'</div><table class="leg">';
+  taskLeg.forEach((t,i)=>{ h += legRow('task', i, t, tRH); });
+  h += '</table></div><div class="legcol"><div class="leghead">'+legBtns('job')+'</div><table class="leg leg2">';
+  jobLeg.forEach((t,i)=>{ h += legRow('job', i, t, jRH); });
   h += '</table></div></div></td></tr>';
 
   // bottom per-day task totals ----------------------------------------------
@@ -1565,12 +1568,6 @@ async function captureSheet(onlyDay){
   if(document.activeElement) document.activeElement.blur();
   document.body.classList.add('capturing');
   const el = document.getElementById('sheet');
-  // Daily view: mark the one day's cells/cols to keep, hide the rest via CSS
-  const kept = [];
-  if(onlyDay!=null){
-    el.classList.add('dailyonly');
-    el.querySelectorAll('[data-daycol="'+onlyDay+'"]').forEach(n=>{ n.classList.add('daykeep'); kept.push(n); });
-  }
   await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
   try{
     return await html2canvas(el, {scale:2, backgroundColor:'#ffffff', logging:false,
@@ -1605,9 +1602,21 @@ async function captureSheet(onlyDay){
       }});
   }finally{
     document.body.classList.remove('capturing');
-    el.classList.remove('dailyonly');
-    kept.forEach(n=>n.classList.remove('daykeep'));
   }
+}
+/* Daily image: render the clean email-style HTML table (single day) off-screen and
+   capture that — avoids html2canvas's unreliable handling of <col> widths. */
+async function captureHtmlTable(days){
+  const holder = document.createElement('div');
+  holder.style.cssText = 'position:fixed;left:-99999px;top:0;background:#fff;padding:12px;width:1000px;z-index:-1';
+  holder.innerHTML = buildHtmlEmail('', days).replace(/^<html><body>/,'').replace(/<\/body><\/html>$/,'');
+  document.body.appendChild(holder);
+  await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+  try{ return await html2canvas(holder, {scale:2, backgroundColor:'#ffffff', logging:false}); }
+  finally{ holder.remove(); }
+}
+async function captureForSend(days){
+  return (days.length===1) ? await captureHtmlTable(days) : await captureSheet();
 }
 function canvasBlob(canvas, type, q){
   return new Promise(res=>canvas.toBlob(res, type, q));
@@ -1890,7 +1899,7 @@ function buildHtmlEmail(prefixHtml, days){
   h += '<table cellspacing="0" cellpadding="2" style="border-collapse:collapse;width:960px;margin-bottom:4px"><tr>'+
     '<td style="width:290px;vertical-align:top;font-family:Arial"><span style="font-size:20px;font-weight:bold">'+escHtml(s.co1||'')+'</span>'+
     '<br><span style="font-size:9px;color:#8a8a8a">'+escHtml(s.co2||'')+'<br>'+escHtml(s.co3||'')+'</span></td>'+
-    '<td style="text-align:center;vertical-align:top;font-family:Arial"><span style="font-size:20px;font-weight:bold;color:#BFBFBF">Weekly Time Sheet</span>'+
+    '<td style="text-align:center;vertical-align:top;font-family:Arial"><span style="font-size:20px;font-weight:bold;color:#BFBFBF">'+(DYS.length===1?'Daily':'Weekly')+' Time Sheet</span>'+
     '<br><span style="font-size:11px"><span style="color:#FF0000">'+usDate(fromIso(weekKey))+'</span> <b>SUNDAY</b></span></td>'+
     '<td style="width:250px;vertical-align:top;font-size:10px;color:#8a8a8a;font-family:Arial">'+
     'Employee: <b style="color:#111">'+escHtml(s.employee||'')+'</b><br>Manager: <b style="color:#111">'+escHtml(s.manager||'')+'</b><br>'+
@@ -2105,19 +2114,31 @@ async function withBusy(btn, fn){
 function bindEmailButtons(){
   document.getElementById('btnImg').onclick = ev=>withBusy(ev.currentTarget, async ()=>{
     if(!ensureRecipient()) return;
-    const days = sendDays(), onlyDay = days.length===1 ? days[0] : null;
-    toast('📷 Taking a picture of the '+(onlyDay!=null?'current day':'sheet')+'…');
-    const canvas = await captureSheet(onlyDay);
+    const days = sendDays();
+    toast('📷 Taking a picture of the '+(days.length===1?'current day':'sheet')+'…');
+    const canvas = await captureForSend(days);
     const blob = await canvasBlob(canvas,'image/png');
     const mp = msgParts();
-    deliverEml(buildEml({kind:'image', imgB64: await blobToBase64(blob), name: fileBase()+'.png', msgHtml: mp.html}),
-               '📷', 'your message on top and the timecard picture right under it');
+    if(await tryCopyImage(blob)){                     // no download — Ctrl+V into the draft
+      setTimeout(()=>openDraft(mp.text), 350);
+      toast('📷 Your email is opening with To / CC / subject and your message already inside.<br>'+
+            'Click just under the message and press <b>Ctrl+V</b> — the timecard picture drops in. Then <b>Send</b>.', 15000);
+    }else{
+      deliverEml(buildEml({kind:'image', imgB64: await blobToBase64(blob), name: fileBase()+'.png', msgHtml: mp.html}),
+                 '📷', 'your message and the timecard picture inside it');
+    }
   });
   document.getElementById('btnTxt').onclick = ev=>withBusy(ev.currentTarget, async ()=>{
     if(!ensureRecipient()) return;
     const days = sendDays(), mp = msgParts();
-    deliverEml(buildEml({kind:'text', bodyText: mp.text+buildPlainText(days), bodyHtml: buildHtmlEmail(mp.html, days)}),
-               '📝', 'your message on top and the whole sheet as a table under it');
+    if(await tryCopyHtml(buildHtmlEmail('', days), buildPlainText(days))){   // no download — Ctrl+V into the draft
+      setTimeout(()=>openDraft(mp.text), 350);
+      toast('📝 Your email is opening with To / CC / subject and your message already inside.<br>'+
+            'Click just under the message and press <b>Ctrl+V</b> — the whole sheet pastes in as a table. Then <b>Send</b>.', 15000);
+    }else{
+      deliverEml(buildEml({kind:'text', bodyText: mp.text+buildPlainText(days), bodyHtml: buildHtmlEmail(mp.html, days)}),
+                 '📝', 'your message and the whole sheet as a table');
+    }
   });
   document.getElementById('btnPdf').onclick = ev=>withBusy(ev.currentTarget, async ()=>{
     if(!ensureRecipient()) return;
