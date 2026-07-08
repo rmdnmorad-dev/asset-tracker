@@ -1701,6 +1701,7 @@ function download(name, blob){
 const raf2 = ()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
 // html2canvas clips <input> text baselines, so swap each input for an identical text div in the clone
 function replaceInputsInClone(doc){
+  doc.body.classList.remove('dark');   // the emailed image/PDF is always light, whatever the screen theme
   const orig = document.querySelectorAll('#sheet input, #sheet textarea');
   const clones = doc.querySelectorAll('#sheet input, #sheet textarea');
   orig.forEach((o,i)=>{
@@ -1741,7 +1742,8 @@ async function captureHtmlTable(days){
   holder.innerHTML = buildHtmlEmail('', days).replace(/^<html><body>/,'').replace(/<\/body><\/html>$/,'');
   document.body.appendChild(holder);
   await raf2();
-  try{ return await html2canvas(holder, {scale:2, backgroundColor:'#ffffff', logging:false}); }
+  try{ return await html2canvas(holder, {scale:2, backgroundColor:'#ffffff', logging:false,
+        onclone: doc=>doc.body.classList.remove('dark')}); }
   finally{ holder.remove(); }
 }
 async function captureForSend(days){
@@ -1772,7 +1774,7 @@ async function captureWithText(days){
   await raf2();
   try{
     const canvas = await html2canvas(el, {scale:2, backgroundColor:'#ffffff', logging:false,
-      onclone: holder ? undefined : replaceInputsInClone});
+      onclone: holder ? (doc=>doc.body.classList.remove('dark')) : replaceInputsInClone});
     return { canvas, texts: collectTexts(el) };
   }finally{
     document.body.classList.remove('capturing');
