@@ -329,22 +329,27 @@
         <label><input type="checkbox" id="subWeekly"> Weekly timecard</label>
       </div></div>
   </div>
-  <div class="row">
+  <div class="row" style="align-items:flex-end">
     <div class="fld" style="flex:1;min-width:300px">
       <span>EMAIL MESSAGE — written at the top of every email, above the timecard</span>
       <textarea id="setMessage" placeholder="Hi, hope you are all doing well.&#10;Please find my timecard below."></textarea></div>
+    <div class="fld"><span>DRAFT FILE FORMAT — the file each send button creates</span>
+      <div class="subchecks">
+        <label><input type="checkbox" id="fmtEml"> .eml <span style="color:#888;font-weight:normal">— Outlook, Apple Mail, Windows Mail</span></label>
+        <label><input type="checkbox" id="fmtMsg"> .msg <span style="color:#888;font-weight:normal">— Outlook desktop (classic &amp; new)</span></label>
+      </div></div>
   </div>
 
   <div class="hint">
-    <b>How sending works:</b><br>
-    📷 <b>Image</b> — nothing downloads: your email opens with the <b>Hi</b> message inside and the picture on the
-    clipboard; click under the message and press <b>Ctrl+V</b>, then Send. (An image can only enter an email by
-    pasting — no browser can auto-drop a picture without a file.)<br>
-    📝 <b>Text</b> — nothing downloads and nothing to paste: the email opens with your <b>Hi</b> message and the
-    whole timecard <b>already written in the body</b>. Just Send. (Press Ctrl+V if you'd rather the colored table.)<br>
-    📄 <b>PDF</b> — creates a ready email file with the <b>searchable PDF attached</b> under your message; open it
-    and Send. ⚡ <i>One time:</i> right-click it in the download bar → <b>“Always open files of this type.”</b>
-    If <b>new Outlook</b> says “couldn’t be attached”, turn its <b>“New Outlook”</b> switch (top-right) off once.
+    <b>How sending works:</b> each button creates a ready-to-send draft <b>file</b> (<b>.eml</b> or <b>.msg</b>,
+    your choice above) with your <b>Hi</b> message and the timecard <b>already inside — nothing to paste</b>.
+    Open the file and press <b>Send</b>.<br>
+    📷 <b>Image</b> — the picture of the sheet sits in the email body.<br>
+    📝 <b>Text</b> — the whole timecard is written out as a table in the body.<br>
+    📄 <b>PDF</b> — the searchable, exact-copy PDF is attached under your message.<br>
+    ⚡ <i>One time:</i> right-click the file in the download bar → <b>“Always open files of this type”</b> and every
+    send after that pops the finished email open by itself. If <b>new Outlook</b> ever says a <b>.eml</b> “couldn’t be
+    attached”, either turn its <b>“New Outlook”</b> switch (top-right) off once, or pick <b>.msg</b> above.
   </div>
   <div class="hint" style="margin-top:10px">
     🧠 <b>Drop-down memory:</b> every value you type in the sheet is remembered and offered as a drop-down
@@ -862,7 +867,7 @@ function defaultState(){
     settings:{
       emailTo:'', emailCc:'', message:'',
       subject:'{type} Timecard-{date}',
-      subjectV2:true, subjectMode:'auto',
+      subjectV2:true, subjectMode:'auto', sendFormat:'eml',
       taskLegend: TASK_LEGEND.map(t=>[t[0],t[1]]),
       jobLegend: JOB_LEGEND.map(t=>[t[0],t[1]]),
       employee:'Morad Ramadan', manager:'C. Hattar',
@@ -892,6 +897,7 @@ if(!state.settings.jobLegend)  state.settings.jobLegend  = JOB_LEGEND.map(t=>[t[
 if(state.settings.message===undefined) state.settings.message = '';
 if(!state.settings.subjectMode) state.settings.subjectMode = 'auto';
 if(!state.settings.theme) state.settings.theme = 'light';
+if(state.settings.sendFormat!=='msg') state.settings.sendFormat = 'eml';
 // 20 column widths: 5 info + 7×(narrow job, wide hours) + 1 total
 const DEFAULT_COLW = [112,88,154,148,154, 39,58,39,58,39,58,39,58,39,58,39,58,39,58, 89];
 if(!Array.isArray(state.settings.colWidths) || state.settings.colWidths.length!==20)
@@ -1360,6 +1366,12 @@ function bindSettings(){
   cd.addEventListener('change', ()=>{ state.settings.subjectMode = cd.checked ? 'daily' : 'auto'; save(); reflect(); });
   cw.addEventListener('change', ()=>{ state.settings.subjectMode = cw.checked ? 'weekly' : 'auto'; save(); reflect(); });
   reflect();
+  // draft file format (.eml / .msg) — behave like a radio pair, one is always on
+  const fe = document.getElementById('fmtEml'), fm = document.getElementById('fmtMsg');
+  const reflectFmt = ()=>{ const msg = state.settings.sendFormat==='msg'; fe.checked = !msg; fm.checked = msg; };
+  fe.addEventListener('change', ()=>{ state.settings.sendFormat = 'eml'; save(); reflectFmt(); });
+  fm.addEventListener('change', ()=>{ state.settings.sendFormat = 'msg'; save(); reflectFmt(); });
+  reflectFmt();
   // backup / import
   document.getElementById('btnBackup').onclick = async ()=>{
     const blob = new Blob([JSON.stringify(state,null,1)], {type:'application/json'});
@@ -1848,18 +1860,207 @@ function jpegToPdf(jpegDataUrl, pxW, pxH){
   return new Blob(parts, {type:'application/pdf'});
 }
 
+/* ============================================================
+   .msg (Outlook / OLE2 compound file) draft writer — self-contained.
+   Builds a CFBF container + the OXMSG property streams for an unsent
+   draft (MSGFLAG_UNSENT) with subject, HTML+text body, To/Cc
+   recipients and attachments. Validated by round-tripping through a
+   real .msg parser. Pure browser JS, no dependencies.
+   ============================================================ */
+function _u16le(n){ return [n&0xFF,(n>>8)&0xFF]; }
+function _u32le(n){ n>>>=0; return [n&0xFF,(n>>8)&0xFF,(n>>16)&0xFF,(n>>24)&0xFF]; }
+function _utf16le(s){ const o=[]; for(let i=0;i<s.length;i++){ const c=s.charCodeAt(i); o.push(c&0xFF,(c>>8)&0xFF); } return o; }
+const _FREESECT=0xFFFFFFFF, _ENDOFCHAIN=0xFFFFFFFE, _FATSECT=0xFFFFFFFD, _NOSTREAM=0xFFFFFFFF;
+const _SEC=512, _MINISEC=64, _MINICUTOFF=4096;
+// topChildren: [{name, type:'storage'|'stream', data?:Uint8Array, children?:[]}]
+function buildCompoundFile(topChildren){
+  const dir=[];
+  const root={name:'Root Entry', type:'root', children:topChildren};
+  function cmp(a,b){ if(a.length!==b.length) return a.length-b.length;
+    const A=a.toUpperCase(), B=b.toUpperCase(); return A<B?-1:A>B?1:0; }
+  function assign(node){ node.id=dir.length; dir.push(node); (node.children||[]).forEach(assign); }
+  assign(root);
+  function makeTree(nodes){
+    nodes=nodes.slice().sort((a,b)=>cmp(a.name,b.name));
+    function build(lo,hi){ if(lo>hi) return _NOSTREAM;
+      const mid=(lo+hi)>>1, n=nodes[mid];
+      n.left=build(lo,mid-1); n.right=build(mid+1,hi); return n.id; }
+    return build(0,nodes.length-1);
+  }
+  dir.forEach(n=>{ n.left=_NOSTREAM; n.right=_NOSTREAM; n.child=_NOSTREAM; });
+  dir.forEach(n=>{ if(n.children && n.children.length) n.child=makeTree(n.children); });
+  const pad=(arr,to)=>{ while(arr.length%to) arr.push(0); };
+  const bigStreams=[], miniStreams=[];
+  dir.forEach(n=>{ if(n.type==='stream'){ ((n.data?n.data.length:0)>=_MINICUTOFF?bigStreams:miniStreams).push(n); } });
+  const bigBytes=[];
+  bigStreams.forEach(n=>{ const len=n.data.length; n.start=bigBytes.length/_SEC;
+    for(let i=0;i<len;i++) bigBytes.push(n.data[i]); pad(bigBytes,_SEC); n.size=len; });
+  const miniBytes=[];
+  miniStreams.forEach(n=>{ const len=n.data?n.data.length:0; n.start=miniBytes.length/_MINISEC;
+    if(n.data) for(let i=0;i<len;i++) miniBytes.push(n.data[i]); pad(miniBytes,_MINISEC); n.size=len; });
+  root.size=miniBytes.length;
+  const bigSecCount=bigBytes.length/_SEC;
+  const miniStreamSecCount=Math.ceil(miniBytes.length/_SEC);
+  const miniSecCount=miniBytes.length/_MINISEC;
+  const miniFatSecCount=Math.ceil((miniSecCount*4)/_SEC)||0;
+  const dirSecCount=Math.ceil(dir.length/4);
+  const contentSecCount=bigSecCount+miniStreamSecCount+miniFatSecCount+dirSecCount;
+  let fatSecCount=1;
+  for(;;){ const need=Math.ceil((contentSecCount+fatSecCount)*4/_SEC); if(need===fatSecCount) break; fatSecCount=need; }
+  const totalSectors=contentSecCount+fatSecCount;
+  let cur=0;
+  const bigBase=cur; cur+=bigSecCount;
+  const miniStreamBase=cur; cur+=miniStreamSecCount;
+  const miniFatBase=cur; cur+=miniFatSecCount;
+  const dirBase=cur; cur+=dirSecCount;
+  const fatBase=cur; cur+=fatSecCount;
+  bigStreams.forEach(n=>{ n.start=bigBase+n.start; });
+  root.start=miniStreamSecCount?miniStreamBase:_ENDOFCHAIN;
+  const FAT=new Array(totalSectors).fill(_FREESECT);
+  const chain=(base,count)=>{ for(let i=0;i<count;i++) FAT[base+i]=(i===count-1)?_ENDOFCHAIN:(base+i+1); };
+  bigStreams.forEach(n=>{ const secs=Math.ceil(n.size/_SEC);
+    for(let i=0;i<secs;i++) FAT[n.start+i]=(i===secs-1)?_ENDOFCHAIN:(n.start+i+1); });
+  chain(miniStreamBase, miniStreamSecCount);
+  chain(miniFatBase, miniFatSecCount);
+  chain(dirBase, dirSecCount);
+  for(let i=0;i<fatSecCount;i++) FAT[fatBase+i]=_FATSECT;
+  const miniFAT=new Array(miniFatSecCount*_SEC/4).fill(_FREESECT);
+  miniStreams.forEach(n=>{ const msecs=Math.ceil((n.size||0)/_MINISEC); if(!msecs) return;
+    for(let i=0;i<msecs;i++) miniFAT[n.start+i]=(i===msecs-1)?_ENDOFCHAIN:(n.start+i+1); });
+  const out=new Uint8Array(_SEC*(1+totalSectors));
+  let p=0;
+  const put=arr=>{ out.set(arr,p); p+=arr.length; };
+  const at=(off,arr)=>{ out.set(arr,off); };
+  put([0xD0,0xCF,0x11,0xE0,0xA1,0xB1,0x1A,0xE1]);
+  put(new Array(16).fill(0));
+  put(_u16le(0x003E)); put(_u16le(0x0003)); put(_u16le(0xFFFE));
+  put(_u16le(0x0009)); put(_u16le(0x0006)); put(new Array(6).fill(0));
+  put(_u32le(0)); put(_u32le(fatSecCount)); put(_u32le(dirBase)); put(_u32le(0));
+  put(_u32le(_MINICUTOFF)); put(_u32le(miniFatSecCount?miniFatBase:_ENDOFCHAIN)); put(_u32le(miniFatSecCount));
+  put(_u32le(_ENDOFCHAIN)); put(_u32le(0));
+  for(let i=0;i<109;i++) put(_u32le(i<fatSecCount ? fatBase+i : _FREESECT));
+  const secOff=n=>_SEC*(1+n);
+  for(let i=0;i<bigBytes.length;i++) out[secOff(bigBase)+i]=bigBytes[i];
+  for(let i=0;i<miniBytes.length;i++) out[secOff(miniStreamBase)+i]=miniBytes[i];
+  { let o=secOff(miniFatBase); for(let i=0;i<miniFAT.length;i++){ at(o,_u32le(miniFAT[i])); o+=4; } }
+  { let o=secOff(dirBase);
+    dir.forEach(n=>{
+      const nb=_utf16le(n.name); nb.push(0,0);
+      const nameField=new Array(64).fill(0);
+      for(let i=0;i<nb.length && i<64;i++) nameField[i]=nb[i];
+      at(o, nameField);
+      at(o+64, _u16le(Math.min(nb.length,64)));
+      out[o+66]= n.type==='root'?5 : n.type==='storage'?1 : 2;
+      out[o+67]=1;
+      at(o+68,_u32le(n.left)); at(o+72,_u32le(n.right)); at(o+76,_u32le(n.child));
+      at(o+80,new Array(16).fill(0)); at(o+96,_u32le(0)); at(o+100,new Array(16).fill(0));
+      const startSec = n.type==='root' ? (root.start===_ENDOFCHAIN?_ENDOFCHAIN:miniStreamBase)
+                     : n.type==='stream' ? (n.size? n.start : _ENDOFCHAIN) : _ENDOFCHAIN;
+      at(o+116,_u32le(startSec)); at(o+120,_u32le(n.size||0)); at(o+124,_u32le(0));
+      o+=128;
+    });
+    for(let i=dir.length;i<dirSecCount*4;i++){
+      out[o+66]=0; at(o+68,_u32le(_NOSTREAM)); at(o+72,_u32le(_NOSTREAM)); at(o+76,_u32le(_NOSTREAM));
+      o+=128;
+    }
+  }
+  { let o=secOff(fatBase); for(let i=0;i<totalSectors;i++){ at(o,_u32le(FAT[i])); o+=4; }
+    for(let i=totalSectors;i<fatSecCount*_SEC/4;i++){ at(o,_u32le(_FREESECT)); o+=4; } }
+  return out;
+}
+const PT_LONG=0x0003, PT_BOOL=0x000B, PT_UNICODE=0x001F, PT_BINARY=0x0102;
+function _hex4(id,type){ return (id.toString(16).padStart(4,'0')+type.toString(16).padStart(4,'0')).toUpperCase(); }
+function buildProps(headerBytes, props){
+  const entries=[], streams=[];
+  props.forEach(pr=>{
+    const e=new Array(16).fill(0);
+    e[0]=pr.type&0xFF; e[1]=(pr.type>>8)&0xFF; e[2]=pr.id&0xFF; e[3]=(pr.id>>8)&0xFF;
+    e[4]=0x06;
+    if(pr.type===PT_LONG || pr.type===PT_BOOL){
+      const v=_u32le(pr.value>>>0); e[8]=v[0];e[9]=v[1];e[10]=v[2];e[11]=v[3];
+    }else{
+      const bytes = pr.type===PT_UNICODE ? _utf16le(pr.value).concat([0,0]) : Array.from(pr.value);
+      const sz=_u32le(bytes.length); e[8]=sz[0];e[9]=sz[1];e[10]=sz[2];e[11]=sz[3];
+      streams.push({name:'__substg1.0_'+_hex4(pr.id,pr.type), type:'stream', data:new Uint8Array(bytes)});
+    }
+    entries.push(e);
+  });
+  const body=[]; headerBytes.forEach(b=>body.push(b)); entries.forEach(e=>e.forEach(b=>body.push(b)));
+  streams.push({name:'__properties_version1.0', type:'stream', data:new Uint8Array(body)});
+  return streams;
+}
+function _streamEntry(name,arr){ return {name, type:'stream', data:new Uint8Array(arr)}; }
+// opt: {subject, bodyText, bodyHtml, to:[{name,email}], cc:[...], attachments:[{name,mime,data,cid?}]}
+function buildMsg(opt){
+  const top=[];
+  const dispTo=(opt.to||[]).map(r=>r.name||r.email).join('; ');
+  const dispCc=(opt.cc||[]).map(r=>r.name||r.email).join('; ');
+  const hasAtt=(opt.attachments||[]).length>0;
+  const msgProps=[
+    {id:0x001A,type:PT_UNICODE,value:'IPM.Note'},
+    {id:0x0037,type:PT_UNICODE,value:opt.subject||''},
+    {id:0x0E1D,type:PT_UNICODE,value:opt.subject||''},
+    {id:0x0E04,type:PT_UNICODE,value:dispTo},
+    {id:0x0E03,type:PT_UNICODE,value:dispCc},
+    {id:0x1000,type:PT_UNICODE,value:opt.bodyText||''},
+    {id:0x0E07,type:PT_LONG,value:0x08},          // MSGFLAG_UNSENT -> opens as editable draft
+    {id:0x0E1B,type:PT_BOOL,value:hasAtt?1:0},
+  ];
+  if(opt.bodyHtml){
+    let html=opt.bodyHtml;
+    if(!/<meta[^>]+charset/i.test(html)) html=html.replace(/<body[^>]*>/i, m=>m+'<meta charset="utf-8">');
+    msgProps.push({id:0x1013,type:PT_BINARY,value:new TextEncoder().encode(html)});
+    msgProps.push({id:0x3FDE,type:PT_LONG,value:65001});
+    msgProps.push({id:0x3FFD,type:PT_LONG,value:65001});
+  }
+  const th=[]; for(let i=0;i<8;i++) th.push(0);
+  const nRecip=(opt.to||[]).length+(opt.cc||[]).length, nAtt=(opt.attachments||[]).length;
+  _u32le(nRecip).forEach(b=>th.push(b)); _u32le(nAtt).forEach(b=>th.push(b));
+  _u32le(nRecip).forEach(b=>th.push(b)); _u32le(nAtt).forEach(b=>th.push(b));
+  for(let i=0;i<8;i++) th.push(0);
+  buildProps(th, msgProps).forEach(s=>top.push(s));
+  top.push({name:'__nameid_version1.0', type:'storage', children:[
+    _streamEntry('__substg1.0_00020102',[]), _streamEntry('__substg1.0_00030102',[]), _streamEntry('__substg1.0_00040102',[]) ]});
+  let ri=0;
+  const addRecip=(r,kind)=>{
+    const idx=ri++, rh=new Array(8).fill(0);
+    const streams=buildProps(rh,[
+      {id:0x0FFE,type:PT_LONG,value:6}, {id:0x0C15,type:PT_LONG,value:kind},
+      {id:0x3000,type:PT_LONG,value:idx}, {id:0x3900,type:PT_LONG,value:0},
+      {id:0x3001,type:PT_UNICODE,value:r.name||r.email}, {id:0x3002,type:PT_UNICODE,value:'SMTP'},
+      {id:0x3003,type:PT_UNICODE,value:r.email}, {id:0x39FE,type:PT_UNICODE,value:r.email} ]);
+    top.push({name:'__recip_version1.0_#'+idx.toString(16).toUpperCase().padStart(8,'0'), type:'storage', children:streams});
+  };
+  (opt.to||[]).forEach(r=>addRecip(r,1));
+  (opt.cc||[]).forEach(r=>addRecip(r,2));
+  (opt.attachments||[]).forEach((a,idx)=>{
+    const ah=new Array(8).fill(0);
+    const props=[
+      {id:0x0FFE,type:PT_LONG,value:7}, {id:0x0E21,type:PT_LONG,value:idx},
+      {id:0x3705,type:PT_LONG,value:1}, {id:0x370B,type:PT_LONG,value:a.cid?0:0xFFFFFFFF},
+      {id:0x3704,type:PT_UNICODE,value:a.name}, {id:0x3707,type:PT_UNICODE,value:a.name},
+      {id:0x370E,type:PT_UNICODE,value:a.mime||'application/octet-stream'},
+      {id:0x3701,type:PT_BINARY,value:a.data} ];
+    if(a.cid){ props.push({id:0x3712,type:PT_UNICODE,value:a.cid}); props.push({id:0x3714,type:PT_LONG,value:4}); }
+    top.push({name:'__attach_version1.0_#'+idx.toString(16).toUpperCase().padStart(8,'0'), type:'storage', children:buildProps(ah,props)});
+  });
+  return buildCompoundFile(top);
+}
+
 /* ---------------- .eml draft builder ----------------
    An .eml file with "X-Unsent: 1" opens in Outlook as an UNSENT DRAFT
    with To / CC / subject / body and the attachment already in place —
    the user only has to press Send. This is the only way a web page can
    hand a mail client a pre-attached email. */
-async function blobToBase64(blob){
-  const buf = new Uint8Array(await blob.arrayBuffer());
+function u8ToBase64(buf){
   let s = '';
   for(let i=0; i<buf.length; i+=0x8000)
     s += String.fromCharCode.apply(null, buf.subarray(i, i+0x8000));
   return btoa(s);
 }
+async function blobToBase64(blob){ return u8ToBase64(new Uint8Array(await blob.arrayBuffer())); }
+/* recipients as {name,email} objects for the .msg writer */
+function recipObjs(str){ return splitEmails(str).map(e=>({name:e, email:e})); }
 function b64wrap(b64){ return b64.replace(/(.{76})/g, '$1\r\n'); }
 function encHeader(s){
   return /^[\x20-\x7E]*$/.test(s) ? s
@@ -2112,44 +2313,45 @@ function msgParts(){
                                    (escHtml(l)||'&nbsp;')+'</p>').join('')+'<br>' : ''
   };
 }
-function deliverEml(blob, icon, what){
-  download(fileBase()+'.eml', blob);           // silent — no dialogs
-  const newOutlookNote = icon==='📄'
-    ? '<br><span style="opacity:.9">⚠ If <b>new Outlook</b> says “couldn’t be attached”, that’s its known bug with drafts. '+
-      'Flip the <b>“New Outlook”</b> switch (top-right of Outlook) <b>off</b> once — classic Outlook opens this with the PDF attached automatically.</span>'
-    : '';
-  toast(icon+' The finished email was created with '+what+', addressed and ready — press <b>Send</b> when it opens.'+AUTOTIP+newOutlookNote, 20000);
-}
-
-/* opens a new pre-addressed email (with the saved message as the body) in the mail app */
-function openDraft(body){
-  const q = ['subject='+encodeURIComponent(subjectText())];
-  const cc = splitEmails(state.settings.emailCc).join(',');
-  if(cc) q.push('cc='+encodeURIComponent(cc));
-  if(body && body.trim()) q.push('body='+encodeURIComponent(body.trim().replace(/\n/g,'\r\n')));
-  location.href = 'mailto:'+encodeURIComponent(splitEmails(state.settings.emailTo).join(','))+'?'+q.join('&');
-}
-async function tryCopyImage(blob){
-  try{
-    if(navigator.clipboard && window.ClipboardItem){
-      await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
-      return true;
-    }
-  }catch(e){}
-  return false;
-}
-/* copies rich HTML (with a plain-text fallback) so Ctrl+V pastes the sheet as a table */
-async function tryCopyHtml(html, text){
-  try{
-    await navigator.clipboard.write([new ClipboardItem({
-      'text/html':  new Blob([html], {type:'text/html'}),
-      'text/plain': new Blob([text], {type:'text/plain'})
-    })]);
-    return true;
-  }catch(e){ return false; }
-}
 const AUTOTIP = '<br><span style="opacity:.9">⚡ <b>Make it 100% automatic (one time):</b> right-click that file in the downloads bar → '+
   '<b>“Always open files of this type”</b>. From then on: click the button → the finished email pops open by itself → Send.</span>';
+/* Builds a ready-to-send draft FILE (.eml or .msg per Settings) with the
+   message and the image / table / PDF already inside — nothing to paste, and
+   it opens in Outlook by double-click regardless of the mailto handler.
+   kind: 'image' | 'pdf' | 'text'
+   payload: {bytes?, name?, msgHtml?, bodyHtml?, bodyText?} */
+function sendDraft(kind, payload, icon, what){
+  const fmt = state.settings.sendFormat==='msg' ? 'msg' : 'eml';
+  let blob, ext, hasFile = (kind!=='text');
+  if(fmt==='msg'){
+    ext = '.msg';
+    const common = {subject: subjectText(), to: recipObjs(state.settings.emailTo),
+                    cc: recipObjs(state.settings.emailCc), bodyText: payload.bodyText||''};
+    let m;
+    if(kind==='image') m = {...common,
+      bodyHtml:'<html><body>'+(payload.msgHtml||'')+'<img src="cid:timecardimg" width="920" style="max-width:100%;border:1px solid #ccc"></body></html>',
+      attachments:[{name:payload.name, mime:'image/png', data:payload.bytes, cid:'timecardimg'}]};
+    else if(kind==='pdf') m = {...common,
+      bodyHtml:'<html><body>'+(payload.msgHtml||'')+'</body></html>',
+      attachments:[{name:payload.name, mime:'application/pdf', data:payload.bytes}]};
+    else m = {...common, bodyHtml: payload.bodyHtml, attachments:[]};
+    blob = new Blob([buildMsg(m)], {type:'application/vnd.ms-outlook'});
+  }else{
+    ext = '.eml';
+    let opt;
+    if(kind==='image') opt = {kind:'image', imgB64: u8ToBase64(payload.bytes), name:payload.name, msgHtml:payload.msgHtml};
+    else if(kind==='pdf') opt = {kind:'pdf', attachB64: u8ToBase64(payload.bytes), name:payload.name, msgHtml:payload.msgHtml};
+    else opt = {bodyText: payload.bodyText, bodyHtml: payload.bodyHtml};
+    blob = buildEml(opt);
+  }
+  download(fileBase()+ext, blob);                     // silent — no dialogs
+  const note = fmt==='msg'
+    ? '<br><span style="opacity:.9">📎 The <b>.msg</b> opens straight in the Outlook desktop app. If a double-click doesn’t open it, right-click → <b>Open with → Outlook</b>.</span>'
+    : AUTOTIP + (hasFile
+      ? '<br><span style="opacity:.9">⚠ If <b>new Outlook</b> says “couldn’t be attached”, that’s its known .eml bug — flip the <b>“New Outlook”</b> switch (top-right) <b>off</b> once, or pick <b>.msg</b> in Settings instead.</span>'
+      : '');
+  toast(icon+' A ready-to-send Outlook draft ('+ext+') was created with '+what+' — press <b>Send</b> when it opens.'+note, 20000);
+}
 async function withBusy(btn, fn){
   btn.disabled=true;
   try{ await fn(); }
@@ -2160,31 +2362,26 @@ function bindEmailButtons(){
   document.getElementById('btnImg').onclick = ev=>withBusy(ev.currentTarget, async ()=>{
     if(!ensureRecipient()) return;
     const days = sendDays();
-    toast('📷 Taking a picture of the '+(days.length===1?'current day':'sheet')+'…');
+    toast('📷 Building the '+(days.length===1?'day':'week')+' image…');
     const canvas = await captureForSend(days);
     const blob = await canvasBlob(canvas,'image/png');
-    const mp = msgParts();
-    const copied = await tryCopyImage(blob);           // nothing downloads
-    openDraft(mp.text);                                 // draft opens instantly, with your message
-    toast(copied
-      ? '📷 Draft opened with your message. Click under the message and press <b>Ctrl+V</b> to drop the picture in.'
-      : '📷 Draft opened, but the browser blocked the clipboard so the picture could not be copied.', 12000);
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    sendDraft('image', {bytes, name: fileBase()+'.png', msgHtml: msgParts().html, bodyText: (state.settings.message||'').trim()},
+              '📷', 'your message and the timecard picture inside the body');
   });
   document.getElementById('btnTxt').onclick = ev=>withBusy(ev.currentTarget, async ()=>{
     if(!ensureRecipient()) return;
     const days = sendDays(), mp = msgParts();
-    const copied = await tryCopyHtml(buildHtmlEmail('', days), buildPlainText(days));   // colored table on clipboard
-    openDraft(mp.text);                                 // draft opens with just your message
-    toast(copied
-      ? '📝 Draft opened with your message. Click just under it and press <b>Ctrl+V</b> to paste the timecard table.'
-      : '📝 Draft opened, but the browser blocked the clipboard so nothing could be copied.', 12000);
+    sendDraft('text', {bodyHtml: buildHtmlEmail(mp.html, days), bodyText: mp.text + buildPlainText(days)},
+              '📝', 'your message and the whole timecard written in the body');
   });
   document.getElementById('btnPdf').onclick = ev=>withBusy(ev.currentTarget, async ()=>{
     if(!ensureRecipient()) return;
     toast('📄 Building the PDF…');
     const pdf = await buildSearchablePdf(sendDays());
-    deliverEml(buildEml({kind:'pdf', attachB64: await blobToBase64(pdf), name: fileBase()+'.pdf', msgHtml: msgParts().html}),
-               '📄', 'your message and the PDF (an exact copy of the sheet) attached');
+    const bytes = new Uint8Array(await pdf.arrayBuffer());
+    sendDraft('pdf', {bytes, name: fileBase()+'.pdf', msgHtml: msgParts().html, bodyText: (state.settings.message||'').trim()},
+              '📄', 'your message and the PDF (an exact copy of the sheet) attached');
   });
   document.getElementById('btnSavePdf').onclick = ev=>withBusy(ev.currentTarget, async ()=>{
     toast('⬇ Building the PDF…');
