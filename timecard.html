@@ -29,8 +29,8 @@
   #weekPick{border:1px solid #4b5563;background:#111827;color:#fff;border-radius:6px;
     padding:6px 8px;font-size:13px;color-scheme:dark}
   #toolbar label{font-size:12px;color:#9ca3af}
-  .credit{margin-left:auto;color:#9ca3af;padding-right:8px;align-self:center;display:flex;align-items:center}
-  .credit svg{height:15px;width:auto;display:block}
+  .credit{margin-left:auto;color:#cbd5e1;padding-right:10px;align-self:center;display:flex;align-items:center}
+  .credit svg{height:26px;width:auto;display:block}
   .legfill td{background:#fff !important}
 
   /* ---------- Settings panel ---------- */
@@ -267,14 +267,15 @@
   </div>
 
   <div class="hint">
-    <b>How sending works:</b> every button creates a ready email file with To / CC / subject, <u>your message on
-    top</u>, and the timecard <b>already placed under it</b> — 📷 the picture inside the body, 📝 the whole sheet
-    as a colored table inside the body, 📄 the searchable PDF attached. Open the created file → it appears in
-    Outlook as a finished draft → press <b>Send</b>. Nothing to paste, nothing to attach.<br>
-    ⚡ <b>Make it one-click (do once):</b> right-click the file in the download bar → <b>“Always open files of this
-    type”</b> so it pops open by itself.<br>
-    <span style="opacity:.8">Only the 📄 PDF needs classic Outlook: if <b>new Outlook</b> shows “couldn’t be
-    attached”, flip its <b>“New Outlook”</b> switch (top-right) off once.</span>
+    <b>How sending works:</b><br>
+    📷 <b>Image</b> — nothing downloads: your email opens with the <b>Hi</b> message inside and the picture on the
+    clipboard; click under the message and press <b>Ctrl+V</b>, then Send. (An image can only enter an email by
+    pasting — no browser can auto-drop a picture without a file.)<br>
+    📝 <b>Text</b> — nothing downloads and nothing to paste: the email opens with your <b>Hi</b> message and the
+    whole timecard <b>already written in the body</b>. Just Send. (Press Ctrl+V if you'd rather the colored table.)<br>
+    📄 <b>PDF</b> — creates a ready email file with the <b>searchable PDF attached</b> under your message; open it
+    and Send. ⚡ <i>One time:</i> right-click it in the download bar → <b>“Always open files of this type.”</b>
+    If <b>new Outlook</b> says “couldn’t be attached”, turn its <b>“New Outlook”</b> switch (top-right) off once.
   </div>
   <div class="hint" style="margin-top:10px">
     🧠 <b>Drop-down memory:</b> every value you type in the sheet is remembered and offered as a drop-down
@@ -765,7 +766,8 @@ const JOB_LEGEND = [
 // the drop-downs start empty and only contain values the user has typed before
 const HIST_FIELDS = ['task','notes','project','contractor','job','hours'];
 const TIME_FIELDS = ['tin','tout','lunch','meet','wfh','leave'];   // these get the time wheel instead
-const HIST_OF = {task:'task', notes:'notes', project:'project', contractor:'contractor',
+// Task # is pick-only (from the TASKS legend), so it's not in the free-text history map
+const HIST_OF = {notes:'notes', project:'project', contractor:'contractor',
                  job:'job', h:'hours'};
 // descriptions shown next to the codes inside the drop-downs (legends are editable)
 function dlLabels(field){
@@ -977,7 +979,9 @@ function buildTable(){
     for(let k=0; k<w.secRows[si]; k++, ri++){
       h += '<tr class="taskrow'+(SECTIONS[si].tall?' tall':'')+'">';
       for(const f of ['task','notes','project','contractor','job']){
-        h += '<td class="b tinfo"><input class="cell task redtx" data-row="'+ri+'" data-f="'+f+'" spellcheck="false" autocomplete="off"></td>';
+        const pick = f==='task';   // Task # is a pick-only list fed by the TASKS legend
+        h += '<td class="b tinfo"><input class="cell task redtx'+(pick?' taskpick':'')+'"'+
+             (pick?' readonly title="Pick a task #"':'')+' data-row="'+ri+'" data-f="'+f+'" spellcheck="false" autocomplete="off"></td>';
       }
       for(let d=0; d<7; d++){
         h += '<td class="b tgreen" data-daycol="'+d+'"><input class="cell redtx jobpick" readonly title="Pick a job code" data-row="'+ri+'" data-f="ha" data-di="'+d+'"></td>'+
@@ -1078,7 +1082,7 @@ function bindSheetInputs(){
     const t = e.target;
     if(!t.classList || !t.classList.contains('cell')) return;
     if(TIME_FIELDS.includes(t.dataset.f)) openWheel(t);
-    else if(t.classList.contains('jobpick') || HIST_OF[t.dataset.f]) openCombo(t);
+    else if(t.classList.contains('jobpick') || t.classList.contains('taskpick') || HIST_OF[t.dataset.f]) openCombo(t);
   });
   host.addEventListener('input', e=>{
     const t = e.target;
@@ -1259,15 +1263,16 @@ function openCombo(inp){
 }
 function renderCombo(){
   if(!comboInp) return;
-  const isJobPick = comboInp.classList.contains('jobpick');
-  let rows = '';
-  if(isJobPick){
-    // codes-only picker fed by the editable job-type legend
-    const codes = state.settings.jobLegend.filter(l=>String(l[0]).trim());
-    rows = (comboInp.value ? '<div class="citem" data-v=""><span class="cv" style="color:#94a3b8">✕ clear this box</span></div>' : '')+
+  // legend-fed pickers: Task # reads the 1st (TASKS) legend, Job Type the 2nd
+  const legKind = comboInp.classList.contains('taskpick') ? 'task'
+                : comboInp.classList.contains('jobpick')  ? 'job' : null;
+  if(legKind){
+    const legend = legKind==='task' ? state.settings.taskLegend : state.settings.jobLegend;
+    const codes = legend.filter(l=>String(l[0]).trim());
+    const rows = (comboInp.value ? '<div class="citem" data-v=""><span class="cv" style="color:#94a3b8">✕ clear this box</span></div>' : '')+
       codes.map(l=>'<div class="citem" data-v="'+esc(l[0])+'"><span class="cv">'+esc(l[0])+'</span>'+
                    '<span class="cl">'+esc(l[1]||'')+'</span></div>').join('');
-    combo.innerHTML = rows || '<div class="cempty">The job legend at the bottom of the sheet is empty.</div>';
+    combo.innerHTML = rows || '<div class="cempty">Add a row to the '+(legKind==='task'?'TASKS':'JOB TYPES')+' legend at the bottom of the sheet first.</div>';
   }else{
     const field = HIST_OF[comboInp.dataset.f];
     const typed = comboInp.value.trim().toLowerCase();
@@ -2125,14 +2130,21 @@ function bindEmailButtons(){
     const canvas = await captureForSend(days);
     const blob = await canvasBlob(canvas,'image/png');
     const mp = msgParts();
-    deliverEml(buildEml({kind:'image', imgB64: await blobToBase64(blob), name: fileBase()+'.png', msgHtml: mp.html}),
-               '📷', 'your message on top and the timecard picture already placed under it');
+    const copied = await tryCopyImage(blob);          // nothing is downloaded
+    setTimeout(()=>openDraft(mp.text), 350);          // draft opens with your message
+    toast(copied
+      ? '📷 Your email is opening with To / CC / subject and your <b>Hi</b> message inside.<br>'+
+        'The picture is on the clipboard — click just under the message and press <b>Ctrl+V</b>. Then Send.<br>'+
+        '<span style="opacity:.75">(A browser can only put a picture into an email by pasting it — there is no way to auto-drop an image without a file. Text below needs no paste.)</span>'
+      : '📷 Draft opening — but the browser blocked the clipboard, so the picture could not be copied. Use 📄 PDF or allow clipboard access.', 16000);
   });
   document.getElementById('btnTxt').onclick = ev=>withBusy(ev.currentTarget, async ()=>{
     if(!ensureRecipient()) return;
     const days = sendDays(), mp = msgParts();
-    deliverEml(buildEml({kind:'text', bodyText: mp.text+buildPlainText(days), bodyHtml: buildHtmlEmail(mp.html, days)}),
-               '📝', 'your message on top and the whole sheet as a table already under it');
+    tryCopyHtml(buildHtmlEmail('', days), buildPlainText(days));   // optional colored-table paste
+    openDraft(mp.text + buildPlainText(days));                     // text written straight into the body
+    toast('📝 Your email is opening with your <b>Hi</b> message and the whole timecard <b>already written in the body</b> — just press Send.<br>'+
+          '<span style="opacity:.75">(Want the colored-table look instead? Press Ctrl+V — it is on your clipboard.)</span>', 15000);
   });
   document.getElementById('btnPdf').onclick = ev=>withBusy(ev.currentTarget, async ()=>{
     if(!ensureRecipient()) return;
