@@ -24,13 +24,13 @@
   body.dark #sheet .hz-right input{background:#2b2f3a;color:#e5e7eb;border-color:#4b5563}
   body.dark #sheet .hz-right input.mail{color:#7db3ff}
   body.dark #sheet .hz-date .dn{color:#e5e7eb}
-  body.dark #sheet input.cell{color:#e5e7eb}
-  body.dark #sheet input.cell.redtx{color:#ff8a8a}
-  body.dark #sheet input.cell.bluetx{color:#67c7f5}
+  body.dark #sheet .cell{color:#e5e7eb}
+  body.dark #sheet .cell.redtx{color:#ff8a8a}
+  body.dark #sheet .cell.bluetx{color:#67c7f5}
   body.dark .tc td.b{border-color:#454b57}
   body.dark .tc td.nb{background:#20232b}
   body.dark .section{background:#20232b;color:#5aa0e0}
-  body.dark .secname:focus,body.dark .yellow:focus,body.dark input.cell:focus{background:#3a3320}
+  body.dark .secname:focus,body.dark .yellow:focus,body.dark .cell:focus{background:#3a3320}
   /* darker equivalents of the sheet's pastel fills */
   body.dark{
     --peach:#5b4632; --lblue:#2e3a4d; --cyan:#26414a; --nearwhite:#2c2f38;
@@ -61,9 +61,9 @@
   body.dark.capturing #sheet .hz-right input{background:#fff;color:#111;border-color:#7f7f7f}
   body.dark.capturing #sheet .hz-right input.mail{color:#0563c1}
   body.dark.capturing #sheet .hz-date .dn{color:#111}
-  body.dark.capturing #sheet input.cell{color:#111}
-  body.dark.capturing #sheet input.cell.redtx{color:#FF0000}
-  body.dark.capturing #sheet input.cell.bluetx{color:#00B0F0}
+  body.dark.capturing #sheet .cell{color:#111}
+  body.dark.capturing #sheet .cell.redtx{color:#FF0000}
+  body.dark.capturing #sheet .cell.bluetx{color:#00B0F0}
   body.dark.capturing .tc td.b{border-color:#000}
   body.dark.capturing .tc td.nb{background:#fff}
   body.dark.capturing .section{background:#fff;color:#0070C0}
@@ -173,12 +173,16 @@
   tr.taskrow.tall td{height:42px}
   .neg{color:#c00000 !important;font-weight:bold}
 
-  input.cell{width:100%;height:100%;border:0;background:transparent;text-align:center;
+  .cell{width:100%;height:100%;border:0;background:transparent;text-align:center;
     font-family:Arial;font-size:12.5px;color:#111;padding:1px 2px;outline:none;display:block}
-  input.cell:focus{background:#fffbe6;box-shadow:inset 0 0 0 2px #2563eb;border-radius:2px}
-  input.cell.redtx{color:var(--red)} input.cell.bluetx{color:var(--blue)}
-  input.cell.task{font-size:12px}
+  .cell:focus{background:#fffbe6;box-shadow:inset 0 0 0 2px #2563eb;border-radius:2px}
+  .cell.redtx{color:var(--red)} .cell.bluetx{color:var(--blue)}
+  .cell.task{font-size:12px}
   input.cell::-webkit-calendar-picker-indicator{opacity:0}
+  /* auto-growing task-info cells (NOTES etc.): wrap text and take extra rows */
+  textarea.cell{resize:none;overflow:hidden;white-space:pre-wrap;word-break:break-word;
+    line-height:1.25;box-sizing:border-box;height:auto;min-height:34px;padding:3px 2px}
+  tr.taskrow.tall textarea.cell{min-height:42px}
 
   .todayhl{box-shadow:inset 0 -3px 0 #2563eb}
 
@@ -262,7 +266,7 @@
   #toast.show{display:block;animation:pop .18s ease-out}
   @keyframes pop{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%)}}
 
-  body.capturing input.cell:focus{background:transparent;box-shadow:none}
+  body.capturing .cell:focus{background:transparent;box-shadow:none}
   body.capturing .todayhl{box-shadow:none}
   body.capturing .hz-date .rd{border-bottom-color:transparent}
   body.capturing .rowbtns{display:none !important}
@@ -1054,9 +1058,11 @@ function buildTable(){
     for(let k=0; k<w.secRows[si]; k++, ri++){
       h += '<tr class="taskrow'+(SECTIONS[si].tall?' tall':'')+'">';
       for(const f of ['task','notes','project','contractor','job']){
-        const pick = f==='task';   // Task # is a pick-only list fed by the TASKS legend
-        h += '<td class="b tinfo"><input class="cell task redtx'+(pick?' taskpick':'')+'"'+
-             (pick?' readonly title="Pick a task #"':'')+' data-row="'+ri+'" data-f="'+f+'" spellcheck="false" autocomplete="off"></td>';
+        if(f==='task'){          // Task # is a pick-only list fed by the TASKS legend
+          h += '<td class="b tinfo"><input class="cell task redtx taskpick" readonly title="Pick a task #" data-row="'+ri+'" data-f="task"></td>';
+        }else{                   // NOTES / PROJECT / CONTRACTOR / JOB TYPE grow taller as you type
+          h += '<td class="b tinfo"><textarea class="cell task redtx grow" rows="1" data-row="'+ri+'" data-f="'+f+'" spellcheck="false" autocomplete="off"></textarea></td>';
+        }
       }
       for(let d=0; d<7; d++){
         h += '<td class="b tgreen" data-daycol="'+d+'"><input class="cell redtx jobpick" readonly title="Pick a job code" data-row="'+ri+'" data-f="ha" data-di="'+d+'"></td>'+
@@ -1153,12 +1159,15 @@ function renderWeek(){
   document.querySelectorAll('input.cell[data-day]').forEach(inp=>{
     inp.value = w.days[+inp.dataset.day][inp.dataset.f] || '';
   });
-  document.querySelectorAll('input.cell[data-row]').forEach(inp=>{
+  document.querySelectorAll('.cell[data-row]').forEach(inp=>{
     const r = w.rows[+inp.dataset.row], f = inp.dataset.f;
     inp.value = (f==='h'||f==='ha') ? (r[f][+inp.dataset.di]||'') : (r[f]||'');
   });
+  growAll();
   recalc();
 }
+function autoGrow(el){ if(el && el.tagName==='TEXTAREA'){ el.style.height='auto'; el.style.height=el.scrollHeight+'px'; } }
+function growAll(){ document.querySelectorAll('#tblhost textarea.cell').forEach(autoGrow); }
 
 function recalc(){
   const w = week();
@@ -1209,6 +1218,7 @@ function bindSheetInputs(){
     if(!t.classList) return;
     if(t.classList.contains('cell')){
       commitValue(t, false);
+      autoGrow(t);                          // NOTES etc. grow as you type
       if(comboInp===t) renderCombo();       // live-filter the drop-down
       if(wheelInp===t) syncWheel();         // typing a custom time moves the wheel
       return;
@@ -1427,6 +1437,7 @@ combo.addEventListener('mousedown', e=>{
   }else{
     comboInp.value = item.dataset.v;
     commitValue(comboInp, true);
+    autoGrow(comboInp);
     closeCombo();
   }
 });
@@ -1690,16 +1701,16 @@ function download(name, blob){
 const raf2 = ()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
 // html2canvas clips <input> text baselines, so swap each input for an identical text div in the clone
 function replaceInputsInClone(doc){
-  const orig = document.querySelectorAll('#sheet input');
-  const clones = doc.querySelectorAll('#sheet input');
+  const orig = document.querySelectorAll('#sheet input, #sheet textarea');
+  const clones = doc.querySelectorAll('#sheet input, #sheet textarea');
   orig.forEach((o,i)=>{
     const c = clones[i]; if(!c) return;
     const cs = getComputedStyle(o);
     const d = doc.createElement('div');
     d.textContent = o.value;
-    const isInfo = o.classList.contains('task');
+    const isInfo = o.tagName==='TEXTAREA' || o.classList.contains('task');
     const wrap = isInfo
-      ? 'white-space:normal;word-break:break-word;line-height:1.15;text-align:center;'+
+      ? 'white-space:pre-wrap;word-break:break-word;line-height:1.2;text-align:center;'+
         'justify-content:center;min-height:'+o.offsetHeight+'px;padding:2px;'
       : 'white-space:nowrap;height:'+o.offsetHeight+'px;';
     d.style.cssText =
@@ -1742,8 +1753,8 @@ function collectTexts(el){
   const push = (s, r, cs)=>{ s=(s||'').trim(); if(!s || r.width<1 || r.height<1) return;
     out.push({s, x:r.left-base.left, y:r.top-base.top, w:r.width, h:r.height,
               size:parseFloat(cs.fontSize)||10, align:cs.textAlign||'left'}); };
-  el.querySelectorAll('input').forEach(i=>{ if(i.value) push(i.value, i.getBoundingClientRect(), getComputedStyle(i)); });
-  el.querySelectorAll('td,th,div,span').forEach(n=>{ if(n.children.length===0) push(n.textContent, n.getBoundingClientRect(), getComputedStyle(n)); });
+  el.querySelectorAll('input,textarea').forEach(i=>{ if(i.value) push(i.value, i.getBoundingClientRect(), getComputedStyle(i)); });
+  el.querySelectorAll('td,th,div,span').forEach(n=>{ if(n.children.length===0 && n.tagName!=='TEXTAREA') push(n.textContent, n.getBoundingClientRect(), getComputedStyle(n)); });
   return out;
 }
 // capture the sheet as an image AND its text positions, for an exact-looking yet searchable PDF
@@ -2160,8 +2171,11 @@ function bindEmailButtons(){
   document.getElementById('btnTxt').onclick = ev=>withBusy(ev.currentTarget, async ()=>{
     if(!ensureRecipient()) return;
     const days = sendDays(), mp = msgParts();
-    openDraft(mp.text + buildPlainText(days));          // text written right into the body, after your message
-    toast('📝 Draft opened with your message and the whole timecard already written under it — just Send.', 10000);
+    const copied = await tryCopyHtml(buildHtmlEmail('', days), buildPlainText(days));   // colored table on clipboard
+    openDraft(mp.text);                                 // draft opens with just your message
+    toast(copied
+      ? '📝 Draft opened with your message. Click just under it and press <b>Ctrl+V</b> to paste the timecard table.'
+      : '📝 Draft opened, but the browser blocked the clipboard so nothing could be copied.', 12000);
   });
   document.getElementById('btnPdf').onclick = ev=>withBusy(ev.currentTarget, async ()=>{
     if(!ensureRecipient()) return;
