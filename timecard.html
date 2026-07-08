@@ -15,6 +15,65 @@
   }
   body{margin:0;background:#e9ebee;font-family:Arial,Helvetica,sans-serif;color:#111}
 
+  /* ---------- Dark theme (screen only; images/PDF always render light) ---------- */
+  body.dark{background:#0f1420;color:#e5e7eb}
+  body.dark #sheet{background:#20232b;border-color:#3a3f4b;color:#e5e7eb}
+  body.dark #sheet .hz-left .co{color:#f3f4f6}
+  body.dark #sheet .hz-mid .title{color:#5b6472}
+  body.dark #sheet .hz-right,body.dark #sheet .hz-left .sub{color:#9aa3b2}
+  body.dark #sheet .hz-right input{background:#2b2f3a;color:#e5e7eb;border-color:#4b5563}
+  body.dark #sheet .hz-right input.mail{color:#7db3ff}
+  body.dark #sheet .hz-date .dn{color:#e5e7eb}
+  body.dark #sheet input.cell{color:#e5e7eb}
+  body.dark #sheet input.cell.redtx{color:#ff8a8a}
+  body.dark #sheet input.cell.bluetx{color:#67c7f5}
+  body.dark .tc td.b{border-color:#454b57}
+  body.dark .tc td.nb{background:#20232b}
+  body.dark .section{background:#20232b;color:#5aa0e0}
+  body.dark .secname:focus,body.dark .yellow:focus,body.dark input.cell:focus{background:#3a3320}
+  /* darker equivalents of the sheet's pastel fills */
+  body.dark{
+    --peach:#5b4632; --lblue:#2e3a4d; --cyan:#26414a; --nearwhite:#2c2f38;
+    --gray:#3a3f4b; --dgray:#4a5060; --green:#3c4a2e; --yellow:#4d4a22;
+    --legcyan:#274a55; --leglav:#3a3446; --secblue:#5aa0e0;
+  }
+  body.dark .lbl,body.dark .colhdr{color:#e5e7eb}
+  body.dark .lbl.red,body.dark .leg .code{color:#ff8a8a}
+  body.dark .datec{background:#20232b;color:#e5e7eb}
+  body.dark .leg td{border-color:#454b57}
+  body.dark .leg .desc{color:#e5e7eb}
+  body.dark .tasksHdr{color:#e5e7eb;border-color:#454b57}
+  body.dark #settings{background:#20232b;border-color:#3a3f4b;color:#e5e7eb}
+  body.dark #settings input,body.dark #settings select,body.dark #settings textarea{background:#2b2f3a;color:#e5e7eb;border-color:#4b5563}
+  body.dark #settings .hint{background:#2b2f3a;color:#cbd5e1}
+  body.dark .btn2{background:#2b2f3a;color:#e5e7eb;border-color:#4b5563}
+  body.dark .rowbtn{background:#2b2f3a;color:#cbd5e1;border-color:#4b5563}
+  /* while capturing, force the sheet back to light so emailed image is always light */
+  body.dark.capturing{
+    --peach:#FBD5B5; --lblue:#DCE5F1; --cyan:#DBEEF3; --nearwhite:#F2F2F2;
+    --gray:#D9D9D9; --dgray:#BFBFBF; --green:#D7E3BC; --yellow:#FDFDA3;
+    --legcyan:#B7DDE8; --leglav:#E5E0EC; --secblue:#0070C0;
+  }
+  body.dark.capturing #sheet{background:#fff;color:#111}
+  body.dark.capturing #sheet .hz-mid .title{color:#BFBFBF}
+  body.dark.capturing #sheet .hz-left .co{color:#111}
+  body.dark.capturing #sheet .hz-right,body.dark.capturing #sheet .hz-left .sub{color:#8a8a8a}
+  body.dark.capturing #sheet .hz-right input{background:#fff;color:#111;border-color:#7f7f7f}
+  body.dark.capturing #sheet .hz-right input.mail{color:#0563c1}
+  body.dark.capturing #sheet .hz-date .dn{color:#111}
+  body.dark.capturing #sheet input.cell{color:#111}
+  body.dark.capturing #sheet input.cell.redtx{color:#FF0000}
+  body.dark.capturing #sheet input.cell.bluetx{color:#00B0F0}
+  body.dark.capturing .tc td.b{border-color:#000}
+  body.dark.capturing .tc td.nb{background:#fff}
+  body.dark.capturing .section{background:#fff;color:#0070C0}
+  body.dark.capturing .lbl,body.dark.capturing .colhdr,body.dark.capturing .datec{color:#111;background:var(--gray)}
+  body.dark.capturing .lbl.red{color:#FF0000}
+  body.dark.capturing .datec{background:#fff}
+  body.dark.capturing .leg td{border-color:#000}
+  body.dark.capturing .leg .desc,body.dark.capturing .tasksHdr,body.dark.capturing .btot{color:#111}
+  body.dark.capturing .leg .code{color:#FF0000}
+
   /* ---------- Toolbar ---------- */
   #toolbar{position:sticky;top:0;z-index:60;background:#1f2937;color:#fff;display:flex;
     gap:8px;align-items:center;padding:8px 16px;flex-wrap:wrap;box-shadow:0 2px 6px rgba(0,0,0,.25)}
@@ -236,6 +295,7 @@
   <div class="grp">
     <button class="btn" id="btnSavePdf" title="Save a PDF of the sheet to your computer">⬇ Save PDF</button>
     <button class="btn" id="btnSearch" title="Search every timecard (Ctrl+F)">🔍 Search</button>
+    <button class="btn" id="btnTheme" title="Switch light / dark theme">🌙 Dark</button>
     <button class="btn" id="btnSettings">⚙ Settings</button>
   </div>
   <div class="credit" id="credit"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0.32 3.27 124.06 26.75" height="22" fill="currentColor"><path d="M8.16 24.35Q6.16 24.35 4.61 23.55Q3.06 22.75 2.19 21.18Q1.32 19.60 1.32 17.31Q1.32 15.95 1.67 14.59Q2.02 13.22 2.63 11.97Q3.23 10.71 3.98 9.66Q3.65 8.34 3.65 6.80Q3.65 5.63 3.92 4.58Q4 4.27 4.22 4.27Q4.40 4.27 4.38 4.49Q4.31 4.93 4.27 5.42Q4.22 5.92 4.22 6.60Q4.22 7.88 4.47 9.02Q4.69 8.73 4.91 8.49Q5.81 7.50 7.04 6.63Q8.27 5.76 9.78 5.24Q11.29 4.71 12.98 4.71Q14.56 4.71 15.88 5.29Q17.20 5.87 18.01 6.96Q18.81 8.05 18.81 9.59Q18.81 10.56 18.29 11.57Q17.78 12.58 16.82 13.43Q15.86 14.28 14.51 14.81Q13.16 15.33 11.48 15.33Q9.28 15.33 7.46 14.37Q5.63 13.40 4.62 11.42Q3.74 12.98 3.32 14.59Q2.90 16.19 2.90 17.64Q2.90 19.76 3.61 21.08Q4.31 22.40 5.55 23.02Q6.80 23.65 8.40 23.65Q11.26 23.65 13.43 22.21Q15.60 20.77 17.01 17.75Q17.27 17.75 17.27 17.95Q15.91 21.21 13.54 22.78Q11.18 24.35 8.16 24.35M5.57 9.94Q5.28 10.34 5.02 10.76Q5.79 12.56 7.37 13.66Q8.95 14.76 11.35 14.76Q12.87 14.76 14.07 14.30Q15.27 13.84 16.09 13.07Q16.92 12.30 17.36 11.36Q17.80 10.43 17.80 9.48Q17.80 8.32 17.17 7.44Q16.54 6.56 15.47 6.06Q14.39 5.57 13.02 5.57Q11.66 5.57 10.29 6.14Q8.91 6.71 7.69 7.70Q6.47 8.69 5.57 9.94M17.03 17.69Q17.20 17.31 17.49 16.49Q17.78 15.66 18.08 14.65Q18.39 13.64 18.55 12.74Q18.61 12.39 18.79 12.22Q18.96 12.06 19.16 12.06Q19.45 12.06 19.69 12.33Q19.93 12.61 19.93 13.11Q19.93 13.73 19.57 14.17Q19.21 14.61 18.68 15Q18.90 15.03 19.14 15.04Q19.38 15.05 19.67 15.05Q20.70 15.05 21.71 14.92Q21.76 15.05 21.76 15.11Q21.76 15.40 21.59 15.84Q21.43 16.28 21.25 16.63Q21.16 16.83 20.90 17.35Q20.64 17.86 20.33 18.51Q20.02 19.16 19.81 19.79Q19.60 20.42 19.60 20.86Q19.60 21.43 20.04 21.43Q20.46 21.43 21.21 20.45Q21.96 19.47 22.70 17.75Q22.97 17.75 22.97 17.95Q22.73 18.55 22.36 19.25Q22 19.95 21.56 20.58Q21.12 21.21 20.61 21.61Q20.11 22.02 19.56 22.02Q19.14 22.02 18.72 21.68Q18.30 21.34 18.30 20.57Q18.30 19.89 18.57 19.24Q18.83 18.59 19.16 18.02Q19.49 17.45 19.76 17.01Q20.02 16.57 20.02 16.30Q20.02 15.91 19.52 15.73Q19.03 15.55 18.24 15.53Q17.84 16.54 17.64 17.03Q17.45 17.51 17.27 17.95Q16.92 17.95 17.03 17.69M24.29 22.09Q23.47 22.09 22.82 21.56Q22.18 21.03 22.18 19.95Q22.18 19.05 22.58 18.04Q22.99 17.03 23.66 16.14Q24.33 15.25 25.16 14.69Q25.98 14.12 26.82 14.12Q27.24 14.12 27.63 14.37Q28.03 14.61 28.03 15.20Q28.03 15.75 27.61 16.41Q27.19 17.07 26.42 17.64Q26.09 17.89 25.59 18.11Q25.08 18.33 24.57 18.47Q24.07 18.61 23.74 18.61Q23.63 18.88 23.53 19.32Q23.43 19.76 23.43 20.22Q23.43 20.77 23.65 21.21Q23.87 21.65 24.46 21.65Q25.19 21.65 25.82 21.23Q26.44 20.81 26.94 20.17Q27.43 19.54 27.79 18.88Q28.14 18.22 28.34 17.75Q28.60 17.75 28.60 17.95Q28.31 18.57 27.95 19.29Q27.59 20.02 27.09 20.65Q26.60 21.27 25.90 21.68Q25.21 22.09 24.29 22.09M23.89 18.22Q24.20 18.22 24.93 17.98Q25.65 17.75 26.25 17.25Q26.82 16.74 27.13 16.14Q27.43 15.53 27.43 15.11Q27.43 14.63 27.08 14.63Q26.82 14.63 26.36 14.98Q25.89 15.33 25.21 16.17Q24.79 16.70 24.42 17.31Q24.05 17.93 23.89 18.22M33.11 22.07Q32.60 22.07 32.22 21.78Q31.83 21.49 31.83 20.61Q31.83 20.24 31.89 19.91Q31.94 19.58 32.03 19.21Q31.83 19.54 31.48 20.02Q31.13 20.50 30.70 20.97Q30.27 21.43 29.82 21.74Q29.37 22.04 28.97 22.04Q28.40 22.04 28.05 21.53Q27.70 21.01 27.70 20.17Q27.70 19.27 28.12 18.24Q28.53 17.20 29.26 16.26Q29.99 15.31 30.93 14.72Q31.88 14.12 32.91 14.12Q33.42 14.12 33.88 14.29Q34.34 14.45 34.69 14.83Q34.85 14.98 34.85 15.18Q34.85 15.31 34.74 15.40Q34.63 15.49 34.45 15.44Q34.21 14.67 33.42 14.67Q33.04 14.67 32.56 14.92Q31.97 15.22 31.29 15.89Q30.62 16.57 30.04 17.41Q29.46 18.26 29.08 19.12Q28.71 19.98 28.71 20.68Q28.71 21.41 29.26 21.41Q29.74 21.41 30.26 20.94Q30.78 20.48 31.25 19.79Q31.72 19.10 32.12 18.41Q32.52 17.73 32.74 17.31Q33.07 16.72 33.35 16.32Q33.64 15.93 34.17 15.93Q34.41 15.93 34.65 15.99Q34.89 16.06 35.16 16.02Q34.50 16.68 34 17.58Q33.51 18.48 33.24 19.35Q32.98 20.22 32.98 20.81Q32.98 21.47 33.42 21.47Q33.77 21.47 34.18 21.08Q34.58 20.68 34.97 20.07Q35.35 19.47 35.68 18.84Q36.01 18.22 36.21 17.75Q36.32 17.75 36.40 17.78Q36.48 17.80 36.48 17.95Q36.45 18.04 36.40 18.14Q36.34 18.24 36.23 18.48Q36.06 18.83 35.75 19.43Q35.44 20.02 35.02 20.63Q34.61 21.23 34.12 21.65Q33.64 22.07 33.11 22.07M40.77 10.38Q40.48 10.80 40.13 11.44Q39.78 12.08 39.48 12.67Q39.18 13.27 39.03 13.57L41.05 13.57Q41.05 13.66 40.97 13.86Q40.90 14.06 40.68 14.15L38.76 14.15Q38.50 14.74 38.16 15.58Q37.82 16.41 37.50 17.31Q37.18 18.22 36.97 19Q36.76 19.78 36.76 20.26Q36.76 20.92 36.94 21.24Q37.11 21.56 37.58 21.56Q38.17 21.56 38.72 20.98Q39.27 20.39 39.76 19.51Q40.26 18.63 40.63 17.75Q40.90 17.75 40.90 17.95Q40.66 18.55 40.30 19.25Q39.95 19.95 39.50 20.60Q39.05 21.25 38.49 21.66Q37.93 22.07 37.25 22.07Q36.32 22.07 35.99 21.55Q35.66 21.03 35.66 20.22Q35.66 19.62 35.88 18.78Q36.10 17.93 36.42 17.03Q36.74 16.13 37.05 15.35Q37.36 14.56 37.53 14.15L36.12 14.15Q36.12 13.97 36.28 13.77Q36.43 13.57 36.61 13.57L37.77 13.57Q37.95 13.22 38.18 12.69Q38.41 12.17 38.81 11.53Q39.14 11 39.65 10.69Q40.17 10.38 40.77 10.38M42.22 22.09Q41.40 22.09 40.75 21.56Q40.11 21.03 40.11 19.95Q40.11 19.05 40.51 18.04Q40.92 17.03 41.59 16.14Q42.26 15.25 43.09 14.69Q43.91 14.12 44.75 14.12Q45.17 14.12 45.56 14.37Q45.96 14.61 45.96 15.20Q45.96 15.75 45.54 16.41Q45.12 17.07 44.35 17.64Q44.02 17.89 43.52 18.11Q43.01 18.33 42.50 18.47Q42 18.61 41.67 18.61Q41.56 18.88 41.46 19.32Q41.36 19.76 41.36 20.22Q41.36 20.77 41.58 21.21Q41.80 21.65 42.39 21.65Q43.12 21.65 43.75 21.23Q44.37 20.81 44.87 20.17Q45.36 19.54 45.72 18.88Q46.07 18.22 46.27 17.75Q46.53 17.75 46.53 17.95Q46.24 18.57 45.88 19.29Q45.52 20.02 45.02 20.65Q44.53 21.27 43.83 21.68Q43.14 22.09 42.22 22.09M41.82 18.22Q42.13 18.22 42.86 17.98Q43.58 17.75 44.18 17.25Q44.75 16.74 45.06 16.14Q45.36 15.53 45.36 15.11Q45.36 14.63 45.01 14.63Q44.75 14.63 44.29 14.98Q43.82 15.33 43.14 16.17Q42.72 16.70 42.35 17.31Q41.98 17.93 41.82 18.22M51.30 22Q50.56 22 50.20 21.49Q49.85 20.99 49.85 20.31Q49.85 20.11 49.87 19.90Q49.90 19.69 49.96 19.47Q49.65 19.95 49.25 20.54Q48.84 21.12 48.32 21.55Q47.81 21.98 47.17 21.98Q46.88 21.98 46.52 21.85Q46.16 21.71 45.88 21.34Q45.61 20.97 45.61 20.24Q45.61 19.29 46.02 18.24Q46.44 17.18 47.17 16.25Q47.89 15.31 48.82 14.73Q49.74 14.15 50.73 14.15Q51.52 14.15 52.23 14.56Q52.56 13.95 52.93 13.19Q53.31 12.43 53.68 11.68Q54.05 10.93 54.34 10.31Q54.63 9.68 54.78 9.35Q55.11 8.58 55.41 8.37Q55.70 8.16 56.12 8.16Q56.36 8.16 56.66 8.22Q56.96 8.27 57.24 8.25Q57.13 8.36 56.74 8.98Q56.34 9.59 55.77 10.57Q55.20 11.55 54.55 12.72Q53.90 13.88 53.27 15.10Q52.65 16.32 52.12 17.45Q51.59 18.57 51.28 19.43Q50.97 20.28 50.97 20.72Q50.97 21.01 51.11 21.22Q51.24 21.43 51.55 21.43Q51.96 21.43 52.40 21.01Q52.84 20.59 53.25 19.96Q53.66 19.34 53.98 18.73Q54.30 18.13 54.45 17.75Q54.71 17.75 54.71 17.95Q54.52 18.41 54.19 19.10Q53.86 19.78 53.42 20.44Q52.98 21.10 52.44 21.55Q51.90 22 51.30 22M47.32 21.34Q47.63 21.34 48.09 21Q48.55 20.66 49.08 19.91Q49.70 19.03 50.49 17.71Q51.28 16.39 52.05 14.92Q51.90 14.78 51.72 14.72Q51.55 14.65 51.24 14.65Q50.73 14.65 50.13 15.08Q49.52 15.51 48.92 16.19Q48.31 16.87 47.82 17.67Q47.32 18.46 47.02 19.20Q46.73 19.93 46.73 20.46Q46.73 21.34 47.32 21.34M59.55 22.11Q58.65 22.11 58.28 21.56Q57.90 21.01 57.90 20.22Q57.90 19.67 58.02 19.18Q58.15 18.70 58.39 18.08L58.34 18.08Q58.17 18.08 58.17 17.91Q58.17 17.82 58.35 17.40Q58.54 16.98 58.84 16.39Q59.14 15.80 59.45 15.18Q59.77 14.56 60.04 14.08Q60.48 13.27 61.01 12.40Q61.53 11.53 62.05 10.74Q62.57 9.94 62.92 9.44Q63.71 8.34 64.39 8.34L64.50 8.34Q64.70 8.34 64.95 8.40Q65.21 8.47 65.43 8.43Q65.10 8.78 64.43 9.69Q63.76 10.60 62.96 11.77Q62.63 12.25 62.14 13.07Q61.64 13.88 61.09 14.89Q60.54 15.91 60.07 16.95Q59.60 18 59.29 18.98Q58.98 19.95 58.98 20.72Q58.98 21.23 59.16 21.43Q59.33 21.63 59.60 21.63Q59.93 21.63 60.38 21.24Q60.83 20.86 61.30 20.23Q61.78 19.60 62.17 18.84Q62.57 18.08 62.82 17.30Q63.07 16.52 63.07 15.86Q63.07 15.22 62.84 14.94Q62.61 14.65 62.24 14.65Q62.08 14.65 61.93 14.73Q61.78 14.81 61.67 14.81Q61.56 14.81 61.56 14.70Q61.56 14.59 61.79 14.45Q62.02 14.32 62.48 14.32Q62.90 14.32 63.33 14.54Q63.76 14.76 64.04 15.26Q64.33 15.75 64.33 16.54Q64.33 17.49 63.89 18.47Q63.45 19.45 62.74 20.27Q62.04 21.10 61.19 21.60Q60.35 22.11 59.55 22.11M62.37 29.02Q61.23 29.02 60.74 28.57Q60.26 28.12 60.26 27.50Q60.26 26.55 60.95 25.75Q61.64 24.95 62.66 24.46Q63.80 23.94 65.26 23.61Q66.73 23.28 68.07 22.88Q68.49 22.15 68.84 21.22Q69.19 20.28 69.48 19.39Q69.76 18.50 69.94 17.93Q69.67 18.41 69.27 19.11Q68.86 19.80 68.35 20.46Q67.85 21.12 67.26 21.56Q66.68 22 66.04 22Q65.80 22 65.46 21.89Q65.12 21.78 64.87 21.48Q64.61 21.19 64.61 20.59Q64.61 20.02 64.97 19.33Q65.32 18.63 65.67 17.95Q65.56 17.95 65.48 17.93Q65.41 17.91 65.41 17.75Q65.47 17.62 65.67 17.18Q65.87 16.74 66.12 16.21Q66.37 15.69 66.57 15.29Q66.81 14.78 67.11 14.59Q67.41 14.39 67.69 14.39L69.06 14.39Q68.90 14.52 68.67 14.69Q68.44 14.85 68.24 15.18Q67.65 16.19 67.21 17.13Q66.77 18.06 66.26 19.12Q66.02 19.62 65.91 20.04Q65.80 20.46 65.80 20.77Q65.80 21.49 66.29 21.49Q66.81 21.49 67.56 20.64Q68.18 19.91 68.80 18.91Q69.43 17.91 70.01 16.84Q70.60 15.77 71.04 14.87Q71.28 14.39 71.90 14.39L73.11 14.39Q72.47 14.83 72.13 15.53Q71.79 16.24 71.37 17.34Q70.91 18.55 70.49 19.84Q70.07 21.14 69.56 22.51Q70.64 22.13 71.37 21.54Q72.09 20.94 72.65 20.01Q73.22 19.07 73.79 17.75Q74.05 17.75 74.05 17.95Q73.57 18.96 73.17 19.73Q72.78 20.50 72.29 21.09Q71.81 21.67 71.08 22.16Q70.36 22.66 69.21 23.12Q68.68 24.07 68.01 25.09Q67.34 26.11 66.49 27Q65.65 27.90 64.62 28.46Q63.60 29.02 62.37 29.02M61.84 28.58Q62.57 28.58 63.34 28.14Q64.11 27.70 64.83 27.03Q65.56 26.36 66.16 25.66Q66.77 24.97 67.14 24.44Q67.25 24.29 67.39 24.05Q67.52 23.80 67.65 23.58Q66.57 23.87 65.28 24.21Q64 24.55 63.05 24.97Q62 25.41 61.39 26.22Q60.79 27.04 60.79 27.68Q60.79 28.07 61.04 28.32Q61.29 28.58 61.84 28.58M75.42 22.11Q76.23 20.55 76.96 18.98Q77.68 17.40 78.43 15.99Q78.87 15.20 79.17 14.88Q79.46 14.56 79.97 14.56Q80.15 14.56 80.34 14.62Q80.54 14.67 80.74 14.67Q80.87 14.67 80.94 14.65Q80.63 14.83 80.15 15.52Q79.66 16.21 79.16 17.12Q78.65 18.02 78.25 18.81Q78.67 18.30 79.12 17.80Q79.57 17.29 80.12 16.83Q80.61 16.41 81.15 15.92Q81.69 15.42 82.21 15.07Q82.74 14.72 83.14 14.72Q83.29 14.72 83.34 14.74Q83.75 14.92 83.75 15.31Q83.75 15.44 83.64 15.71Q83.36 16.46 82.91 17.24Q82.46 18.02 82.06 18.81Q82.39 18.41 82.88 17.84Q83.38 17.27 83.89 16.83Q84.37 16.39 85.12 15.91Q85.87 15.42 86.59 15.07Q87.32 14.72 87.76 14.72Q87.91 14.72 87.98 14.74Q87.98 14.74 87.74 15.17Q87.49 15.60 87.13 16.29Q86.77 16.98 86.39 17.77Q86.02 18.55 85.72 19.26Q85.43 19.98 85.34 20.46Q85.27 20.75 85.27 20.99Q85.27 21.34 85.40 21.45Q85.54 21.56 85.69 21.56Q86.13 21.56 86.56 21.19Q86.99 20.81 87.41 20.23Q87.82 19.65 88.16 18.99Q88.51 18.33 88.75 17.75Q89.01 17.75 89.01 17.95Q88.77 18.55 88.41 19.26Q88.04 19.98 87.58 20.61Q87.12 21.25 86.57 21.67Q86.02 22.09 85.38 22.09Q84.92 22.09 84.51 21.78Q84.11 21.47 84.11 20.64Q84.11 19.73 84.53 18.83Q84.96 17.93 85.43 17.18Q85.65 16.81 85.65 16.59Q85.65 16.32 85.38 16.32Q85.16 16.32 84.78 16.54Q84.39 16.76 83.82 17.31Q83.47 17.64 82.99 18.23Q82.52 18.81 82.04 19.49Q81.55 20.17 81.20 20.83Q80.85 21.49 80.74 22Q80.41 22 80.21 21.73Q80.01 21.45 80.01 21.08Q80.01 21.01 80.01 20.94Q80.01 20.88 80.04 20.79Q80.15 20.11 80.39 19.64Q80.63 19.16 80.94 18.52Q81.09 18.24 81.29 17.85Q81.49 17.47 81.64 17.11Q81.80 16.74 81.80 16.50Q81.80 16.28 81.62 16.28Q81.42 16.28 81.10 16.48Q80.78 16.68 80.50 16.93Q80.21 17.18 80.06 17.31Q79.51 17.84 78.73 18.83Q77.95 19.82 77.02 21.65Q76.89 21.89 76.71 21.95Q76.54 22 76.16 22Q75.92 22 75.76 22.01Q75.59 22.02 75.42 22.11M90.57 22.26Q89.76 22.26 89.22 21.86Q88.68 21.45 88.42 20.79Q88.15 20.13 88.15 19.38Q88.15 18.55 88.48 17.47Q88.81 16.39 89.40 15.25Q89.98 14.10 90.75 13.02Q91.52 11.95 92.41 11.08Q93.30 10.21 94.25 9.70Q95.19 9.20 96.12 9.20Q97.28 9.20 97.73 9.91Q98.19 10.63 98.19 11.66Q98.19 12.54 97.90 13.65Q97.61 14.76 97.10 15.96Q96.58 17.16 95.88 18.28Q95.17 19.40 94.32 20.31Q93.48 21.21 92.53 21.74Q91.59 22.26 90.57 22.26M90.84 21.82Q91.59 21.82 92.36 21.24Q93.13 20.66 93.85 19.68Q94.58 18.70 95.20 17.52Q95.83 16.35 96.32 15.15Q96.80 13.95 97.06 12.93Q97.33 11.90 97.33 11.24Q97.33 10.60 97.09 10.11Q96.84 9.61 96.14 9.61Q95.41 9.61 94.64 10.21Q93.87 10.80 93.14 11.78Q92.40 12.76 91.74 13.95Q91.08 15.14 90.57 16.32Q90.07 17.51 89.78 18.51Q89.50 19.51 89.50 20.13Q89.50 20.81 89.78 21.32Q90.07 21.82 90.84 21.82M98.85 17.69Q99.02 17.31 99.31 16.49Q99.59 15.66 99.90 14.65Q100.21 13.64 100.36 12.74Q100.43 12.39 100.61 12.22Q100.78 12.06 100.98 12.06Q101.27 12.06 101.51 12.33Q101.75 12.61 101.75 13.11Q101.75 13.73 101.39 14.17Q101.02 14.61 100.50 15Q100.72 15.03 100.96 15.04Q101.20 15.05 101.49 15.05Q102.52 15.05 103.53 14.92Q103.58 15.05 103.58 15.11Q103.58 15.40 103.41 15.84Q103.25 16.28 103.07 16.63Q102.98 16.83 102.72 17.35Q102.45 17.86 102.15 18.51Q101.84 19.16 101.63 19.79Q101.42 20.42 101.42 20.86Q101.42 21.43 101.86 21.43Q102.28 21.43 103.03 20.45Q103.77 19.47 104.52 17.75Q104.79 17.75 104.79 17.95Q104.54 18.55 104.18 19.25Q103.82 19.95 103.38 20.58Q102.94 21.21 102.43 21.61Q101.93 22.02 101.38 22.02Q100.96 22.02 100.54 21.68Q100.12 21.34 100.12 20.57Q100.12 19.89 100.39 19.24Q100.65 18.59 100.98 18.02Q101.31 17.45 101.57 17.01Q101.84 16.57 101.84 16.30Q101.84 15.91 101.34 15.73Q100.85 15.55 100.06 15.53Q99.66 16.54 99.46 17.03Q99.26 17.51 99.09 17.95Q98.74 17.95 98.85 17.69M109.30 22.07Q108.79 22.07 108.40 21.78Q108.02 21.49 108.02 20.61Q108.02 20.24 108.07 19.91Q108.13 19.58 108.22 19.21Q108.02 19.54 107.67 20.02Q107.32 20.50 106.89 20.97Q106.46 21.43 106.01 21.74Q105.56 22.04 105.16 22.04Q104.59 22.04 104.24 21.53Q103.88 21.01 103.88 20.17Q103.88 19.27 104.30 18.24Q104.72 17.20 105.45 16.26Q106.17 15.31 107.12 14.72Q108.06 14.12 109.10 14.12Q109.60 14.12 110.07 14.29Q110.53 14.45 110.88 14.83Q111.03 14.98 111.03 15.18Q111.03 15.31 110.92 15.40Q110.81 15.49 110.64 15.44Q110.40 14.67 109.60 14.67Q109.23 14.67 108.75 14.92Q108.15 15.22 107.48 15.89Q106.81 16.57 106.23 17.41Q105.64 18.26 105.27 19.12Q104.90 19.98 104.90 20.68Q104.90 21.41 105.45 21.41Q105.93 21.41 106.45 20.94Q106.96 20.48 107.44 19.79Q107.91 19.10 108.31 18.41Q108.70 17.73 108.92 17.31Q109.25 16.72 109.54 16.32Q109.82 15.93 110.35 15.93Q110.59 15.93 110.84 15.99Q111.08 16.06 111.34 16.02Q110.68 16.68 110.19 17.58Q109.69 18.48 109.43 19.35Q109.16 20.22 109.16 20.81Q109.16 21.47 109.60 21.47Q109.96 21.47 110.36 21.08Q110.77 20.68 111.15 20.07Q111.54 19.47 111.87 18.84Q112.20 18.22 112.40 17.75Q112.51 17.75 112.58 17.78Q112.66 17.80 112.66 17.95Q112.64 18.04 112.58 18.14Q112.53 18.24 112.42 18.48Q112.24 18.83 111.94 19.43Q111.63 20.02 111.21 20.63Q110.79 21.23 110.31 21.65Q109.82 22.07 109.30 22.07M117.44 22Q116.69 22 116.34 21.49Q115.98 20.99 115.98 20.31Q115.98 20.11 116.01 19.90Q116.03 19.69 116.09 19.47Q115.79 19.95 115.38 20.54Q114.97 21.12 114.45 21.55Q113.94 21.98 113.30 21.98Q113.01 21.98 112.65 21.85Q112.29 21.71 112.01 21.34Q111.74 20.97 111.74 20.24Q111.74 19.29 112.16 18.24Q112.57 17.18 113.30 16.25Q114.03 15.31 114.95 14.73Q115.87 14.15 116.86 14.15Q117.66 14.15 118.36 14.56Q118.69 13.95 119.06 13.19Q119.44 12.43 119.81 11.68Q120.19 10.93 120.47 10.31Q120.76 9.68 120.91 9.35Q121.24 8.58 121.54 8.37Q121.84 8.16 122.25 8.16Q122.50 8.16 122.79 8.22Q123.09 8.27 123.38 8.25Q123.27 8.36 122.87 8.98Q122.47 9.59 121.90 10.57Q121.33 11.55 120.68 12.72Q120.03 13.88 119.40 15.10Q118.78 16.32 118.25 17.45Q117.72 18.57 117.41 19.43Q117.11 20.28 117.11 20.72Q117.11 21.01 117.24 21.22Q117.37 21.43 117.68 21.43Q118.10 21.43 118.54 21.01Q118.98 20.59 119.38 19.96Q119.79 19.34 120.11 18.73Q120.43 18.13 120.58 17.75Q120.85 17.75 120.85 17.95Q120.65 18.41 120.32 19.10Q119.99 19.78 119.55 20.44Q119.11 21.10 118.57 21.55Q118.03 22 117.44 22M113.45 21.34Q113.76 21.34 114.22 21Q114.69 20.66 115.21 19.91Q115.83 19.03 116.62 17.71Q117.41 16.39 118.18 14.92Q118.03 14.78 117.85 14.72Q117.68 14.65 117.37 14.65Q116.86 14.65 116.26 15.08Q115.65 15.51 115.05 16.19Q114.44 16.87 113.95 17.67Q113.45 18.46 113.16 19.20Q112.86 19.93 112.86 20.46Q112.86 21.34 113.45 21.34M121.62 22.33Q121.26 22.33 121.04 22.11Q120.82 21.89 120.82 21.56Q120.82 21.12 121.16 20.81Q121.51 20.50 121.90 20.50Q122.25 20.50 122.47 20.71Q122.69 20.92 122.69 21.25Q122.69 21.67 122.36 22Q122.03 22.33 121.62 22.33"/></svg></div>
@@ -822,6 +882,7 @@ if(!state.settings.taskLegend) state.settings.taskLegend = TASK_LEGEND.map(t=>[t
 if(!state.settings.jobLegend)  state.settings.jobLegend  = JOB_LEGEND.map(t=>[t[0],t[1]]);
 if(state.settings.message===undefined) state.settings.message = '';
 if(!state.settings.subjectMode) state.settings.subjectMode = 'auto';
+if(!state.settings.theme) state.settings.theme = 'light';
 
 let saveTimer = null;
 function save(){
@@ -1718,17 +1779,15 @@ function buildSearchablePdf(dayIdxs){
     days.forEach((d,i)=>cell(dcol(i), y, dayW, GH, w.days[d][f]||'0:00', {fill, color:col, size:6.5}));
     totCell(y, GH, '', {fill:'#FFFFFF'}); y+=GH;
   }
-  // TOTAL WORK HOURS
-  lblCell('TOTAL WORK HOURS');
-  days.forEach((d,i)=>cell(dcol(i), y, dayW, GH, fmtDur(dtot[i]), {fill:'#FBD5B5', size:6.5}));
-  totCell(y, GH, fmtDur(weekMin), {fill:'#FBD5B5', bold:true, size:6.5}); y+=GH;
-
-  // ---- task table header
+  // TOTAL WORK HOURS — day totals span two rows (exactly like the sheet); the
+  // TASK #/NOTES/… headers occupy the lower half of the info columns. No MON/TUE, no TOTAL.
+  cell(x0, y, labelW, GH, 'TOTAL WORK HOURS', {fill:'#D9D9D9', bold:true, size:6.5});
+  days.forEach((d,i)=>cell(dcol(i), y, dayW, 2*GH, fmtDur(dtot[i]), {fill:'#FBD5B5', size:6.5}));
+  totCell(y, 2*GH, fmtDur(weekMin), {fill:'#FBD5B5', bold:true, size:6.5});
   const infoHdr = ['TASK #','NOTES','PROJECT','CONTRACTOR','JOB TYPE'];
   let cx = x0;
-  infoHdr.forEach((t,i)=>{ cell(cx, y, infoW[i], GH, t, {fill:'#D9D9D9', bold:true, size:6}); cx+=infoW[i]; });
-  days.forEach((d,i)=>cell(dcol(i), y, dayW, GH, DAYS[d].slice(0,3), {fill:'#D9D9D9', bold:true, size:6}));
-  totCell(y, GH, 'TOTAL', {fill:'#D9D9D9', bold:true, size:6}); y+=GH;
+  infoHdr.forEach((t,i)=>{ cell(cx, y+GH, infoW[i], GH, t, {fill:'#D9D9D9', bold:true, size:6}); cx+=infoW[i]; });
+  y += 2*GH;
 
   // ---- sections + rows
   const secRows = w.secRows, dayTot=days.map(()=>0); let grand=0, ri=0;
@@ -1753,10 +1812,11 @@ function buildSearchablePdf(dayIdxs){
       y+=rh;
     }
   }
-  // per-day totals footer
-  cell(x0, y, labelW, GH, 'DAILY TASK TOTALS', {fill:'#FFFFFF', bold:true, size:6, align:'right'});
-  days.forEach((d,i)=>cell(dcol(i), y, dayW, GH, fmtNum(dayTot[i]), {fill:'#FFFFFF', size:6.5}));
-  totCell(y, GH, fmtNum(grand), {fill:'#FFFFFF', bold:true, size:6.5}); y+=GH+8;
+  // bare per-day task totals under the grid (just numbers, like the sheet — no label, no border)
+  doc.setFont('helvetica','normal'); doc.setFontSize(6.5); doc.setTextColor(20,20,20);
+  days.forEach((d,i)=>doc.text(fmtNum(dayTot[i]), dcol(i)+dayW/2, y+7, {align:'center', baseline:'middle'}));
+  if(showTot){ doc.setFont('helvetica','bold'); doc.text(fmtNum(grand), totX(x0)+totalW/2, y+7, {align:'center', baseline:'middle'}); }
+  y += 16;
 
   // ---- legends — both scaled to the same total height (shorter one gets taller rows)
   if(y > PH-90){ doc.addPage(); y=M; }
@@ -2130,21 +2190,14 @@ function bindEmailButtons(){
     const canvas = await captureForSend(days);
     const blob = await canvasBlob(canvas,'image/png');
     const mp = msgParts();
-    const copied = await tryCopyImage(blob);          // nothing is downloaded
-    setTimeout(()=>openDraft(mp.text), 350);          // draft opens with your message
-    toast(copied
-      ? '📷 Your email is opening with To / CC / subject and your <b>Hi</b> message inside.<br>'+
-        'The picture is on the clipboard — click just under the message and press <b>Ctrl+V</b>. Then Send.<br>'+
-        '<span style="opacity:.75">(A browser can only put a picture into an email by pasting it — there is no way to auto-drop an image without a file. Text below needs no paste.)</span>'
-      : '📷 Draft opening — but the browser blocked the clipboard, so the picture could not be copied. Use 📄 PDF or allow clipboard access.', 16000);
+    deliverEml(buildEml({kind:'image', imgB64: await blobToBase64(blob), name: fileBase()+'.png', msgHtml: mp.html}),
+               '📷', 'your message on top and the timecard picture already placed under it — nothing to paste');
   });
   document.getElementById('btnTxt').onclick = ev=>withBusy(ev.currentTarget, async ()=>{
     if(!ensureRecipient()) return;
     const days = sendDays(), mp = msgParts();
-    tryCopyHtml(buildHtmlEmail('', days), buildPlainText(days));   // optional colored-table paste
-    openDraft(mp.text + buildPlainText(days));                     // text written straight into the body
-    toast('📝 Your email is opening with your <b>Hi</b> message and the whole timecard <b>already written in the body</b> — just press Send.<br>'+
-          '<span style="opacity:.75">(Want the colored-table look instead? Press Ctrl+V — it is on your clipboard.)</span>', 15000);
+    deliverEml(buildEml({kind:'text', bodyText: mp.text+buildPlainText(days), bodyHtml: buildHtmlEmail(mp.html, days)}),
+               '📝', 'your message on top and the whole sheet as a table already under it — nothing to paste');
   });
   document.getElementById('btnPdf').onclick = ev=>withBusy(ev.currentTarget, async ()=>{
     if(!ensureRecipient()) return;
@@ -2175,6 +2228,21 @@ function bindEmailButtons(){
   setInterval(restore, 1500);
 })();
 
+/* ---------------- light / dark theme (screen only) ---------------- */
+function applyTheme(){
+  const dark = state.settings.theme==='dark';
+  document.body.classList.toggle('dark', dark);
+  const btn = document.getElementById('btnTheme');
+  if(btn) btn.textContent = dark ? '☀ Light' : '🌙 Dark';
+}
+function bindTheme(){
+  document.getElementById('btnTheme').onclick = ()=>{
+    state.settings.theme = state.settings.theme==='dark' ? 'light' : 'dark';
+    save(); applyTheme();
+  };
+  applyTheme();
+}
+
 /* ---------------- init ---------------- */
 bindSheetInputs();
 bindHeader();
@@ -2182,6 +2250,7 @@ bindWeekNav();
 bindSettings();
 bindEmailButtons();
 bindSearch();
+bindTheme();
 renderWeek();
 if(!state.settings.emailTo){
   toast('👋 Welcome! Open <b>⚙ Settings</b> once to save the email address and CCs you send your timecard to. Everything you type in the sheet is saved automatically in this browser.', 12000);
