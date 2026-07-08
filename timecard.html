@@ -1628,60 +1628,86 @@ function download(name, blob){
   a.click();
   setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 4000);
 }
-async function captureSheet(onlyDay){
+const raf2 = ()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+// html2canvas clips <input> text baselines, so swap each input for an identical text div in the clone
+function replaceInputsInClone(doc){
+  const orig = document.querySelectorAll('#sheet input');
+  const clones = doc.querySelectorAll('#sheet input');
+  orig.forEach((o,i)=>{
+    const c = clones[i]; if(!c) return;
+    const cs = getComputedStyle(o);
+    const d = doc.createElement('div');
+    d.textContent = o.value;
+    const isInfo = o.classList.contains('task');
+    const wrap = isInfo
+      ? 'white-space:normal;word-break:break-word;line-height:1.15;text-align:center;'+
+        'justify-content:center;min-height:'+o.offsetHeight+'px;padding:2px;'
+      : 'white-space:nowrap;height:'+o.offsetHeight+'px;';
+    d.style.cssText =
+      'display:flex;align-items:center;box-sizing:border-box;overflow:hidden;'+wrap+
+      'width:'+o.offsetWidth+'px;'+
+      'justify-content:'+(cs.textAlign==='center'?'center':'flex-start')+';'+
+      'font-family:'+cs.fontFamily+';font-size:'+cs.fontSize+';font-weight:'+cs.fontWeight+';'+
+      'color:'+cs.color+';background-color:'+cs.backgroundColor+';'+
+      'border:'+cs.borderTopWidth+' '+cs.borderTopStyle+' '+cs.borderTopColor+';'+
+      'padding:'+cs.paddingTop+' '+cs.paddingRight+' '+cs.paddingBottom+' '+cs.paddingLeft+';'+
+      'text-decoration:'+cs.textDecorationLine+';';
+    c.parentNode.replaceChild(d, c);
+  });
+}
+async function captureSheet(){
   closePopups();
   if(document.activeElement) document.activeElement.blur();
-  document.body.classList.add('capturing');
-  const el = document.getElementById('sheet');
-  await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
-  try{
-    return await html2canvas(el, {scale:2, backgroundColor:'#ffffff', logging:false,
-      // html2canvas draws <input> text with a clipped baseline, so in the cloned
-      // document every input is swapped for an identically styled text div
-      onclone: doc=>{
-        const sel = '#sheet input';
-        const orig = document.querySelectorAll(sel);
-        const clones = doc.querySelectorAll(sel);
-        orig.forEach((o,i)=>{
-          const c = clones[i]; if(!c) return;
-          const cs = getComputedStyle(o);
-          const d = doc.createElement('div');
-          d.textContent = o.value;
-          // task info cells wrap like Excel does (row auto-fits); time/number cells stay on one line
-          const isInfo = o.classList.contains('task');
-          const wrap = isInfo
-            ? 'white-space:normal;word-break:break-word;line-height:1.15;text-align:center;'+
-              'justify-content:center;min-height:'+o.offsetHeight+'px;padding:2px;'
-            : 'white-space:nowrap;height:'+o.offsetHeight+'px;';
-          d.style.cssText =
-            'display:flex;align-items:center;box-sizing:border-box;overflow:hidden;'+wrap+
-            'width:'+o.offsetWidth+'px;'+
-            'justify-content:'+(cs.textAlign==='center'?'center':'flex-start')+';'+
-            'font-family:'+cs.fontFamily+';font-size:'+cs.fontSize+';font-weight:'+cs.fontWeight+';'+
-            'color:'+cs.color+';background-color:'+cs.backgroundColor+';'+
-            'border:'+cs.borderTopWidth+' '+cs.borderTopStyle+' '+cs.borderTopColor+';'+
-            'padding:'+cs.paddingTop+' '+cs.paddingRight+' '+cs.paddingBottom+' '+cs.paddingLeft+';'+
-            'text-decoration:'+cs.textDecorationLine+';';
-          c.parentNode.replaceChild(d, c);
-        });
-      }});
-  }finally{
-    document.body.classList.remove('capturing');
-  }
+  document.body.classList.add('capturing');           // forces light even in dark theme
+  await raf2();
+  try{ return await html2canvas(document.getElementById('sheet'),
+        {scale:2, backgroundColor:'#ffffff', logging:false, onclone: replaceInputsInClone}); }
+  finally{ document.body.classList.remove('capturing'); }
 }
-/* Daily image: render the clean email-style HTML table (single day) off-screen and
-   capture that — avoids html2canvas's unreliable handling of <col> widths. */
+/* Daily image: render the clean single-day HTML table off-screen and capture that. */
 async function captureHtmlTable(days){
   const holder = document.createElement('div');
   holder.style.cssText = 'position:fixed;left:-99999px;top:0;background:#fff;padding:12px;width:1000px;z-index:-1';
   holder.innerHTML = buildHtmlEmail('', days).replace(/^<html><body>/,'').replace(/<\/body><\/html>$/,'');
   document.body.appendChild(holder);
-  await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+  await raf2();
   try{ return await html2canvas(holder, {scale:2, backgroundColor:'#ffffff', logging:false}); }
   finally{ holder.remove(); }
 }
 async function captureForSend(days){
   return (days.length===1) ? await captureHtmlTable(days) : await captureSheet();
+}
+// collect every text + its position (relative to the element) for the PDF's invisible searchable layer
+function collectTexts(el){
+  const base = el.getBoundingClientRect(), out = [];
+  const push = (s, r, cs)=>{ s=(s||'').trim(); if(!s || r.width<1 || r.height<1) return;
+    out.push({s, x:r.left-base.left, y:r.top-base.top, w:r.width, h:r.height,
+              size:parseFloat(cs.fontSize)||10, align:cs.textAlign||'left'}); };
+  el.querySelectorAll('input').forEach(i=>{ if(i.value) push(i.value, i.getBoundingClientRect(), getComputedStyle(i)); });
+  el.querySelectorAll('td,th,div,span').forEach(n=>{ if(n.children.length===0) push(n.textContent, n.getBoundingClientRect(), getComputedStyle(n)); });
+  return out;
+}
+// capture the sheet as an image AND its text positions, for an exact-looking yet searchable PDF
+async function captureWithText(days){
+  closePopups();
+  if(document.activeElement) document.activeElement.blur();
+  let el, holder=null;
+  if(days.length===1){
+    holder = document.createElement('div');
+    holder.style.cssText = 'position:fixed;left:-99999px;top:0;background:#fff;padding:12px;width:1000px;z-index:-1';
+    holder.innerHTML = buildHtmlEmail('', days).replace(/^<html><body>/,'').replace(/<\/body><\/html>$/,'');
+    document.body.appendChild(holder); el = holder;
+  } else el = document.getElementById('sheet');
+  document.body.classList.add('capturing');
+  await raf2();
+  try{
+    const canvas = await html2canvas(el, {scale:2, backgroundColor:'#ffffff', logging:false,
+      onclone: holder ? undefined : replaceInputsInClone});
+    return { canvas, texts: collectTexts(el) };
+  }finally{
+    document.body.classList.remove('capturing');
+    if(holder) holder.remove();
+  }
 }
 function canvasBlob(canvas, type, q){
   return new Promise(res=>canvas.toBlob(res, type, q));
@@ -1691,149 +1717,25 @@ function canvasBlob(canvas, type, q){
 function todayCol(){ return (new Date().getDay()+6)%7; }   // Mon=0 … Sun=6
 function sendDays(){ return resolvedWeekly() ? [0,1,2,3,4,5,6] : [todayCol()]; }
 
-/* ---------------- searchable (real-text) PDF via jsPDF ---------------- */
-function hx(h){ return [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)]; }
-function buildSearchablePdf(dayIdxs){
+/* ---------------- exact-looking, searchable PDF ----------------
+   The page is a picture of the sheet itself (pixel-identical), with the
+   text overlaid invisibly on top so it stays selectable / copyable. */
+async function buildSearchablePdf(days){
+  const { canvas, texts } = await captureWithText(days);
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({orientation:'landscape', unit:'pt', format:'a4', compress:true});
-  const PW = doc.internal.pageSize.getWidth(), PH = doc.internal.pageSize.getHeight();
-  const M = 20, s = state.settings, w = week(), dates = weekDates(), days = dayIdxs;
-  const RED='#FF0000', BLUE='#00B0F0', SEC='#0070C0';
-
-  function box(x,y,wd,ht,fill){
-    if(fill){ const c=hx(fill); doc.setFillColor(c[0],c[1],c[2]); doc.rect(x,y,wd,ht,'F'); }
-    doc.setDrawColor(0); doc.setLineWidth(0.4); doc.rect(x,y,wd,ht,'S');
-  }
-  function cell(x,y,wd,ht,txt,o){
-    o=o||{}; box(x,y,wd,ht,o.fill);
-    if(txt==null||txt==='') return;
-    doc.setFont('helvetica', o.bold?'bold':'normal');
-    doc.setFontSize(o.size||7);
-    const c = hx(o.color||'#000000'); doc.setTextColor(c[0],c[1],c[2]);
-    const al = o.align||'center';
-    const tx = al==='left' ? x+3 : al==='right' ? x+wd-3 : x+wd/2;
-    let str = String(txt);
-    const maxW = wd-4;
-    if(o.wrap){
-      const lines = doc.splitTextToSize(str, maxW);
-      const lh = (o.size||7)+1.5, startY = y+ht/2 - (lines.length-1)*lh/2;
-      lines.forEach((ln,i)=>doc.text(ln, tx, startY+i*lh, {align:al, baseline:'middle'}));
-    }else{
-      while(str && doc.getTextWidth(str) > maxW && str.length>1) str = str.slice(0,-1);
-      doc.text(str, tx, y+ht/2, {align:al, baseline:'middle'});
-    }
-  }
-  // ---- geometry
-  const showTot = days.length>1;                // single-day card drops the week-total column
-  const infoW = [40,52,86,60,42];               // TASK NOTES PROJECT CONTRACTOR JOB
-  const labelW = infoW.reduce((a,b)=>a+b,0);    // grid label column
-  const totalW = showTot?50:0, usable = PW-2*M;
-  let dayW = (usable-labelW-totalW)/days.length;
-  dayW = Math.max(46, Math.min(dayW, 108));
-  const gridW = labelW + dayW*days.length + totalW;
-  const totX = x0plus => x0plus + labelW + dayW*days.length;
-  let x0 = M, y = M;
-  const totCell = (yy,ht,txt,o)=>{ if(showTot) cell(totX(x0), yy, totalW, ht, txt, o); };
-
-  // ---- title band (spread over a min width so single-day cards don't overlap)
-  const headW = Math.max(gridW, 640);
-  doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.setTextColor(20,20,20);
-  doc.text(s.co1||'JORDAN ISAT', x0, y+13);
-  doc.setFont('helvetica','normal'); doc.setFontSize(6.5); doc.setTextColor(140,140,140);
-  doc.text(s.co2||'', x0, y+22); doc.text(s.co3||'', x0, y+30);
-  doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.setTextColor(150,150,150);
-  doc.text((showTot?'Weekly':'Daily')+' Time Sheet', M+headW/2, y+13, {align:'center'});
-  doc.setFontSize(8); const cr=hx(RED); doc.setTextColor(cr[0],cr[1],cr[2]);
-  doc.text(usDate(fromIso(weekKey)), M+headW/2-18, y+26, {align:'right'});
-  doc.setTextColor(20,20,20); doc.text('SUNDAY', M+headW/2-12, y+26, {align:'left'});
-  doc.setFontSize(7); doc.setTextColor(90,90,90); doc.setFont('helvetica','normal');
-  const rx = M+headW;
-  [['Employee:', s.employee],['Manager:', s.manager],['Phone:', s.phone],['E-mail:', s.email]]
-    .forEach((r,i)=>{ doc.setFont('helvetica','normal'); doc.text(r[0], rx-190, y+8+i*8);
-      doc.setFont('helvetica','bold'); doc.setTextColor(20,20,20); doc.text(String(r[1]||''), rx-150, y+8+i*8);
-      doc.setTextColor(90,90,90); });
-  y += 40;
-
-  // ---- time grid
-  const GH = 15;
-  const dcol = i => x0 + labelW + i*dayW;
-  // header row: blank label, day names, Total Hours
-  cell(x0, y, labelW, GH, '', {fill:'#FFFFFF'});
-  days.forEach((d,i)=>cell(dcol(i), y, dayW, GH, DAYS[d], {fill:'#BFBFBF', bold:true, size:6.5}));
-  totCell(y, GH, s.totalHoursLabel||'Total Hours', {fill:'#FDFDA3', size:6, wrap:true});
-  y += GH;
-  const lblCell = (t,extra)=>cell(x0, y, labelW, GH, t, Object.assign({fill:'#D9D9D9', bold:true, size:6.5, align:'center'}, extra||{}));
-  // DATE
-  lblCell('DATE');
-  days.forEach((d,i)=>cell(dcol(i), y, dayW, GH, usDate(dates[d]), {fill:'#FFFFFF', size:6.5}));
-  totCell(y, GH, '', {fill:'#FFFFFF'}); y+=GH;
-  const trows = [['TIME IN','tin','#FBD5B5',RED],['LUNCH BREAK','lunch','#DCE5F1','#000000'],
-    ['TIME OUT','tout','#FBD5B5',RED],['MEETING FROM HOME','meet','#DBEEF3',BLUE],
-    ['WORKING FROM HOME','wfh','#DBEEF3',BLUE],['LEAVES, VACATIONS, SICK LEAVES, HOLIDAYS','leave','#F2F2F2',RED]];
-  let weekMin=0; const dtot=[];
-  days.forEach(d=>{ const dd=w.days[d]; const tin=parseClock(dd.tin),tout=parseClock(dd.tout);
-    let t=0; if(tin!=null&&tout!=null)t=tout-tin; t+=-(parseDur(dd.lunch)||0)+(parseDur(dd.meet)||0)+(parseDur(dd.wfh)||0)+(parseDur(dd.leave)||0);
-    dtot.push(t); weekMin+=t; });
-  for(const [lbl,f,fill,col] of trows){
-    lblCell(lbl, {color: lbl[0]==='L'&&f==='leave'?RED:'#000000'});
-    days.forEach((d,i)=>cell(dcol(i), y, dayW, GH, w.days[d][f]||'0:00', {fill, color:col, size:6.5}));
-    totCell(y, GH, '', {fill:'#FFFFFF'}); y+=GH;
-  }
-  // TOTAL WORK HOURS — day totals span two rows (exactly like the sheet); the
-  // TASK #/NOTES/… headers occupy the lower half of the info columns. No MON/TUE, no TOTAL.
-  cell(x0, y, labelW, GH, 'TOTAL WORK HOURS', {fill:'#D9D9D9', bold:true, size:6.5});
-  days.forEach((d,i)=>cell(dcol(i), y, dayW, 2*GH, fmtDur(dtot[i]), {fill:'#FBD5B5', size:6.5}));
-  totCell(y, 2*GH, fmtDur(weekMin), {fill:'#FBD5B5', bold:true, size:6.5});
-  const infoHdr = ['TASK #','NOTES','PROJECT','CONTRACTOR','JOB TYPE'];
-  let cx = x0;
-  infoHdr.forEach((t,i)=>{ cell(cx, y+GH, infoW[i], GH, t, {fill:'#D9D9D9', bold:true, size:6}); cx+=infoW[i]; });
-  y += 2*GH;
-
-  // ---- sections + rows
-  const secRows = w.secRows, dayTot=days.map(()=>0); let grand=0, ri=0;
-  for(let si=0; si<SECTIONS.length; si++){
-    if(y > PH-70){ doc.addPage(); y=M; }
-    cell(x0, y, gridW, GH+2, s.sectionNames[si]||SECTIONS[si].name, {fill:'#FFFFFF', bold:true, size:10, color:SEC});
-    y += GH+2;
-    for(let k=0;k<secRows[si];k++,ri++){
-      const r = w.rows[ri];
-      // row height grows for wrapped project/notes
-      const info=[r.task,r.notes,r.project,r.contractor,r.job];
-      let rh=16;
-      info.forEach((t,i)=>{ if(t){ const ln=doc.splitTextToSize(String(t), infoW[i]-4).length; rh=Math.max(rh, 8+ln*8); } });
-      if(y+rh > PH-40){ doc.addPage(); y=M; }
-      cx=x0;
-      info.forEach((t,i)=>{ cell(cx, y, infoW[i], rh, t||'', {fill:'#D9D9D9', color:RED, size:6.5, wrap:true}); cx+=infoW[i]; });
-      let rowTot=0;
-      days.forEach((d,i)=>{ const v=num(r.ha[d])+num(r.h[d]); rowTot+=v; dayTot[i]+=v;
-        cell(dcol(i), y, dayW, rh, v?fmtNum(v):'', {fill:'#D7E3BC', color:RED, size:6.5}); });
-      grand+=rowTot;
-      totCell(y, rh, fmtNum(rowTot), {fill:'#D7E3BC', size:6.5});
-      y+=rh;
-    }
-  }
-  // bare per-day task totals under the grid (just numbers, like the sheet — no label, no border)
-  doc.setFont('helvetica','normal'); doc.setFontSize(6.5); doc.setTextColor(20,20,20);
-  days.forEach((d,i)=>doc.text(fmtNum(dayTot[i]), dcol(i)+dayW/2, y+7, {align:'center', baseline:'middle'}));
-  if(showTot){ doc.setFont('helvetica','bold'); doc.text(fmtNum(grand), totX(x0)+totalW/2, y+7, {align:'center', baseline:'middle'}); }
-  y += 16;
-
-  // ---- legends — both scaled to the same total height (shorter one gets taller rows)
-  if(y > PH-90){ doc.addPage(); y=M; }
-  const legW=[30,180], headH=12;
-  const maxLeg2 = Math.max(s.taskLegend.length, s.jobLegend.length), targetLegH = maxLeg2*12;
-  function legend(lx, title, arr){
-    let ly=y;
-    doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(20,20,20);
-    box(lx, ly, legW[0]+legW[1], headH, '#D9D9D9'); if(title) doc.text(title, lx+4, ly+headH/2+2); ly+=headH;
-    const rh = arr.length ? targetLegH/arr.length : 12;
-    arr.forEach(t=>{ cell(lx, ly, legW[0], rh, t[0], {fill:'#B7DDE8', color:RED, size:6.5});
-      cell(lx+legW[0], ly, legW[1], rh, t[1], {fill:'#E5E0EC', size:6.5, align:'left', wrap:true}); ly+=rh; });
-    return ly;
-  }
-  legend(x0, 'TASKS :', s.taskLegend);
-  legend(x0+legW[0]+legW[1]+30, '', s.jobLegend);
-
+  const cssW = canvas.width/2, cssH = canvas.height/2;   // capture is scale 2
+  const doc = new jsPDF({orientation: cssW>=cssH?'landscape':'portrait', unit:'px', format:[cssW, cssH], compress:true});
+  doc.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, cssW, cssH);
+  doc.setTextColor(0,0,0);
+  texts.forEach(t=>{
+    const fs = Math.max(4, Math.min(t.size||8, 40));
+    doc.setFontSize(fs);
+    let x = t.x+1, align = 'left';
+    if(t.align==='center'){ x = t.x+t.w/2; align = 'center'; }
+    else if(t.align==='right' || t.align==='end'){ x = t.x+t.w-1; align = 'right'; }
+    const y = t.y + t.h/2 + fs*0.32;
+    try{ doc.text(t.s, x, y, {renderingMode:'invisible', align, maxWidth: t.w+6}); }catch(e){}
+  });
   return doc.output('blob');
 }
 
@@ -2019,8 +1921,8 @@ function buildHtmlEmail(prefixHtml, days){
       h += '<td style="'+B+'background:#D7E3BC;font-size:11px;text-align:center">'+fmtNum(rowTot)+'</td></tr>';
     }
   }
-  // per-day task totals
-  h += '<tr><td colspan="5" style="border:none;text-align:right;font-size:10px;color:#666;padding-right:6px">DAILY TASK TOTALS</td>';
+  // bare per-day task totals under the grid (just numbers, exactly like the sheet — no label)
+  h += '<tr><td colspan="5" style="border:none"></td>';
   for(const d of DYS) h += '<td style="border:none;font-size:11px;text-align:center">'+fmtNum(dayTaskTot[d])+'</td>';
   h += '<td style="border:none;font-size:11px;text-align:center;font-weight:bold">'+fmtNum(grand)+'</td></tr>';
   h += '</table>';
@@ -2201,14 +2103,14 @@ function bindEmailButtons(){
   });
   document.getElementById('btnPdf').onclick = ev=>withBusy(ev.currentTarget, async ()=>{
     if(!ensureRecipient()) return;
-    toast('📄 Building the searchable PDF…');
-    const pdf = buildSearchablePdf(sendDays());
+    toast('📄 Building the PDF…');
+    const pdf = await buildSearchablePdf(sendDays());
     deliverEml(buildEml({kind:'pdf', attachB64: await blobToBase64(pdf), name: fileBase()+'.pdf', msgHtml: msgParts().html}),
-               '📄', 'your message and the searchable PDF attached');
+               '📄', 'your message and the PDF (an exact copy of the sheet) attached');
   });
   document.getElementById('btnSavePdf').onclick = ev=>withBusy(ev.currentTarget, async ()=>{
-    toast('⬇ Building the searchable PDF…');
-    download(fileBase()+'.pdf', buildSearchablePdf(sendDays()));
+    toast('⬇ Building the PDF…');
+    download(fileBase()+'.pdf', await buildSearchablePdf(sendDays()));
     toast('⬇ <b>'+fileBase()+'.pdf</b> saved — you can select and copy its text.', 8000);
   });
 }
