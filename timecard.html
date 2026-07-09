@@ -83,6 +83,7 @@
     padding:7px 12px;cursor:pointer;font-size:13px;white-space:nowrap}
   .btn:hover{background:#4b5563}
   .btn:disabled{opacity:.5;cursor:wait}
+  #btnUndo:disabled,#btnRedo:disabled{opacity:.4;cursor:default}
   .btn.send{background:#2563eb;border-color:#3b82f6;font-weight:bold}
   .btn.send:hover{background:#1d4ed8}
   #weekPick{border:1px solid #4b5563;background:#111827;color:#fff;border-radius:6px;
@@ -293,6 +294,11 @@
     <input type="date" id="weekPick">
     <button class="btn" id="nextWk" title="Next week">▶</button>
     <button class="btn" id="thisWk">This Week</button>
+  </div>
+  <div class="sep"></div>
+  <div class="grp">
+    <button class="btn" id="btnUndo" title="Undo (Ctrl+Z)" disabled>↶ Undo</button>
+    <button class="btn" id="btnRedo" title="Redo (Ctrl+Shift+Z)" disabled>↷ Redo</button>
   </div>
   <div class="sep"></div>
   <div class="grp">
@@ -908,11 +914,24 @@ if(!Array.isArray(state.settings.colWidths) || state.settings.colWidths.length!=
   state.settings.colWidths = DEFAULT_COLW.slice();
 
 let saveTimer = null;
+// ---- undo / redo: snapshots of the whole state, captured when edits settle ----
+let undoStack = [], redoStack = [], undoBase = null, restoring = false;
+const UNDO_CAP = 150;
 function save(){
   clearTimeout(saveTimer);
   saveTimer = setTimeout(()=>{
-    try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
+    const cur = JSON.stringify(state);
+    try{ localStorage.setItem(LS_KEY, cur); }
     catch(e){ toast('⚠ Could not save — browser storage is blocked or full.'); }
+    if(!restoring){
+      if(undoBase!==null && cur!==undoBase){          // a settled change -> one undo step
+        undoStack.push(undoBase);
+        if(undoStack.length>UNDO_CAP) undoStack.shift();
+        redoStack.length = 0;                          // a fresh edit invalidates redo
+      }
+      undoBase = cur;
+      updateUndoButtons();
+    }
   }, 250);
 }
 
@@ -1290,6 +1309,10 @@ function bindSheetInputs(){
 }
 
 function commitValue(inp, finalize){
+  // ignore commits while restoring an undo/redo snapshot, and stale commits from a
+  // cell that a re-render has already removed (a late blur/change would otherwise
+  // write its old value back into the just-restored state)
+  if(restoring || !document.contains(inp)) return;
   const w = week();
   let v = inp.value;
   if(finalize){
@@ -2476,6 +2499,81 @@ function bindTheme(){
   applyTheme();
 }
 
+/* ---------------- undo / redo ---------------- */
+function updateUndoButtons(){
+  const u = document.getElementById('btnUndo'), r = document.getElementById('btnRedo');
+  if(u) u.disabled = undoStack.length===0;
+  if(r) r.disabled = redoStack.length===0;
+}
+// rebuild every on-screen control from the (restored) state object
+function syncUIFromState(){
+  [['empName','employee'],['empMgr','manager'],['empPhone','phone'],['empMail','email']]
+    .forEach(([id,k])=>{ const el=document.getElementById(id); if(el) el.value=state.settings[k]||''; });
+  ['co1','co2','co3'].forEach(id=>{ const el=document.getElementById(id); if(el && state.settings[id]!=null) el.textContent=state.settings[id]; });
+  [['setTo','emailTo'],['setCc','emailCc'],['setSubject','subject'],['setMessage','message']]
+    .forEach(([id,k])=>{ const el=document.getElementById(id); if(el) el.value=state.settings[k]||''; });
+  const cd=document.getElementById('subDaily'), cw=document.getElementById('subWeekly');
+  if(cd&&cw){ const wk=resolvedWeekly(); cd.checked=!wk; cw.checked=wk; }
+  const fe=document.getElementById('fmtEml'), fm=document.getElementById('fmtMsg');
+  if(fe&&fm){ const msg=state.settings.sendFormat==='msg'; fe.checked=!msg; fm.checked=msg; }
+  const sp=document.getElementById('subjPreview'); if(sp) sp.textContent='→  '+subjectText();
+  applyTheme();
+  renderWeek();                       // rebuilds the sheet, legends, section names, column widths
+}
+function applyStateSnapshot(json){
+  restoring = true;
+  state = JSON.parse(json);
+  undoBase = json;
+  try{ localStorage.setItem(LS_KEY, json); }catch(e){}
+  if(!state.weeks[weekKey]){          // keep showing a week that still exists
+    const keys = Object.keys(state.weeks).sort();
+    if(keys.length) weekKey = keys[keys.length-1];
+  }
+  syncUIFromState();
+  restoring = false;
+  updateUndoButtons();
+}
+function undo(){
+  closePopups();
+  restoring = true;                                  // block cell commits from mutating state during the switch
+  if(document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  clearTimeout(saveTimer);
+  const cur = JSON.stringify(state);
+  if(undoBase!==null && cur!==undoBase){             // fold a not-yet-saved edit in as its own step
+    undoStack.push(undoBase); undoBase = cur; redoStack.length = 0;
+  }
+  if(!undoStack.length){ restoring = false; toast('↶ Nothing to undo.', 2000); updateUndoButtons(); return; }
+  redoStack.push(cur);
+  applyStateSnapshot(undoStack.pop());               // resets restoring = false
+  toast('↶ Undo', 1200);
+}
+function redo(){
+  closePopups();
+  restoring = true;
+  if(document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  clearTimeout(saveTimer);
+  if(!redoStack.length){ restoring = false; toast('↷ Nothing to redo.', 2000); return; }
+  undoStack.push(JSON.stringify(state));
+  applyStateSnapshot(redoStack.pop());
+  toast('↷ Redo', 1200);
+}
+function bindUndo(){
+  document.getElementById('btnUndo').onclick = undo;
+  document.getElementById('btnRedo').onclick = redo;
+  document.addEventListener('keydown', e=>{
+    if(!(e.ctrlKey||e.metaKey) || e.altKey) return;
+    const k = (e.key||'').toLowerCase();
+    const ae = document.activeElement;
+    if(ae && ae.id==='searchInp') return;           // let the search box keep its own text undo
+    if(k==='z' || e.code==='KeyZ'){
+      e.preventDefault();
+      e.shiftKey ? redo() : undo();                  // Ctrl+Z undo · Ctrl+Shift+Z redo
+    }else if(k==='y' || e.code==='KeyY'){            // Ctrl+Y also redoes (Windows convention)
+      e.preventDefault(); redo();
+    }
+  });
+}
+
 /* ---------------- init ---------------- */
 bindSheetInputs();
 bindHeader();
@@ -2485,7 +2583,10 @@ bindEmailButtons();
 bindSearch();
 bindTheme();
 bindColResize();
+bindUndo();
 renderWeek();
+undoBase = JSON.stringify(state);       // baseline for undo (after the current week is materialised)
+updateUndoButtons();
 if(!state.settings.emailTo){
   toast('👋 Welcome! Open <b>⚙ Settings</b> once to save the email address and CCs you send your timecard to. Everything you type in the sheet is saved automatically in this browser.', 12000);
 }
