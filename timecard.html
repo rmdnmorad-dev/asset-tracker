@@ -2003,6 +2003,38 @@ function buildProps(headerBytes, props){
   return streams;
 }
 function _streamEntry(name,arr){ return {name, type:'stream', data:new Uint8Array(arr)}; }
+/* Classic Outlook renders a message from its RTF body. To show HTML (formatted
+   table + inline cid image) instead of plain text, the HTML is wrapped as
+   "encapsulated HTML" RTF (\fromhtml1 with the markup inside an \*\htmltag
+   destination) and stored uncompressed in PidTagRtfCompressed. */
+function _rtfEscHtml(s){
+  let o='';
+  for(let i=0;i<s.length;i++){
+    const c=s.charCodeAt(i), ch=s[i];
+    if(ch==='\\') o+='\\\\';
+    else if(ch==='{') o+='\\{';
+    else if(ch==='}') o+='\\}';
+    else if(c===13||c===10) o+='';                      // raw CR/LF are insignificant in the markup
+    else if(c<128) o+=ch;
+    else o+='\\u'+(c>=0x8000?c-0x10000:c)+'?';          // non-ASCII -> RTF signed-16-bit unicode
+  }
+  return o;
+}
+function htmlToEncapsulatedRtf(html){
+  return '{\\rtf1\\ansi\\ansicpg1252\\fromhtml1\\deff0'+
+         '{\\fonttbl{\\f0\\fswiss Arial;}{\\f1\\fmodern Courier New;}}'+
+         '{\\*\\htmltag '+_rtfEscHtml(html)+'}}';
+}
+function rtfCompressedFromHtml(html){
+  const rtf=htmlToEncapsulatedRtf(html);
+  const raw=[]; for(let i=0;i<rtf.length;i++) raw.push(rtf.charCodeAt(i)&0xFF);   // RTF is ASCII (unicode via \u)
+  const out=[];
+  _u32le(raw.length+12).forEach(b=>out.push(b));   // COMPSIZE = 12 + RAWSIZE
+  _u32le(raw.length).forEach(b=>out.push(b));       // RAWSIZE
+  _u32le(0x414C454D).forEach(b=>out.push(b));       // COMPTYPE 'MELA' = stored uncompressed
+  _u32le(0).forEach(b=>out.push(b));                // CRC = 0 for uncompressed
+  return new Uint8Array(out.concat(raw));
+}
 // opt: {subject, bodyText, bodyHtml, to:[{name,email}], cc:[...], attachments:[{name,mime,data,cid?}]}
 function buildMsg(opt){
   const top=[];
@@ -2026,6 +2058,11 @@ function buildMsg(opt){
     msgProps.push({id:0x1013,type:PT_BINARY,value:new TextEncoder().encode(html)});
     msgProps.push({id:0x3FDE,type:PT_LONG,value:65001});
     msgProps.push({id:0x3FFD,type:PT_LONG,value:65001});
+    msgProps.push({id:0x1016,type:PT_LONG,value:3});            // PidTagNativeBody = HTML (render the HTML body, not plain text)
+    // Classic Outlook renders the RTF body; store the HTML encapsulated in RTF
+    // so the table formatting and inline image show instead of the plain text.
+    msgProps.push({id:0x1009,type:PT_BINARY,value:rtfCompressedFromHtml(html)});
+    msgProps.push({id:0x0E1F,type:PT_BOOL,value:0});            // PidTagRtfInSync = false
   }
   const th=[]; for(let i=0;i<8;i++) th.push(0);
   const nRecip=(opt.to||[]).length+(opt.cc||[]).length, nAtt=(opt.attachments||[]).length;
@@ -2051,11 +2088,15 @@ function buildMsg(opt){
     const ah=new Array(8).fill(0);
     const props=[
       {id:0x0FFE,type:PT_LONG,value:7}, {id:0x0E21,type:PT_LONG,value:idx},
-      {id:0x3705,type:PT_LONG,value:1}, {id:0x370B,type:PT_LONG,value:a.cid?0:0xFFFFFFFF},
+      {id:0x3705,type:PT_LONG,value:1}, {id:0x370B,type:PT_LONG,value:0xFFFFFFFF},  // RenderingPosition = -1 (not placed in the text flow)
       {id:0x3704,type:PT_UNICODE,value:a.name}, {id:0x3707,type:PT_UNICODE,value:a.name},
       {id:0x370E,type:PT_UNICODE,value:a.mime||'application/octet-stream'},
       {id:0x3701,type:PT_BINARY,value:a.data} ];
-    if(a.cid){ props.push({id:0x3712,type:PT_UNICODE,value:a.cid}); props.push({id:0x3714,type:PT_LONG,value:4}); }
+    if(a.cid){
+      props.push({id:0x3712,type:PT_UNICODE,value:a.cid});   // PidTagAttachContentId (matches <img src="cid:...">)
+      props.push({id:0x3714,type:PT_LONG,value:4});          // PidTagAttachFlags = ATT_MHTML_REF (inline)
+      props.push({id:0x7FFE,type:PT_BOOL,value:1});          // PidTagAttachmentHidden -> not shown in the attachment list
+    }
     top.push({name:'__attach_version1.0_#'+idx.toString(16).toUpperCase().padStart(8,'0'), type:'storage', children:buildProps(ah,props)});
   });
   return buildCompoundFile(top);
