@@ -335,8 +335,8 @@
       <textarea id="setMessage" placeholder="Hi, hope you are all doing well.&#10;Please find my timecard below."></textarea></div>
     <div class="fld"><span>DRAFT FILE FORMAT — the file each send button creates</span>
       <div class="subchecks">
-        <label><input type="checkbox" id="fmtEml"> .eml <span style="color:#888;font-weight:normal">— Outlook, Apple Mail, Windows Mail</span></label>
-        <label><input type="checkbox" id="fmtMsg"> .msg <span style="color:#888;font-weight:normal">— Outlook desktop (classic &amp; new)</span></label>
+        <label><input type="checkbox" id="fmtEml"> .eml <span style="color:#888;font-weight:normal">— recommended · opens as a ready draft in classic Outlook, Apple Mail, Windows Mail</span></label>
+        <label><input type="checkbox" id="fmtMsg"> .msg <span style="color:#888;font-weight:normal">— classic Outlook desktop only (new Outlook can only attach it)</span></label>
       </div></div>
   </div>
 
@@ -348,8 +348,12 @@
     📝 <b>Text</b> — the whole timecard is written out as a table in the body.<br>
     📄 <b>PDF</b> — the searchable, exact-copy PDF is attached under your message.<br>
     ⚡ <i>One time:</i> right-click the file in the download bar → <b>“Always open files of this type”</b> and every
-    send after that pops the finished email open by itself. If <b>new Outlook</b> ever says a <b>.eml</b> “couldn’t be
-    attached”, either turn its <b>“New Outlook”</b> switch (top-right) off once, or pick <b>.msg</b> above.
+    send after that pops the finished email open by itself.<br>
+    ℹ️ <b>Which format?</b> Use <b>.eml</b> — it opens as a ready-to-send draft in classic Outlook, Apple Mail and
+    Windows Mail. Only use <b>.msg</b> if you are on <b>classic Outlook desktop</b>; the new (redesigned) Outlook can
+    <i>only attach</i> a .msg, it can’t open it as a draft — that’s a Microsoft limitation, so on new Outlook stick
+    with .eml. If new Outlook ever says a .eml “couldn’t be attached”, turn its <b>“New Outlook”</b> switch
+    (top-right) off once.
   </div>
   <div class="hint" style="margin-top:10px">
     🧠 <b>Drop-down memory:</b> every value you type in the sheet is remembered and offered as a drop-down
@@ -1882,10 +1886,19 @@ function buildCompoundFile(topChildren){
   assign(root);
   function makeTree(nodes){
     nodes=nodes.slice().sort((a,b)=>cmp(a.name,b.name));
-    function build(lo,hi){ if(lo>hi) return _NOSTREAM;
+    let maxDepth=0;
+    function build(lo,hi,depth){ if(lo>hi) return _NOSTREAM;
       const mid=(lo+hi)>>1, n=nodes[mid];
-      n.left=build(lo,mid-1); n.right=build(mid+1,hi); return n.id; }
-    return build(0,nodes.length-1);
+      n._depth=depth; if(depth>maxDepth) maxDepth=depth;
+      n.left=build(lo,mid-1,depth+1); n.right=build(mid+1,hi,depth+1);
+      n._leaf=(n.left===_NOSTREAM && n.right===_NOSTREAM);
+      return n.id; }
+    const rootId=build(0,nodes.length-1,0);
+    // a sorted-array balanced BST has leaves on the two deepest levels only;
+    // colouring the deepest-level leaves red yields a valid red-black tree,
+    // which the Windows compound-file reader (used by classic Outlook) expects.
+    nodes.forEach(n=>{ n.red = (n._leaf && n._depth===maxDepth && n.id!==rootId); });
+    return rootId;
   }
   dir.forEach(n=>{ n.left=_NOSTREAM; n.right=_NOSTREAM; n.child=_NOSTREAM; });
   dir.forEach(n=>{ if(n.children && n.children.length) n.child=makeTree(n.children); });
@@ -1951,7 +1964,7 @@ function buildCompoundFile(topChildren){
       at(o, nameField);
       at(o+64, _u16le(Math.min(nb.length,64)));
       out[o+66]= n.type==='root'?5 : n.type==='storage'?1 : 2;
-      out[o+67]=1;
+      out[o+67]= n.red ? 0 : 1;                                // 0 = red, 1 = black
       at(o+68,_u32le(n.left)); at(o+72,_u32le(n.right)); at(o+76,_u32le(n.child));
       at(o+80,new Array(16).fill(0)); at(o+96,_u32le(0)); at(o+100,new Array(16).fill(0));
       const startSec = n.type==='root' ? (root.start===_ENDOFCHAIN?_ENDOFCHAIN:miniStreamBase)
@@ -2005,6 +2018,7 @@ function buildMsg(opt){
     {id:0x1000,type:PT_UNICODE,value:opt.bodyText||''},
     {id:0x0E07,type:PT_LONG,value:0x08},          // MSGFLAG_UNSENT -> opens as editable draft
     {id:0x0E1B,type:PT_BOOL,value:hasAtt?1:0},
+    {id:0x340D,type:PT_LONG,value:0x00040000},    // PidTagStoreSupportMask: STORE_UNICODE_OK
   ];
   if(opt.bodyHtml){
     let html=opt.bodyHtml;
@@ -2346,7 +2360,8 @@ function sendDraft(kind, payload, icon, what){
   }
   download(fileBase()+ext, blob);                     // silent — no dialogs
   const note = fmt==='msg'
-    ? '<br><span style="opacity:.9">📎 The <b>.msg</b> opens straight in the Outlook desktop app. If a double-click doesn’t open it, right-click → <b>Open with → Outlook</b>.</span>'
+    ? '<br><span style="opacity:.9">📎 Double-click the <b>.msg</b> to open it in <b>classic Outlook desktop</b>. '+
+      'Note: the <b>new</b> (redesigned) Outlook can only <i>attach</i> a .msg, not open it as a draft — on new Outlook use <b>.eml</b> in Settings instead.</span>'
     : AUTOTIP + (hasFile
       ? '<br><span style="opacity:.9">⚠ If <b>new Outlook</b> says “couldn’t be attached”, that’s its known .eml bug — flip the <b>“New Outlook”</b> switch (top-right) <b>off</b> once, or pick <b>.msg</b> in Settings instead.</span>'
       : '');
