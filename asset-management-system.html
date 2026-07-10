@@ -1129,6 +1129,10 @@
                     <i class="fas fa-history"></i>
                     <span>Asset History</span>
                 </div>
+                <div class="nav-item" data-page="pcassets">
+                    <i class="fas fa-desktop"></i>
+                    <span>PC Assets</span>
+                </div>
             </div>
 
             <div class="nav-section">
@@ -1397,6 +1401,63 @@
                         </table>
                     </div>
                 </div>
+
+                <!-- PC ASSETS PAGE (client-side only, no external database) -->
+                <div class="page" id="pcassets">
+                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                        <div>
+                            <button class="btn btn-primary" id="addPcBtn">
+                                <i class="fas fa-plus"></i> Add PC
+                            </button>
+                            <button class="btn btn-secondary ms-2" id="importPcBtn">
+                                <i class="fas fa-upload"></i> Import PC List
+                            </button>
+                            <button class="btn btn-secondary ms-2" id="exportPcBtn">
+                                <i class="fas fa-download"></i> Export CSV
+                            </button>
+                            <button class="btn btn-danger ms-2" id="clearPcBtn">
+                                <i class="fas fa-trash"></i> Clear List
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2 mb-3 flex-wrap">
+                        <select class="form-select" style="width: 150px;" id="pcTypeFilter">
+                            <option value="">All Types</option>
+                        </select>
+                        <select class="form-select" style="width: 200px;" id="pcDivisionFilter">
+                            <option value="">All Divisions</option>
+                        </select>
+                        <input type="text" class="form-control" style="width: 240px;" id="pcSearchInput" placeholder="Search name, tag, engineer, model...">
+                    </div>
+
+                    <div class="kpi-section" id="pcKpiCards"></div>
+
+                    <div class="charts-grid" id="pcChartsContainer"></div>
+
+                    <div class="table-wrapper">
+                        <table class="table" id="pcTable">
+                            <thead>
+                                <tr>
+                                    <th class="sortable" data-table="pc" data-col="0">Name</th>
+                                    <th class="sortable" data-table="pc" data-col="1">Type</th>
+                                    <th class="sortable" data-table="pc" data-col="2">Model#</th>
+                                    <th class="sortable" data-table="pc" data-col="3">Service Tag#</th>
+                                    <th class="sortable" data-table="pc" data-col="4">Engineer</th>
+                                    <th class="sortable" data-table="pc" data-col="5">Division</th>
+                                    <th class="sortable" data-table="pc" data-col="6">Ship Date</th>
+                                    <th class="sortable" data-table="pc" data-col="7">Years Old</th>
+                                    <th class="sortable" data-table="pc" data-col="8">Shipped From</th>
+                                    <th class="sortable" data-table="pc" data-col="9">Customs/Tax</th>
+                                    <th class="sortable" data-table="pc" data-col="10">Storage</th>
+                                    <th class="sortable" data-table="pc" data-col="11">Notes</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="pcTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -1537,9 +1598,9 @@
         </div>
     </div>
 
-    <!-- Import Preview Modal -->
+    <!-- Asset Import Modal (paste or upload) -->
     <div class="modal" id="importPreviewModal">
-        <div class="modal-content" style="max-width: 800px;">
+        <div class="modal-content" style="max-width: 900px;">
             <div class="modal-header">
                 <h2>Import Assets</h2>
                 <button class="modal-close" onclick="closeImportPreviewModal()">
@@ -1547,26 +1608,43 @@
                 </button>
             </div>
             <div class="modal-body">
-                <div id="importPreviewSummary" style="margin-bottom: 1rem; color: var(--text-secondary);"></div>
-                <div class="table-wrapper" style="max-height: 350px; overflow-y: auto;">
-                    <table class="table" id="importPreviewTable">
-                        <thead>
-                            <tr>
-                                <th>Tag</th>
-                                <th>Model</th>
-                                <th>Category</th>
-                                <th>Assigned To</th>
-                                <th>Assigned On</th>
-                                <th>Note</th>
-                            </tr>
-                        </thead>
-                        <tbody id="importPreviewTableBody"></tbody>
-                    </table>
+                <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: .75rem;">
+                    Paste rows copied straight from Excel/Sheets (including the header row), or upload a CSV/XLSX/JSON file.
+                    Expected columns: <strong>Asset #, Category, Owner, Location, Assignment Date, Returned Date, Return Condtion, Notes</strong>
+                    (extra columns and different spellings are handled automatically).
+                    Multiple rows for the same asset tag are merged into one asset with its full assignment history.
+                </p>
+                <textarea class="form-control" id="assetImportTextarea" rows="8" style="font-family:'Courier New',monospace;font-size:12px;" placeholder="Paste your asset table here (with header row)...&#10;Asset #	Category	Owner	Location	Assignment Date	Returned Date	Return Condtion	Notes&#10;ADP-67	Adapters	Zaineh Jamil	F3-A4	1/0/1900"></textarea>
+                <div class="d-flex gap-2 mt-2">
+                    <button class="btn btn-secondary" id="assetImportFileBtn">
+                        <i class="fas fa-file-upload"></i> Upload CSV/XLSX/JSON
+                    </button>
+                    <button class="btn btn-primary" id="assetImportParseBtn">
+                        <i class="fas fa-magic"></i> Parse Data
+                    </button>
+                </div>
+                <div id="importPreviewWrap" style="display:none; margin-top: 1.25rem;">
+                    <div id="importPreviewSummary" style="margin-bottom: 1rem; color: var(--text-secondary);"></div>
+                    <div class="table-wrapper" style="max-height: 350px; overflow-y: auto;">
+                        <table class="table" id="importPreviewTable">
+                            <thead>
+                                <tr>
+                                    <th>Tag</th>
+                                    <th>Model</th>
+                                    <th>Category</th>
+                                    <th>Assigned To</th>
+                                    <th>Assigned On</th>
+                                    <th>Note</th>
+                                </tr>
+                            </thead>
+                            <tbody id="importPreviewTableBody"></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeImportPreviewModal()">Cancel</button>
-                <button class="btn btn-primary" id="confirmImportBtn">Confirm Import</button>
+                <button class="btn btn-primary" id="confirmImportBtn" style="display:none;">Confirm Import</button>
             </div>
         </div>
     </div>
@@ -1612,12 +1690,157 @@
         </div>
     </div>
 
+    <!-- Password Confirmation Modal (for destructive actions) -->
+    <div class="modal" id="passwordModal">
+        <div class="modal-content" style="max-width: 420px;">
+            <div class="modal-header">
+                <h2 id="passwordModalTitle">Password Required</h2>
+                <button class="modal-close" onclick="closePasswordModal(false)">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p id="passwordModalMessage" style="color: var(--text-secondary); margin-bottom: 1.25rem;"></p>
+                <div class="form-group" style="margin-bottom: 0.5rem;">
+                    <label>Password</label>
+                    <input type="password" class="form-control" id="passwordModalInput" autocomplete="off" placeholder="Enter password...">
+                    <small id="passwordModalError" style="display:none; color: var(--danger-color); margin-top: 6px;">
+                        <i class="fas fa-exclamation-circle"></i> Incorrect password. Please try again.
+                    </small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closePasswordModal(false)">Cancel</button>
+                <button class="btn btn-danger" id="passwordModalConfirmBtn" onclick="submitPasswordModal()">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PC Modal (Add/Edit) -->
+    <div class="modal" id="pcModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="pcModalTitle">Add PC</h2>
+                <button class="modal-close" onclick="closePcModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Name *</label>
+                    <input type="text" class="form-control" id="pcName" placeholder="e.g. LMWS162">
+                </div>
+                <div class="form-group">
+                    <label>Type *</label>
+                    <select class="form-select" id="pcType">
+                        <option value="Laptop">Laptop</option>
+                        <option value="Station">Station</option>
+                        <option value="Desktop">Desktop</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Model#</label>
+                    <input type="text" class="form-control" id="pcModel" placeholder="e.g. Precision Tower 5810">
+                </div>
+                <div class="form-group">
+                    <label>Service Tag#</label>
+                    <input type="text" class="form-control" id="pcServiceTag">
+                </div>
+                <div class="form-group">
+                    <label>Engineer</label>
+                    <input type="text" class="form-control" id="pcEngineer" placeholder="Available">
+                </div>
+                <div class="form-group">
+                    <label>Division</label>
+                    <input type="text" class="form-control" id="pcDivision" placeholder="In Stock">
+                </div>
+                <div class="form-group">
+                    <label>Ship Date</label>
+                    <input type="date" class="form-control" id="pcShipDate">
+                </div>
+                <div class="form-group">
+                    <label>Years Old</label>
+                    <input type="number" class="form-control" id="pcYearsOld" min="0" step="1">
+                </div>
+                <div class="form-group">
+                    <label>Shipped From</label>
+                    <input type="text" class="form-control" id="pcShippedFrom" placeholder="e.g. US">
+                </div>
+                <div class="form-group">
+                    <label>Customs/Tax</label>
+                    <input type="text" class="form-control" id="pcCustomsTax">
+                </div>
+                <div class="form-group">
+                    <label>Storage</label>
+                    <input type="text" class="form-control" id="pcStorage" placeholder="e.g. 512 GB">
+                </div>
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea class="form-control" id="pcNotes" rows="2"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closePcModal()">Cancel</button>
+                <button class="btn btn-primary" id="savePcBtn">Save PC</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PC Import Modal -->
+    <div class="modal" id="pcImportModal">
+        <div class="modal-content" style="max-width: 900px;">
+            <div class="modal-header">
+                <h2>Import PC List</h2>
+                <button class="modal-close" onclick="closePcImportModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: .75rem;">
+                    Paste rows copied straight from Excel/Sheets (tab or comma separated) including the header row, or upload a CSV/XLSX file.
+                    Expected columns: <strong>Name, Type, Model#, Service tag#, Engineer, Division, Ship Date, Years old, Shipped From, Customs/Tax, Notes, Column1</strong>
+                    (the storage size is picked up automatically whether it sits under Notes or Column1).
+                    Re-importing updates existing PCs by Name instead of duplicating them. The list is saved in this browser &mdash; it is not sent to any database.
+                </p>
+                <textarea class="form-control" id="pcImportTextarea" rows="8" style="font-family:'Courier New',monospace;font-size:12px;" placeholder="Paste PC list data here (with header row)..."></textarea>
+                <div class="d-flex gap-2 mt-2">
+                    <button class="btn btn-secondary" id="pcImportFileBtn">
+                        <i class="fas fa-file-upload"></i> Upload CSV/XLSX
+                    </button>
+                    <button class="btn btn-primary" id="pcImportParseBtn">
+                        <i class="fas fa-magic"></i> Parse Data
+                    </button>
+                </div>
+                <div id="pcImportPreviewWrap" style="display:none; margin-top: 1.25rem;">
+                    <div id="pcImportSummary" style="margin-bottom: .75rem; color: var(--text-secondary);"></div>
+                    <div class="table-wrapper" style="max-height: 320px; overflow-y: auto;">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th><th>Type</th><th>Model#</th><th>Tag#</th>
+                                    <th>Engineer</th><th>Division</th><th>Ship Date</th><th>Years</th><th>Storage</th>
+                                </tr>
+                            </thead>
+                            <tbody id="pcImportPreviewBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closePcImportModal()">Cancel</button>
+                <button class="btn btn-primary" id="pcImportConfirmBtn" style="display:none;">Confirm Import</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Container -->
     <div class="toast-container" id="toastContainer"></div>
 
     <!-- Hidden file inputs -->
     <input type="file" id="importAssetInput" style="display:none;" accept=".csv,.xlsx,.xls,.json">
     <input type="file" id="importDbInput" style="display:none;" accept=".json">
+    <input type="file" id="pcImportFileInput" style="display:none;" accept=".csv,.xlsx,.xls">
 
     <!-- Scripts -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
@@ -1870,6 +2093,46 @@
             }
         };
 
+        // ==================== PASSWORD-PROTECTED CONFIRM ====================
+        const CLEAR_DATA_PASSWORD = '12341423';
+        let passwordModalResolve = null;
+
+        // Shows a modal that requires typing the correct password before it
+        // resolves true. Cancel / close resolves false. Wrong password keeps
+        // the modal open and shows an inline error.
+        const showPasswordConfirm = (message, title = 'Password Required', confirmLabel = 'Confirm') => {
+            document.getElementById('passwordModalTitle').textContent = title;
+            document.getElementById('passwordModalMessage').textContent = message;
+            document.getElementById('passwordModalConfirmBtn').textContent = confirmLabel;
+            document.getElementById('passwordModalInput').value = '';
+            document.getElementById('passwordModalError').style.display = 'none';
+            document.getElementById('passwordModal').classList.add('active');
+            setTimeout(() => document.getElementById('passwordModalInput').focus(), 50);
+
+            return new Promise((resolve) => {
+                passwordModalResolve = resolve;
+            });
+        };
+
+        const closePasswordModal = (result) => {
+            document.getElementById('passwordModal').classList.remove('active');
+            if (passwordModalResolve) {
+                passwordModalResolve(result);
+                passwordModalResolve = null;
+            }
+        };
+
+        const submitPasswordModal = () => {
+            const input = document.getElementById('passwordModalInput');
+            if (input.value === CLEAR_DATA_PASSWORD) {
+                closePasswordModal(true);
+            } else {
+                document.getElementById('passwordModalError').style.display = 'block';
+                input.value = '';
+                input.focus();
+            }
+        };
+
         // ==================== UI CONTROLS ====================
         const switchPage = (pageName) => {
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -1889,7 +2152,8 @@
                 assignments: { title: 'Assignments', subtitle: 'View assignment history' },
                 history: { title: 'Asset History', subtitle: 'Track who had what, and when' },
                 reports: { title: 'Reports', subtitle: 'Export and analyze data' },
-                settings: { title: 'Settings', subtitle: 'System configuration' }
+                settings: { title: 'Settings', subtitle: 'System configuration' },
+                pcassets: { title: 'PC Assets', subtitle: 'PC / workstation inventory (stored in this browser)' }
             };
 
             if (titles[pageName]) {
@@ -1913,6 +2177,8 @@
                 setTimeout(loadReports, 100);
             } else if (pageName === 'settings') {
                 setTimeout(loadSettings, 100);
+            } else if (pageName === 'pcassets') {
+                setTimeout(loadPcAssets, 100);
             }
         };
 
@@ -3333,7 +3599,11 @@
         };
 
         const clearDatabase = async () => {
-            if (!await showConfirm('This will delete ALL data including assets, employees, and assignments. This cannot be undone.', 'Clear Entire Database?', 'Clear Everything')) return;
+            if (!await showPasswordConfirm(
+                'This will delete ALL data including assets, employees, and assignments. This cannot be undone. Enter the password to continue.',
+                'Clear Entire Database?',
+                'Clear Everything'
+            )) return;
             try {
                 await clearStore('assignments');
                 await clearStore('assets');
@@ -3407,6 +3677,48 @@
             return null;
         };
 
+        // Maps the close-but-different category spellings that show up in
+        // imported sheets ("Keyboard", "Laptop Stand", "Power Extention"...)
+        // onto the app's canonical category names, so imported assets match
+        // the category filter dropdown instead of creating near-duplicates.
+        const canonicalizeImportCategory = (rawCategory, tag) => {
+            const raw = (rawCategory || '').toString().trim();
+            const source = raw || deriveCategoryFromTag(tag) || '';
+            if (!source) return 'Other';
+            const lower = source.toLowerCase();
+            if (lower.includes('headset')) return 'Headsets';
+            if (lower.includes('keyboard')) return 'Keyboards';
+            if (lower.includes('monitor')) return 'Monitors';
+            if (lower.includes('mouse')) return 'Mouse';
+            if (lower.includes('cable')) return 'Cables';
+            if (lower.includes('desk')) return 'Desks';
+            if (lower.includes('chair')) return 'Chairs';
+            if (lower.includes('adapter')) return 'Adapters';
+            if (lower.includes('laptop stand')) return 'Laptop Stands';
+            if (lower.includes('power') || lower.includes('extension') || lower.includes('extention')) return 'Power Extensions';
+            if (lower.includes('dock')) return 'Docking Station';
+            return source;
+        };
+
+        // Return conditions arrive as free text ("Great", "Satisfactory",
+        // sometimes even a date typed into the wrong column). Map them onto
+        // the app's Good / Bad / Poor conditions; unknown values pass through.
+        const canonicalizeImportCondition = (raw) => {
+            const str = (raw || '').toString().trim();
+            if (!str) return '';
+            // A date accidentally typed in the condition column - ignore it
+            if (/\d{1,2}\/\d{1,2}\/\d{4}/.test(str) || /^\d{4}-\d{1,2}-\d{1,2}/.test(str)) return '';
+            const lower = str.toLowerCase();
+            if (lower.includes('good') || lower.includes('great') || lower.includes('satisfactory')) return 'Good';
+            if (lower.includes('poor')) return 'Poor';
+            if (lower.includes('bad')) return 'Bad';
+            return str;
+        };
+
+        // Rows that aren't real assets: personally-owned items marked "Owned",
+        // Excel formula errors, and stray header rows pasted mid-data.
+        const IMPORT_SKIP_TAGS = new Set(['owned', '#value!', '#ref!', '#n/a', 'n/a', 'asset', 'asset#']);
+
         // Excel/Sheet date cells often arrive as JS Date objects (from SheetJS),
         // "M/D/YYYY" strings, or "YYYY-MM-DD" strings. Converting these naively
         // with `new Date(x).toLocaleDateString()` shifts the day backward for
@@ -3424,6 +3736,7 @@
                 // calendar day - read the UTC fields, not local fields, to avoid
                 // the timezone rollback.
                 const y = value.getUTCFullYear();
+                if (y <= 1900) return ''; // Excel "no date" placeholder
                 const m = String(value.getUTCMonth() + 1).padStart(2, '0');
                 const d = String(value.getUTCDate()).padStart(2, '0');
                 return `${y}-${m}-${d}`;
@@ -3432,9 +3745,16 @@
             const str = value.toString().trim();
             if (!str) return '';
 
+            // Excel sheets use "1/0/1900" (and similar) as a placeholder for
+            // "no date" - a month/day of 0 or a year of 1900 or earlier means
+            // the cell was really empty, so treat it as such.
+            const isJunkDate = (y, mo, d) =>
+                y <= 1900 || mo < 1 || mo > 12 || d < 1 || d > 31;
+
             // "YYYY-MM-DD" (already safe, just validate)
             let m = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
             if (m) {
+                if (isJunkDate(parseInt(m[1]), parseInt(m[2]), parseInt(m[3]))) return '';
                 const y = m[1], mo = m[2].padStart(2, '0'), d = m[3].padStart(2, '0');
                 return `${y}-${mo}-${d}`;
             }
@@ -3442,14 +3762,17 @@
             // "M/D/YYYY" or "MM/DD/YYYY" (the format in the user's sheet)
             m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
             if (m) {
+                if (isJunkDate(parseInt(m[3]), parseInt(m[1]), parseInt(m[2]))) return '';
                 const mo = m[1].padStart(2, '0'), d = m[2].padStart(2, '0'), y = m[3];
                 return `${y}-${mo}-${d}`;
             }
 
-            // Fallback: let Date parse it, but build the result from LOCAL
-            // fields (not UTC/ISO) so we don't introduce a shift.
-            const parsed = parseStoredDateSafe(str) || new Date();
-            if (isNaN(parsed.getTime())) return str; // give up, return as-is
+            // Fallback: let the safe parser try, but build the result from
+            // LOCAL fields (not UTC/ISO) so we don't introduce a shift. If it
+            // can't be parsed at all, treat it as "no date" rather than
+            // inventing one.
+            const parsed = parseStoredDateSafe(str);
+            if (!parsed || isNaN(parsed.getTime())) return '';
             const y = parsed.getFullYear();
             const mo = String(parsed.getMonth() + 1).padStart(2, '0');
             const d = String(parsed.getDate()).padStart(2, '0');
@@ -3484,17 +3807,25 @@
             if (mapped.assignmentDate) mapped.assignmentDate = normalizeImportDate(mapped.assignmentDate);
             if (mapped.unassignmentDate) mapped.unassignmentDate = normalizeImportDate(mapped.unassignmentDate);
             if (mapped.purchaseDate) mapped.purchaseDate = normalizeImportDate(mapped.purchaseDate);
+            // Tags never legitimately contain spaces - "CB- 257" is the same
+            // asset as "CB-257", just a typo in the sheet.
+            if (mapped.tag) mapped.tag = mapped.tag.toString().trim().replace(/\s+/g, '');
             return mapped;
         };
 
-        const parseCSVText = (text) => {
+        // Splits pasted / CSV text into row objects. Auto-detects tab vs comma
+        // delimiting, so a straight copy-paste from Excel/Sheets (tab-separated)
+        // works as well as a saved .csv file. Shared by the asset importer and
+        // the PC list importer.
+        const parseDelimitedText = (text) => {
             const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
             if (lines.length === 0) return [];
-            const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+            const delim = lines[0].includes('\t') ? '\t' : ',';
+            const headers = lines[0].split(delim).map(h => h.trim().replace(/^"|"$/g, ''));
             return lines.slice(1).map(line => {
-                const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+                const values = line.split(delim).map(v => v.trim().replace(/^"|"$/g, ''));
                 const obj = {};
-                headers.forEach((h, i) => { obj[h] = values[i] !== undefined ? values[i] : ''; });
+                headers.forEach((h, i) => { obj[h || `col${i}`] = values[i] !== undefined ? values[i] : ''; });
                 return obj;
             });
         };
@@ -3518,7 +3849,7 @@
                     reader.readAsText(file);
                 } else if (ext === 'csv') {
                     reader.onload = (e) => {
-                        try { resolve(parseCSVText(e.target.result)); }
+                        try { resolve(parseDelimitedText(e.target.result)); }
                         catch (err) { reject(err); }
                     };
                     reader.readAsText(file);
@@ -3543,7 +3874,13 @@
         // an "unassigned" row) get turned into ONE asset + a full assignment
         // history, instead of being treated as duplicate/conflicting assets.
         const buildImportPlan = (rawRows) => {
-            const mappedRows = rawRows.map(mapImportRow).filter(r => r.tag || r.name);
+            const mappedRows = rawRows.map(mapImportRow).filter(r => {
+                const t = (r.tag || r.name || '').toString().trim();
+                if (!t) return false;
+                if (IMPORT_SKIP_TAGS.has(t.toLowerCase())) return false;
+                if (!/[A-Za-z]/.test(t)) return false; // formula garbage / stray numbers
+                return true;
+            });
             const groups = {};
 
             mappedRows.forEach(r => {
@@ -3556,6 +3893,16 @@
             for (const [tagKey, rows] of Object.entries(groups)) {
                 const first = rows[0];
                 const hasMultipleRows = rows.length > 1;
+
+                // Use the last non-empty value across the tag's rows for
+                // condition/notes/location - later rows are more recent.
+                let latestCondition = '', latestNotes = '', latestLocation = '';
+                for (const r of rows) {
+                    const cond = canonicalizeImportCondition(r.condition);
+                    if (cond) latestCondition = cond;
+                    if (r.notes && r.notes.toString().trim()) latestNotes = r.notes.toString().trim();
+                    if (r.location && r.location.toString().trim()) latestLocation = r.location.toString().trim();
+                }
 
                 // Sort history rows by assignment date so the most recent ends up active.
                 const historyRows = rows
@@ -3586,11 +3933,10 @@
                     tag: (first.tag || first.name || '').toString().trim(),
                     name: (first.name || first.tag || '').toString().trim(),
                     model: first.model ? first.model.toString().trim() : '',
-                    category: (first.category ? first.category.toString().trim() : '')
-                        || deriveCategoryFromTag(first.tag || first.name)
-                        || 'Other',
-                    condition: first.condition ? first.condition.toString().trim() : 'Good',
-                    location: first.location ? first.location.toString().trim() : '',
+                    category: canonicalizeImportCategory(first.category, first.tag || first.name),
+                    condition: latestCondition || 'Good',
+                    location: latestLocation,
+                    notes: latestNotes,
                     price: parseFloat(first.price) || 0,
                     purchaseDate: first.purchaseDate ? first.purchaseDate.toString().trim() : '',
                     currentEmployeeName: currentHolderRow ? currentHolderRow.employeeName.toString().trim() : null,
@@ -3598,7 +3944,10 @@
                     history: historyRows.map(r => ({
                         employeeName: r.employeeName.toString().trim(),
                         assignmentDate: (r.assignmentDate || '').toString().trim(),
-                        unassignmentDate: (r.unassignmentDate || '').toString().trim() || null
+                        unassignmentDate: (r.unassignmentDate || '').toString().trim() || null,
+                        // Only the row identified as the current holder should
+                        // become an Active assignment on import.
+                        isCurrent: r === currentHolderRow
                     })),
                     duplicateCount: rows.length,
                     note
@@ -3607,7 +3956,40 @@
             return plan;
         };
 
-        const openImportPreviewModal = (plan) => {
+        // Opens the import modal fresh (empty paste box, no preview yet).
+        const openAssetImportModal = () => {
+            pendingImportRows = [];
+            document.getElementById('assetImportTextarea').value = '';
+            document.getElementById('importPreviewWrap').style.display = 'none';
+            document.getElementById('confirmImportBtn').style.display = 'none';
+            document.getElementById('importPreviewSummary').innerHTML = '';
+            document.getElementById('importPreviewTableBody').innerHTML = '';
+            document.getElementById('importPreviewModal').classList.add('active');
+        };
+
+        // Parses whatever is in the paste box and shows the preview.
+        const parseAssetImportText = () => {
+            const text = document.getElementById('assetImportTextarea').value;
+            if (!text.trim()) {
+                showToast('Paste your table data first (including the header row)', 'error');
+                return;
+            }
+            const rawRows = parseDelimitedText(text);
+            if (rawRows.length === 0) {
+                showToast('No rows found — make sure the header row is included', 'error');
+                return;
+            }
+            const plan = buildImportPlan(rawRows);
+            if (plan.length === 0) {
+                showToast('No valid asset rows found in the pasted data', 'error');
+                return;
+            }
+            showImportPlan(plan);
+        };
+
+        const IMPORT_PREVIEW_LIMIT = 200;
+
+        const showImportPlan = (plan) => {
             pendingImportRows = plan;
             const summaryEl = document.getElementById('importPreviewSummary');
             const tbody = document.getElementById('importPreviewTableBody');
@@ -3617,7 +3999,7 @@
                 (duplicateGroups > 0 ? ` <strong>${duplicateGroups}</strong> had duplicate rows (multiple employees and/or unassign entries) — these will be merged into one asset with a full assignment history, not created as separate duplicate assets.` : '');
 
             tbody.innerHTML = '';
-            plan.forEach(p => {
+            plan.slice(0, IMPORT_PREVIEW_LIMIT).forEach(p => {
                 const row = document.createElement('tr');
                 const modelDisplay = p.model || 'N/A';
                 row.innerHTML = `
@@ -3630,7 +4012,14 @@
                 `;
                 tbody.appendChild(row);
             });
+            if (plan.length > IMPORT_PREVIEW_LIMIT) {
+                const row = document.createElement('tr');
+                row.innerHTML = `<td colspan="6" class="text-center text-muted">... and ${plan.length - IMPORT_PREVIEW_LIMIT} more asset(s)</td>`;
+                tbody.appendChild(row);
+            }
 
+            document.getElementById('importPreviewWrap').style.display = 'block';
+            document.getElementById('confirmImportBtn').style.display = 'inline-flex';
             document.getElementById('importPreviewModal').classList.add('active');
         };
 
@@ -3639,39 +4028,86 @@
             document.getElementById('importAssetInput').value = '';
         };
 
-        // Finds an existing employee by name, or creates one on the fly so the
-        // imported history has someone valid to point at.
-        const findOrCreateEmployeeByName = async (name) => {
-            const trimmed = name.trim();
-            const employees = await getAllRecords('employees');
-            const existing = employees.find(e => e.name.trim().toLowerCase() === trimmed.toLowerCase());
-            if (existing) return existing;
-
-            const newId = await addRecord('employees', {
-                name: trimmed,
-                department: '',
-                jobTitle: '',
-                phone: '',
-                location: '',
-                email: '',
-                status: 'Active',
-                createdDate: new Date()
-            });
-            return { id: newId, name: trimmed };
-        };
-
+        // Runs the confirmed import. Everything is fetched ONCE up front and
+        // new records are written in batches — the previous version re-fetched
+        // whole tables for every single row, which made big imports (1500+
+        // rows) take forever and hammer the database.
         const runAssetImport = async () => {
+            if (!pendingImportRows.length) return;
+
+            const confirmBtn = document.getElementById('confirmImportBtn');
+            const originalLabel = confirmBtn.textContent;
+            confirmBtn.disabled = true;
+            confirmBtn.textContent = 'Importing...';
+
             let createdAssets = 0, updatedAssets = 0, createdAssignments = 0, skippedAssignments = 0, errors = 0;
 
-            for (const p of pendingImportRows) {
-                try {
-                    const existingAssets = await getRecordByIndex('assets', 'tag', p.tag).catch(() => []);
-                    let asset = existingAssets && existingAssets[0];
+            try {
+                const existingAssets = await getAllRecords('assets');
+                const existingEmployees = await getAllRecords('employees');
+                const existingAssignments = await getAllRecords('assignments');
+                const existingCategories = await getAllRecords('categories');
 
-                    const assetData = {
+                const assetByTag = {};
+                existingAssets.forEach(a => { if (a.tag) assetByTag[a.tag.toString().trim().toLowerCase()] = a; });
+                const employeeByName = {};
+                existingEmployees.forEach(e => { if (e.name) employeeByName[e.name.trim().toLowerCase()] = e; });
+                const assignmentsByAssetId = {};
+                existingAssignments.forEach(a => {
+                    (assignmentsByAssetId[a.assetId] = assignmentsByAssetId[a.assetId] || []).push(a);
+                });
+
+                // ── 1. Create all missing employees in one batch ───────────
+                const newEmployeeNames = [];
+                const seenNewEmployees = new Set();
+                pendingImportRows.forEach(p => p.history.forEach(h => {
+                    const key = h.employeeName.trim().toLowerCase();
+                    if (!key || employeeByName[key] || seenNewEmployees.has(key)) return;
+                    seenNewEmployees.add(key);
+                    newEmployeeNames.push(h.employeeName.trim());
+                }));
+                if (newEmployeeNames.length) {
+                    const inserted = await batchInsert('employees', newEmployeeNames.map(name => ({
+                        name,
+                        email: '',
+                        department: '',
+                        jobTitle: '',
+                        phone: '',
+                        location: '',
+                        status: 'Active',
+                        createdDate: new Date()
+                    })));
+                    inserted.forEach(row => {
+                        const emp = toCamel(row, 'employees');
+                        if (emp.name) employeeByName[emp.name.trim().toLowerCase()] = emp;
+                    });
+                }
+
+                // ── 2. Register any new category names so filters know them ─
+                const knownCategories = new Set(existingCategories.map(c => (c.name || '').trim().toLowerCase()));
+                const newCategories = [];
+                pendingImportRows.forEach(p => {
+                    const key = (p.category || '').trim().toLowerCase();
+                    if (key && !knownCategories.has(key)) {
+                        knownCategories.add(key);
+                        newCategories.push(p.category);
+                    }
+                });
+                if (newCategories.length) {
+                    await batchInsert('categories', newCategories.map(name => ({ name, createdDate: new Date() })));
+                }
+
+                // Builds the asset record for a plan entry. For brand-new assets
+                // the current holder comes straight from the plan; for existing
+                // assets these fields get recomputed from the merged history.
+                const planAssetRecord = (p, asset) => {
+                    const holder = p.currentEmployeeName
+                        ? employeeByName[p.currentEmployeeName.trim().toLowerCase()]
+                        : null;
+                    return {
                         name: p.name || p.tag,
-                        // Don't overwrite a real model with blank/N-A on re-import;
-                        // only fill it in if the sheet actually has one.
+                        // Don't overwrite a real model/location/notes with blanks
+                        // on re-import; only fill in what the sheet actually has.
                         model: p.model || (asset ? (asset.model || '') : ''),
                         tag: p.tag,
                         category: p.category,
@@ -3679,105 +4115,151 @@
                         location: p.location || (asset ? (asset.location || '') : ''),
                         price: p.price || (asset ? (asset.price || 0) : 0),
                         purchaseDate: p.purchaseDate || (asset ? (asset.purchaseDate || '') : ''),
-                        notes: asset ? (asset.notes || '') : '',
-                        assignedEmployeeId: asset ? asset.assignedEmployeeId : null,
-                        status: asset ? asset.status : 'Unassigned',
-                        assignmentDate: asset ? asset.assignmentDate : 'NA',
+                        notes: p.notes || (asset ? (asset.notes || '') : ''),
+                        assignedEmployeeId: holder ? holder.id : null,
+                        status: holder ? 'Assigned' : 'Unassigned',
+                        assignmentDate: holder ? (p.currentAssignmentDate || null) : null,
                         createdDate: asset ? asset.createdDate : new Date(),
                         lastUpdated: new Date()
                     };
+                };
 
-                    if (asset) {
-                        assetData.id = asset.id;
-                        await updateRecord('assets', assetData);
-                        updatedAssets++;
-                    } else {
-                        const newId = await addRecord('assets', assetData);
-                        assetData.id = newId;
-                        createdAssets++;
-                    }
+                // ── 3. Insert brand-new assets in batches ──────────────────
+                const newPlans = [], existingPlans = [];
+                pendingImportRows.forEach(p => {
+                    (assetByTag[p.tag.toLowerCase()] ? existingPlans : newPlans).push(p);
+                });
 
-                    // MERGE this file's history rows into the EXISTING assignment
-                    // history for this asset, rather than treating the file as
-                    // the full truth. This is what makes re-importing an updated
-                    // sheet (or a sheet that only has the latest snapshot) safe:
-                    // older assignments from previous imports/manual entries are
-                    // preserved, and only genuinely new assignment events get
-                    // added.
-                    const existingAssignments = await getAllRecords('assignments');
-                    const assetAssignments = existingAssignments.filter(a => a.assetId === assetData.id);
-
-                    for (const h of p.history) {
-                        const employee = await findOrCreateEmployeeByName(h.employeeName);
-                        const isActive = !h.unassignmentDate;
-
-                        // An assignment event is considered "the same" as one we
-                        // already have if it's the same asset + employee + start
-                        // date. If we find a match, update its end date/status
-                        // instead of inserting a duplicate row.
-                        const duplicate = assetAssignments.find(a =>
-                            a.employeeId === employee.id &&
-                            (a.assignmentDate || '') === (h.assignmentDate || '')
-                        );
-
-                        if (duplicate) {
-                            const newUnassignDate = h.unassignmentDate || null;
-                            if ((duplicate.unassignmentDate || null) !== newUnassignDate) {
-                                duplicate.unassignmentDate = newUnassignDate;
-                                duplicate.status = newUnassignDate ? 'Inactive' : 'Active';
-                                await updateRecord('assignments', duplicate);
-                            }
-                            skippedAssignments++;
-                        } else {
-                            const newAssignment = {
-                                assetId: assetData.id,
-                                assetName: assetData.name,
-                                employeeId: employee.id,
-                                employeeName: employee.name,
-                                assignmentDate: h.assignmentDate || new Date().toISOString().split('T')[0],
-                                unassignmentDate: h.unassignmentDate || null,
-                                status: isActive ? 'Active' : 'Inactive',
-                                createdDate: new Date()
-                            };
-                            const newAssignId = await addRecord('assignments', newAssignment);
-                            newAssignment.id = newAssignId;
-                            assetAssignments.push(newAssignment);
-                            createdAssignments++;
-                        }
-                    }
-
-                    // Recompute the asset's current holder from the FULL merged
-                    // history (not just this file's rows): whichever assignment
-                    // is still Active, if any, wins. If more than one is
-                    // somehow active, the most recently started one wins and
-                    // earlier ones are auto-closed out.
-                    const refreshedAssignments = (await getAllRecords('assignments')).filter(a => a.assetId === assetData.id);
-                    const activeOnes = refreshedAssignments
-                        .filter(a => a.status === 'Active')
-                        .sort((a, b) => (parseStoredDateSafe(b.assignmentDate)||new Date(0)) - (parseStoredDateSafe(a.assignmentDate)||new Date(0)));
-
-                    if (activeOnes.length > 1) {
-                        for (let i = 1; i < activeOnes.length; i++) {
-                            activeOnes[i].status = 'Inactive';
-                            activeOnes[i].unassignmentDate = activeOnes[0].assignmentDate;
-                            await updateRecord('assignments', activeOnes[i]);
-                        }
-                    }
-
-                    if (activeOnes.length > 0) {
-                        assetData.assignedEmployeeId = activeOnes[0].employeeId;
-                        assetData.status = 'Assigned';
-                        assetData.assignmentDate = activeOnes[0].assignmentDate;
-                    } else {
-                        assetData.assignedEmployeeId = null;
-                        assetData.status = 'Unassigned';
-                        assetData.assignmentDate = 'NA';
-                    }
-                    await updateRecord('assets', assetData);
-                } catch (err) {
-                    errors++;
-                    console.error('Error importing row for tag', p.tag, err);
+                if (newPlans.length) {
+                    const inserted = await batchInsert('assets', newPlans.map(p => planAssetRecord(p, null)));
+                    inserted.forEach(row => {
+                        const a = toCamel(row, 'assets');
+                        if (a.tag) assetByTag[a.tag.toString().trim().toLowerCase()] = a;
+                    });
+                    createdAssets = inserted.length;
                 }
+
+                // ── 4. Build assignment history records ────────────────────
+                const newAssignmentRecords = [];
+
+                // New assets: no existing history to merge with.
+                for (const p of newPlans) {
+                    const asset = assetByTag[p.tag.toLowerCase()];
+                    if (!asset) { errors++; continue; }
+                    for (const h of p.history) {
+                        const emp = employeeByName[h.employeeName.trim().toLowerCase()];
+                        if (!emp) continue;
+                        newAssignmentRecords.push({
+                            assetId: asset.id,
+                            assetName: asset.name || p.tag,
+                            employeeId: emp.id,
+                            employeeName: emp.name,
+                            assignmentDate: h.assignmentDate || null,
+                            unassignmentDate: h.unassignmentDate || null,
+                            status: (h.isCurrent && !h.unassignmentDate) ? 'Active' : 'Inactive',
+                            createdDate: new Date()
+                        });
+                        createdAssignments++;
+                    }
+                }
+
+                // Existing assets: MERGE the file's history into what's already
+                // stored. Same asset + employee + start date = the same event
+                // (update its end date instead of duplicating it). The file is
+                // authoritative about who currently holds the asset.
+                for (const p of existingPlans) {
+                    try {
+                        const asset = assetByTag[p.tag.toLowerCase()];
+                        const assetAssignments = assignmentsByAssetId[asset.id] || [];
+                        let fileActive = null;
+
+                        for (const h of p.history) {
+                            const emp = employeeByName[h.employeeName.trim().toLowerCase()];
+                            if (!emp) continue;
+
+                            const duplicate = assetAssignments.find(a =>
+                                a.employeeId === emp.id &&
+                                (a.assignmentDate || '') === (h.assignmentDate || '')
+                            );
+
+                            if (duplicate) {
+                                const newUnassignDate = h.unassignmentDate || null;
+                                const newStatus = (h.isCurrent && !newUnassignDate) ? 'Active' : 'Inactive';
+                                if ((duplicate.unassignmentDate || null) !== newUnassignDate || duplicate.status !== newStatus) {
+                                    duplicate.unassignmentDate = newUnassignDate;
+                                    duplicate.status = newStatus;
+                                    await updateRecord('assignments', duplicate);
+                                }
+                                if (newStatus === 'Active') fileActive = duplicate;
+                                skippedAssignments++;
+                            } else {
+                                const rec = {
+                                    assetId: asset.id,
+                                    assetName: asset.name || p.tag,
+                                    employeeId: emp.id,
+                                    employeeName: emp.name,
+                                    assignmentDate: h.assignmentDate || null,
+                                    unassignmentDate: h.unassignmentDate || null,
+                                    status: (h.isCurrent && !h.unassignmentDate) ? 'Active' : 'Inactive',
+                                    createdDate: new Date()
+                                };
+                                if (rec.status === 'Active') fileActive = rec;
+                                newAssignmentRecords.push(rec);
+                                assetAssignments.push(rec); // visible to later dup-checks
+                                createdAssignments++;
+                            }
+                        }
+
+                        // Work out the single current holder. If the file names
+                        // one, it wins and every other active record is closed
+                        // out; otherwise the most recent stored active stands.
+                        let topActive = fileActive;
+                        if (!topActive) {
+                            topActive = assetAssignments
+                                .filter(a => a.status === 'Active')
+                                .sort((a, b) => (parseStoredDateSafe(b.assignmentDate)||new Date(0)) - (parseStoredDateSafe(a.assignmentDate)||new Date(0)))[0] || null;
+                        }
+                        for (const a of assetAssignments) {
+                            if (a !== topActive && a.status === 'Active') {
+                                a.status = 'Inactive';
+                                a.unassignmentDate = a.unassignmentDate || (topActive ? topActive.assignmentDate : null) || null;
+                                if (a.id) await updateRecord('assignments', a);
+                            }
+                        }
+
+                        const updated = planAssetRecord(p, asset);
+                        updated.id = asset.id;
+                        updated.assignedEmployeeId = topActive ? topActive.employeeId : null;
+                        updated.status = topActive ? 'Assigned' : 'Unassigned';
+                        updated.assignmentDate = topActive ? (topActive.assignmentDate || null) : null;
+
+                        // Only write the asset back if something actually
+                        // changed - re-importing the same sheet shouldn't fire
+                        // one update request per asset.
+                        const norm = (v) => (v === null || v === undefined || v === '' || v === 'NA') ? '' : String(v);
+                        const changed = ['name', 'model', 'category', 'condition', 'location', 'price',
+                            'purchaseDate', 'notes', 'assignedEmployeeId', 'status', 'assignmentDate']
+                            .some(k => norm(updated[k]) !== norm(asset[k]));
+                        if (changed) {
+                            await updateRecord('assets', updated);
+                            updatedAssets++;
+                        }
+                    } catch (err) {
+                        errors++;
+                        console.error('Error importing row for tag', p.tag, err);
+                    }
+                }
+
+                // ── 5. Insert all new assignment records in batches ────────
+                if (newAssignmentRecords.length) {
+                    await batchInsert('assignments', newAssignmentRecords);
+                }
+            } catch (err) {
+                errors++;
+                console.error('Import failed:', err);
+            } finally {
+                confirmBtn.disabled = false;
+                confirmBtn.textContent = originalLabel;
             }
 
             closeImportPreviewModal();
@@ -3786,6 +4268,8 @@
                 + (errors > 0 ? `, ${errors} error(s)` : '');
             showToast(summary, errors > 0 ? 'warning' : 'success');
 
+            await loadCategories();
+            await loadConditions();
             await loadAssets();
             await loadAssignments();
             await loadEmployeeSelects();
@@ -3821,9 +4305,13 @@
                 exportToCSV(assets, 'assets.csv');
             });
 
-            document.getElementById('importAssetBtn').addEventListener('click', () => {
+            document.getElementById('importAssetBtn').addEventListener('click', openAssetImportModal);
+
+            document.getElementById('assetImportFileBtn').addEventListener('click', () => {
                 document.getElementById('importAssetInput').click();
             });
+
+            document.getElementById('assetImportParseBtn').addEventListener('click', parseAssetImportText);
 
             document.getElementById('importAssetInput').addEventListener('change', async (e) => {
                 const file = e.target.files[0];
@@ -3835,7 +4323,11 @@
                         return;
                     }
                     const plan = buildImportPlan(rawRows);
-                    openImportPreviewModal(plan);
+                    if (plan.length === 0) {
+                        showToast('No valid asset rows found in that file', 'error');
+                        return;
+                    }
+                    showImportPlan(plan);
                 } catch (err) {
                     console.error(err);
                     showToast('Could not read that file. Please check the format.', 'error');
@@ -3843,6 +4335,14 @@
             });
 
             document.getElementById('confirmImportBtn').addEventListener('click', runAssetImport);
+
+            // Password modal: Enter submits
+            document.getElementById('passwordModalInput').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    submitPasswordModal();
+                }
+            });
 
             document.getElementById('categoryFilter').addEventListener('change', loadAssets);
             document.getElementById('conditionFilter').addEventListener('change', loadAssets);
@@ -4347,6 +4847,522 @@
 
         // Initialize sort after DOM ready
         document.addEventListener('DOMContentLoaded', initTableSort);
+
+        // ==================== PC ASSETS ====================
+        // A self-contained "PC Assets" feature (list + charts + importer).
+        // It does NOT talk to Supabase or any other backend — the list is
+        // kept in memory and saved to this browser's localStorage (when the
+        // host environment allows it) so imported data survives a reload.
+
+        let pcAssets = [];
+        let pcIdCounter = 1;
+        let currentPcId = null;
+        let pendingPcImportRows = [];
+        const pcCharts = {};
+
+        const PC_STORAGE_KEY = 'assetHubPcAssets';
+
+        // Persist the PC list so an imported list survives page reloads.
+        // Wrapped in try/catch because some hosts (e.g. sandboxed artifact
+        // iframes) block localStorage entirely — in that case the list simply
+        // stays session-only, same as before.
+        const savePcAssets = () => {
+            try {
+                localStorage.setItem(PC_STORAGE_KEY, JSON.stringify({ pcAssets, pcIdCounter }));
+            } catch (e) { /* storage unavailable */ }
+        };
+
+        const loadSavedPcAssets = () => {
+            try {
+                const raw = localStorage.getItem(PC_STORAGE_KEY);
+                if (!raw) return;
+                const saved = JSON.parse(raw);
+                if (saved && Array.isArray(saved.pcAssets)) {
+                    pcAssets = saved.pcAssets;
+                    pcIdCounter = parseInt(saved.pcIdCounter) || (pcAssets.length + 1);
+                }
+            } catch (e) { /* storage unavailable or corrupted */ }
+        };
+
+        const normalizePcKey = (str) => (str || '').toString().trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+
+        const PC_FIELD_ALIASES = {
+            name: ['name', 'pcname', 'assetname'],
+            type: ['type', 'pctype', 'assettype'],
+            model: ['model', 'model#', 'modelno', 'modelnumber'],
+            serviceTag: ['servicetag', 'servicetag#', 'tag', 'tag#', 'serialnumber', 'serial'],
+            engineer: ['engineer', 'assignedto', 'user', 'owner'],
+            division: ['division', 'department'],
+            shipDate: ['shipdate', 'dateshipped', 'date'],
+            yearsOld: ['yearsold', 'age', 'years'],
+            shippedFrom: ['shippedfrom', 'shipfrom', 'origin'],
+            customsTax: ['customstax', 'customs/tax', 'customs', 'tax'],
+            notes: ['notes', 'note', 'comments', 'comment'],
+            storage: ['column1', 'storage', 'capacity', 'disk', 'drive']
+        };
+
+        // Uses the same tab/comma auto-detecting parser as the asset importer.
+        const parsePcDelimitedText = parseDelimitedText;
+
+        const looksLikePcStorage = (v) => /^\d+(\.\d+)?\s*(gb|tb)$/i.test((v || '').toString().trim());
+
+        const mapPcRow = (row) => {
+            const mapped = {};
+            const rowKeys = Object.keys(row);
+            for (const [field, aliases] of Object.entries(PC_FIELD_ALIASES)) {
+                for (const key of rowKeys) {
+                    if (aliases.includes(normalizePcKey(key))) {
+                        const v = row[key];
+                        mapped[field] = (v === null || v === undefined) ? '' : v.toString().trim();
+                        break;
+                    }
+                }
+            }
+            // Some sheets have the storage size sitting under the "Notes"
+            // header and the actual notes under "Column1" (or vice versa).
+            // If the notes cell looks like a storage size ("512 GB", "1 TB")
+            // and the storage cell doesn't, swap them so both land correctly.
+            if (looksLikePcStorage(mapped.notes) && !looksLikePcStorage(mapped.storage)) {
+                const realNotes = mapped.storage || '';
+                mapped.storage = mapped.notes;
+                mapped.notes = realNotes;
+            }
+            return mapped;
+        };
+
+        const readPcImportFile = (file) => {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                const ext = file.name.split('.').pop().toLowerCase();
+                reader.onerror = () => reject(reader.error);
+                if (ext === 'csv') {
+                    reader.onload = (e) => {
+                        try { resolve(parsePcDelimitedText(e.target.result)); }
+                        catch (err) { reject(err); }
+                    };
+                    reader.readAsText(file);
+                } else {
+                    reader.onload = (e) => {
+                        try {
+                            const data = new Uint8Array(e.target.result);
+                            const wb = XLSX.read(data, { type: 'array' });
+                            const sheet = wb.Sheets[wb.SheetNames[0]];
+                            const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+                            resolve(rows);
+                        } catch (err) { reject(err); }
+                    };
+                    reader.readAsArrayBuffer(file);
+                }
+            });
+        };
+
+        const buildPcRecord = (r) => ({
+            id: pcIdCounter++,
+            name: r.name || '',
+            type: r.type || 'Other',
+            model: r.model || '',
+            serviceTag: r.serviceTag || '',
+            engineer: r.engineer || 'Available',
+            division: r.division || 'In Stock',
+            shipDate: normalizeImportDate(r.shipDate || ''),
+            yearsOld: r.yearsOld || '',
+            shippedFrom: r.shippedFrom || '',
+            customsTax: r.customsTax || '',
+            storage: r.storage || '',
+            notes: r.notes || ''
+        });
+
+        // ---- Import modal ----
+        const openPcImportModal = () => {
+            document.getElementById('pcImportTextarea').value = '';
+            document.getElementById('pcImportPreviewWrap').style.display = 'none';
+            document.getElementById('pcImportConfirmBtn').style.display = 'none';
+            pendingPcImportRows = [];
+            document.getElementById('pcImportModal').classList.add('active');
+        };
+
+        const closePcImportModal = () => {
+            document.getElementById('pcImportModal').classList.remove('active');
+        };
+
+        const finalizePcImportRows = (rawRows) => {
+            pendingPcImportRows = rawRows.map(mapPcRow).filter(r => r.name);
+            renderPcImportPreview();
+        };
+
+        const parsePcImportInput = () => {
+            const text = document.getElementById('pcImportTextarea').value;
+            if (!text.trim()) { showToast('Paste some data or upload a file first', 'error'); return; }
+            finalizePcImportRows(parsePcDelimitedText(text));
+        };
+
+        const renderPcImportPreview = () => {
+            const tbody = document.getElementById('pcImportPreviewBody');
+            tbody.innerHTML = '';
+            pendingPcImportRows.slice(0, 15).forEach(r => {
+                tbody.innerHTML += `<tr>
+                    <td>${r.name || '-'}</td><td>${r.type || '-'}</td><td>${r.model || '-'}</td><td>${r.serviceTag || '-'}</td>
+                    <td>${r.engineer || '-'}</td><td>${r.division || '-'}</td><td>${r.shipDate || '-'}</td><td>${r.yearsOld || '-'}</td><td>${r.storage || '-'}</td>
+                </tr>`;
+            });
+            if (pendingPcImportRows.length > 15) {
+                tbody.innerHTML += `<tr><td colspan="9" class="text-center text-muted">... and ${pendingPcImportRows.length - 15} more</td></tr>`;
+            }
+            document.getElementById('pcImportSummary').textContent = pendingPcImportRows.length
+                ? `${pendingPcImportRows.length} PC record(s) ready to import.`
+                : 'No valid rows found (each row needs at least a Name).';
+            document.getElementById('pcImportPreviewWrap').style.display = 'block';
+            document.getElementById('pcImportConfirmBtn').style.display = pendingPcImportRows.length ? 'inline-block' : 'none';
+        };
+
+        const confirmPcImport = () => {
+            if (!pendingPcImportRows.length) return;
+            // Re-importing the same list must not create duplicates: a PC with
+            // the same Name as an existing one updates it instead.
+            let added = 0, updated = 0;
+            pendingPcImportRows.forEach(r => {
+                const rec = buildPcRecord(r);
+                const key = rec.name.trim().toLowerCase();
+                const idx = pcAssets.findIndex(p => (p.name || '').trim().toLowerCase() === key);
+                if (idx > -1) {
+                    rec.id = pcAssets[idx].id;
+                    pcAssets[idx] = rec;
+                    updated++;
+                } else {
+                    pcAssets.push(rec);
+                    added++;
+                }
+            });
+            savePcAssets();
+            showToast(`Imported ${added} new PC asset(s)` + (updated ? `, updated ${updated} existing` : ''), 'success');
+            pendingPcImportRows = [];
+            closePcImportModal();
+            loadPcAssets();
+        };
+
+        // ---- Add / Edit modal ----
+        const openPcModal = (id = null) => {
+            currentPcId = id;
+            if (id) {
+                const p = pcAssets.find(x => x.id === id);
+                if (!p) return;
+                document.getElementById('pcModalTitle').textContent = 'Edit PC';
+                document.getElementById('pcName').value = p.name || '';
+                document.getElementById('pcType').value = p.type || 'Laptop';
+                document.getElementById('pcModel').value = p.model || '';
+                document.getElementById('pcServiceTag').value = p.serviceTag || '';
+                document.getElementById('pcEngineer').value = p.engineer || '';
+                document.getElementById('pcDivision').value = p.division || '';
+                document.getElementById('pcShipDate').value = p.shipDate || '';
+                document.getElementById('pcYearsOld').value = p.yearsOld || '';
+                document.getElementById('pcShippedFrom').value = p.shippedFrom || '';
+                document.getElementById('pcCustomsTax').value = p.customsTax || '';
+                document.getElementById('pcStorage').value = p.storage || '';
+                document.getElementById('pcNotes').value = p.notes || '';
+            } else {
+                document.getElementById('pcModalTitle').textContent = 'Add PC';
+                ['pcName', 'pcModel', 'pcServiceTag', 'pcEngineer', 'pcDivision', 'pcShipDate', 'pcYearsOld', 'pcShippedFrom', 'pcCustomsTax', 'pcStorage', 'pcNotes']
+                    .forEach(fid => { document.getElementById(fid).value = ''; });
+                document.getElementById('pcType').value = 'Laptop';
+            }
+            document.getElementById('pcModal').classList.add('active');
+        };
+
+        const closePcModal = () => {
+            document.getElementById('pcModal').classList.remove('active');
+            currentPcId = null;
+        };
+
+        const savePcAsset = () => {
+            const name = document.getElementById('pcName').value.trim();
+            if (!name) { showToast('Name is required', 'error'); return; }
+            const data = {
+                name,
+                type: document.getElementById('pcType').value,
+                model: document.getElementById('pcModel').value.trim(),
+                serviceTag: document.getElementById('pcServiceTag').value.trim(),
+                engineer: document.getElementById('pcEngineer').value.trim() || 'Available',
+                division: document.getElementById('pcDivision').value.trim() || 'In Stock',
+                shipDate: document.getElementById('pcShipDate').value,
+                yearsOld: document.getElementById('pcYearsOld').value,
+                shippedFrom: document.getElementById('pcShippedFrom').value.trim(),
+                customsTax: document.getElementById('pcCustomsTax').value.trim(),
+                storage: document.getElementById('pcStorage').value.trim(),
+                notes: document.getElementById('pcNotes').value.trim()
+            };
+            if (currentPcId) {
+                const idx = pcAssets.findIndex(x => x.id === currentPcId);
+                if (idx > -1) pcAssets[idx] = { ...pcAssets[idx], ...data };
+                showToast('PC updated', 'success');
+            } else {
+                pcAssets.push({ id: pcIdCounter++, ...data });
+                showToast('PC added', 'success');
+            }
+            savePcAssets();
+            closePcModal();
+            loadPcAssets();
+        };
+
+        const deletePcAsset = async (id) => {
+            if (!await showConfirm('Delete this PC asset? This cannot be undone.', 'Delete PC Asset?', 'Delete')) return;
+            pcAssets = pcAssets.filter(x => x.id !== id);
+            savePcAssets();
+            showToast('PC deleted', 'success');
+            loadPcAssets();
+        };
+
+        const clearPcList = async () => {
+            if (!await showPasswordConfirm(
+                'This will remove ALL PC assets from this list. This cannot be undone. Enter the password to continue.',
+                'Clear PC List?',
+                'Clear All'
+            )) return;
+            pcAssets = [];
+            savePcAssets();
+            loadPcAssets();
+            showToast('PC list cleared', 'success');
+        };
+
+        const exportPcAssets = () => {
+            if (!pcAssets.length) { showToast('No PC assets to export', 'error'); return; }
+            const rows = pcAssets.map(p => ({
+                Name: p.name, Type: p.type, 'Model#': p.model, 'Service tag#': p.serviceTag,
+                Engineer: p.engineer, Division: p.division,
+                'Ship Date': p.shipDate ? formatImportedDateForDisplay(p.shipDate) : '',
+                'Years old': p.yearsOld, 'Shipped From': p.shippedFrom, 'Customs/Tax': p.customsTax,
+                Notes: p.notes, Column1: p.storage
+            }));
+            exportToCSV(rows, `pc-assets-${new Date().toISOString().split('T')[0]}.csv`);
+            showToast('PC list exported', 'success');
+        };
+
+        // ---- List / KPIs / Charts ----
+        const getPcDivisions = () => Array.from(new Set(pcAssets.map(p => p.division).filter(Boolean))).sort();
+        const getPcTypes = () => Array.from(new Set(pcAssets.map(p => p.type).filter(Boolean))).sort();
+
+        const populatePcFilters = () => {
+            const typeSel = document.getElementById('pcTypeFilter');
+            const divSel = document.getElementById('pcDivisionFilter');
+            const curType = typeSel.value, curDiv = divSel.value;
+            typeSel.innerHTML = '<option value="">All Types</option>' + getPcTypes().map(t => `<option value="${t}">${t}</option>`).join('');
+            divSel.innerHTML = '<option value="">All Divisions</option>' + getPcDivisions().map(d => `<option value="${d}">${d}</option>`).join('');
+            typeSel.value = curType; divSel.value = curDiv;
+        };
+
+        const renderPcKpis = (list) => {
+            const total = list.length;
+            const inStock = list.filter(p => (p.division || '').toLowerCase() === 'in stock' || (p.engineer || '').toLowerCase() === 'available').length;
+            const laptops = list.filter(p => (p.type || '').toLowerCase() === 'laptop').length;
+            const ages = list.map(p => parseFloat(p.yearsOld)).filter(n => !isNaN(n));
+            const avgAge = ages.length ? (ages.reduce((a, b) => a + b, 0) / ages.length).toFixed(1) : '0';
+
+            const kpis = [
+                { label: 'Total PCs', value: total, icon: 'fas fa-desktop', color: '#06B6D4' },
+                { label: 'In Stock / Available', value: inStock, icon: 'fas fa-warehouse', color: '#10B981' },
+                { label: 'Laptops', value: laptops, icon: 'fas fa-laptop', color: '#F59E0B' },
+                { label: 'Avg. Age (yrs)', value: avgAge, icon: 'fas fa-hourglass-half', color: '#EF4444' }
+            ];
+            const container = document.getElementById('pcKpiCards');
+            container.innerHTML = '';
+            kpis.forEach(k => {
+                const card = document.createElement('div');
+                card.className = 'kpi-card';
+                card.innerHTML = `
+                    <div class="kpi-card-header">
+                        <div class="kpi-label">${k.label}</div>
+                        <div class="kpi-icon" style="background: rgba(${hexToRgb(k.color)}, 0.15); color: ${k.color};">
+                            <i class="${k.icon}"></i>
+                        </div>
+                    </div>
+                    <div class="kpi-value">${k.value}</div>
+                `;
+                container.appendChild(card);
+            });
+        };
+
+        const renderPcTable = (list) => {
+            const tbody = document.getElementById('pcTableBody');
+            tbody.innerHTML = '';
+            if (!list.length) {
+                tbody.innerHTML = '<tr><td colspan="13" class="text-center text-muted">No PC assets found. Use "Import PC List" or "Add PC" to get started.</td></tr>';
+                return;
+            }
+            list.forEach(p => {
+                const isAvailable = (p.engineer || '').toLowerCase() === 'available';
+                const engineerCell = isAvailable ? '<span class="badge badge-info">Available</span>' : (p.engineer || '-');
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><code>${p.name || '-'}</code></td>
+                    <td>${p.type || '-'}</td>
+                    <td>${p.model || '-'}</td>
+                    <td>${p.serviceTag || '-'}</td>
+                    <td>${engineerCell}</td>
+                    <td>${p.division || '-'}</td>
+                    <td>${p.shipDate ? formatImportedDateForDisplay(p.shipDate) : '-'}</td>
+                    <td>${p.yearsOld || '-'}</td>
+                    <td>${p.shippedFrom || '-'}</td>
+                    <td>${p.customsTax || '-'}</td>
+                    <td>${p.storage || '-'}</td>
+                    <td>${p.notes || '-'}</td>
+                    <td>
+                        <button class="btn btn-sm btn-secondary" onclick="openPcModal(${p.id})"><i class="fas fa-edit"></i></button>
+                        <button class="btn btn-sm btn-danger" onclick="deletePcAsset(${p.id})"><i class="fas fa-trash"></i></button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        };
+
+        const renderPcCharts = (list) => {
+            const container = document.getElementById('pcChartsContainer');
+            container.innerHTML = '';
+
+            const divData = {};
+            list.forEach(p => { const d = p.division || 'Unknown'; divData[d] = (divData[d] || 0) + 1; });
+            const c1 = document.createElement('div');
+            c1.className = 'chart-card';
+            c1.innerHTML = `<h4 class="chart-title">PCs by Division</h4><div class="chart-container"><canvas id="pcDivisionChart"></canvas></div>`;
+            container.appendChild(c1);
+
+            const typeData = {};
+            list.forEach(p => { const t = p.type || 'Unknown'; typeData[t] = (typeData[t] || 0) + 1; });
+            const c2 = document.createElement('div');
+            c2.className = 'chart-card';
+            c2.innerHTML = `<h4 class="chart-title">PCs by Type</h4><div class="chart-container"><canvas id="pcTypeChart"></canvas></div>`;
+            container.appendChild(c2);
+
+            const ageData = {};
+            list.forEach(p => {
+                const n = parseFloat(p.yearsOld);
+                let bucket = 'Unknown';
+                if (!isNaN(n)) {
+                    if (n <= 2) bucket = '0-2 yrs';
+                    else if (n <= 5) bucket = '3-5 yrs';
+                    else if (n <= 8) bucket = '6-8 yrs';
+                    else bucket = '9+ yrs';
+                }
+                ageData[bucket] = (ageData[bucket] || 0) + 1;
+            });
+            const c3 = document.createElement('div');
+            c3.className = 'chart-card';
+            c3.innerHTML = `<h4 class="chart-title">PCs by Age</h4><div class="chart-container"><canvas id="pcAgeChart"></canvas></div>`;
+            container.appendChild(c3);
+
+            setTimeout(() => {
+                if (pcCharts.division) pcCharts.division.destroy();
+                pcCharts.division = new Chart(document.getElementById('pcDivisionChart').getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: Object.keys(divData),
+                        datasets: [{ label: 'Count', data: Object.values(divData), backgroundColor: '#06B6D4', borderColor: '#0891B2', borderWidth: 1 }]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { ticks: { color: '#CBD5E1' }, grid: { color: 'rgba(203,213,225,0.1)' } },
+                            y: { ticks: { color: '#CBD5E1' }, grid: { color: 'rgba(203,213,225,0.1)' } }
+                        }
+                    }
+                });
+
+                if (pcCharts.type) pcCharts.type.destroy();
+                const typeLabels = Object.keys(typeData);
+                const typeColors = ['#06B6D4', '#F59E0B', '#10B981', '#EF4444', '#8B5CF6', '#EC4899'];
+                pcCharts.type = new Chart(document.getElementById('pcTypeChart').getContext('2d'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: typeLabels,
+                        datasets: [{ data: Object.values(typeData), backgroundColor: typeLabels.map((_, i) => typeColors[i % typeColors.length]), borderWidth: 2 }]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    color: '#F1F5F9',
+                                    generateLabels: chart => chart.data.labels.map((label, i) => ({
+                                        text: `${label}: ${chart.data.datasets[0].data[i]}`,
+                                        fillStyle: chart.data.datasets[0].backgroundColor[i],
+                                        index: i
+                                    }))
+                                }
+                            }
+                        }
+                    }
+                });
+
+                if (pcCharts.age) pcCharts.age.destroy();
+                const ageOrder = ['0-2 yrs', '3-5 yrs', '6-8 yrs', '9+ yrs', 'Unknown'];
+                const ageLabels = ageOrder.filter(l => ageData[l] !== undefined);
+                pcCharts.age = new Chart(document.getElementById('pcAgeChart').getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: ageLabels,
+                        datasets: [{ label: 'Count', data: ageLabels.map(l => ageData[l]), backgroundColor: '#F59E0B', borderColor: '#D97706', borderWidth: 1 }]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { ticks: { color: '#CBD5E1' }, grid: { color: 'rgba(203,213,225,0.1)' } },
+                            y: { ticks: { color: '#CBD5E1' }, grid: { color: 'rgba(203,213,225,0.1)' } }
+                        }
+                    }
+                });
+            }, 60);
+        };
+
+        const loadPcAssets = () => {
+            populatePcFilters();
+            const typeFilter = document.getElementById('pcTypeFilter').value;
+            const divFilter = document.getElementById('pcDivisionFilter').value;
+            const search = document.getElementById('pcSearchInput').value.toLowerCase();
+
+            const filtered = pcAssets.filter(p => {
+                if (typeFilter && p.type !== typeFilter) return false;
+                if (divFilter && p.division !== divFilter) return false;
+                if (search) {
+                    const hay = `${p.name} ${p.serviceTag} ${p.engineer} ${p.model}`.toLowerCase();
+                    if (!hay.includes(search)) return false;
+                }
+                return true;
+            });
+
+            renderPcKpis(filtered);
+            renderPcTable(filtered);
+            renderPcCharts(filtered);
+        };
+
+        // ---- Wire up events (own DOMContentLoaded listener, doesn't touch the existing one) ----
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSavedPcAssets();
+
+            document.getElementById('addPcBtn').addEventListener('click', () => openPcModal());
+            document.getElementById('savePcBtn').addEventListener('click', savePcAsset);
+            document.getElementById('importPcBtn').addEventListener('click', openPcImportModal);
+            document.getElementById('exportPcBtn').addEventListener('click', exportPcAssets);
+            document.getElementById('clearPcBtn').addEventListener('click', clearPcList);
+            document.getElementById('pcTypeFilter').addEventListener('change', loadPcAssets);
+            document.getElementById('pcDivisionFilter').addEventListener('change', loadPcAssets);
+            document.getElementById('pcSearchInput').addEventListener('input', loadPcAssets);
+
+            document.getElementById('pcImportParseBtn').addEventListener('click', parsePcImportInput);
+            document.getElementById('pcImportConfirmBtn').addEventListener('click', confirmPcImport);
+            document.getElementById('pcImportFileBtn').addEventListener('click', () => document.getElementById('pcImportFileInput').click());
+            document.getElementById('pcImportFileInput').addEventListener('change', async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                try {
+                    const rows = await readPcImportFile(file);
+                    finalizePcImportRows(rows);
+                } catch (err) {
+                    showToast('Could not read file: ' + err.message, 'error');
+                }
+                e.target.value = '';
+            });
+        });
 
     </script>
 </body>
