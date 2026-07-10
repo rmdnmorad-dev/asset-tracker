@@ -299,8 +299,12 @@
     animation:clickfx .5s cubic-bezier(.22,1,.36,1) forwards}
   body.dark .clickfx{border-color:rgba(147,197,253,.7)}
   @keyframes clickfx{to{opacity:0;transform:translate(-50%,-50%) scale(3.4)}}
-  /* border beam: ring mask (border area only) + a gradient light on an offset-path */
+  /* border beam: ring mask (border area only) + a gradient light on an offset-path.
+     overflow:hidden is essential — the light square swings past the box edge while
+     it travels; without clipping it adds scrollable overflow, so scrollbars flick
+     in and out and the whole page shifts / stutters at the corners. */
   .beamring{pointer-events:none;position:absolute;inset:0;border-radius:inherit;padding:var(--bw,1.5px);
+    overflow:hidden;
     -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
     -webkit-mask-composite:xor;
             mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
@@ -308,24 +312,34 @@
   .beam{display:none;position:absolute;aspect-ratio:1/1;width:var(--bsz,56px);
     background:linear-gradient(to left,var(--bfrom,#fff),var(--bvia,rgba(255,255,255,.4)),transparent);
     offset-path:rect(0 auto auto 0 round var(--br,10px));
+    will-change:transform;
     animation:beamtravel var(--bdur,6s) linear infinite}
   @supports (offset-path: rect(0px auto auto 0px)){.beam{display:block}}
   @keyframes beamtravel{from{offset-distance:0%}to{offset-distance:100%}}
-  #sheet{position:relative;border-radius:10px}
-  #sheet>.beamring{--br:10px;--bsz:130px;--bdur:9s;--bw:2px;--bfrom:#2563eb;--bvia:rgba(37,99,235,.35)}
+  #sheet{position:relative;border-radius:12px}
+  #sheet>.beamring{--br:12px;--bsz:80px;--bdur:9s;--bw:2px;--bfrom:#2563eb;--bvia:rgba(37,99,235,.35)}
   body.dark #sheet>.beamring{--bfrom:#fff;--bvia:rgba(255,255,255,.35)}
   #settings{position:relative}
-  #settings>.beamring{--br:10px;--bsz:90px;--bdur:7s;--bfrom:#2563eb;--bvia:rgba(37,99,235,.35)}
+  #settings>.beamring{--br:10px;--bsz:70px;--bdur:7s;--bfrom:#2563eb;--bvia:rgba(37,99,235,.35)}
   body.dark #settings>.beamring{--bfrom:#fff;--bvia:rgba(255,255,255,.35)}
   /* credit: beam box around the logo + glow around/inside the letters */
   .grp.right{margin-left:auto;display:flex;gap:8px;align-items:center}
   .creditbox{position:relative;border:1px solid rgba(255,255,255,.18);border-radius:10px;
     padding:5px 12px;background:rgba(255,255,255,.04)}
-  .creditbox>.beamring{--br:10px;--bsz:42px;--bdur:4.5s;--bfrom:#fff;--bvia:rgba(255,255,255,.45);--bw:1.5px}
-  @keyframes letterglow{
-    0%,100%{filter:drop-shadow(0 0 2px rgba(255,255,255,.6)) drop-shadow(0 0 7px rgba(147,197,253,.35))}
-    50%{filter:drop-shadow(0 0 4px rgba(255,255,255,.95)) drop-shadow(0 0 13px rgba(147,197,253,.8))}}
-  #credit svg{animation:letterglow 3.2s ease-in-out infinite}
+  .creditbox>.beamring{--br:10px;--bsz:36px;--bdur:4.5s;--bfrom:#fff;--bvia:rgba(255,255,255,.45);--bw:1.5px}
+  /* letters: STATIC glow (an animated filter repaints the vector every frame = lag);
+     the pulse comes from a separate halo layer animating only opacity (GPU-cheap) */
+  #credit svg{filter:drop-shadow(0 0 2.5px rgba(255,255,255,.7)) drop-shadow(0 0 8px rgba(147,197,253,.5))}
+  .creditbox::before{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+    background:radial-gradient(70% 90% at 50% 50%,rgba(147,197,253,.30),transparent 72%);
+    animation:haloPulse 3.2s ease-in-out infinite}
+  @keyframes haloPulse{0%,100%{opacity:.3}50%{opacity:1}}
+  /* theme switch spreads as a growing circle from the button (View Transitions) */
+  ::view-transition-old(root),::view-transition-new(root){animation:none;mix-blend-mode:normal}
+  ::view-transition-old(root){z-index:0}
+  ::view-transition-new(root){z-index:1}
+  html.notrans *:not(.ticon){transition:none !important}
+
   /* theme toggle: rotating sun/moon, like the reference icon */
   #btnTheme{position:relative;width:40px;height:34px;padding:0;overflow:hidden}
   .ticon{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:16px;
@@ -2581,9 +2595,25 @@ function applyTheme(){
   if(btn) btn.title = dark ? 'Switch to light theme' : 'Switch to dark theme';
 }
 function bindTheme(){
-  document.getElementById('btnTheme').onclick = ()=>{
-    state.settings.theme = state.settings.theme==='dark' ? 'light' : 'dark';
-    save(); applyTheme();
+  const btn = document.getElementById('btnTheme');
+  btn.onclick = e=>{
+    const toggle = ()=>{
+      state.settings.theme = state.settings.theme==='dark' ? 'light' : 'dark';
+      save(); applyTheme();
+    };
+    if(!document.startViewTransition){ toggle(); return; }
+    // the new theme spreads as a growing circle from the click point
+    const b = btn.getBoundingClientRect();
+    const x = e.clientX || b.left+b.width/2, y = e.clientY || b.top+b.height/2;
+    document.documentElement.classList.add('notrans');   // colors switch instantly; the circle IS the animation
+    const vt = document.startViewTransition(toggle);
+    vt.ready.then(()=>{
+      const r = Math.hypot(Math.max(x, innerWidth-x), Math.max(y, innerHeight-y));
+      document.documentElement.animate(
+        { clipPath: ['circle(0px at '+x+'px '+y+'px)', 'circle('+r+'px at '+x+'px '+y+'px)'] },
+        { duration: 550, easing: 'cubic-bezier(.22,1,.36,1)', pseudoElement: '::view-transition-new(root)' });
+    }).catch(()=>{});
+    vt.finished.finally(()=>document.documentElement.classList.remove('notrans'));
   };
   applyTheme();
 }
