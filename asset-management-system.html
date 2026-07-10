@@ -3736,7 +3736,6 @@
                 // calendar day - read the UTC fields, not local fields, to avoid
                 // the timezone rollback.
                 const y = value.getUTCFullYear();
-                if (y <= 1900) return ''; // Excel "no date" placeholder
                 const m = String(value.getUTCMonth() + 1).padStart(2, '0');
                 const d = String(value.getUTCDate()).padStart(2, '0');
                 return `${y}-${m}-${d}`;
@@ -3745,16 +3744,9 @@
             const str = value.toString().trim();
             if (!str) return '';
 
-            // Excel sheets use "1/0/1900" (and similar) as a placeholder for
-            // "no date" - a month/day of 0 or a year of 1900 or earlier means
-            // the cell was really empty, so treat it as such.
-            const isJunkDate = (y, mo, d) =>
-                y <= 1900 || mo < 1 || mo > 12 || d < 1 || d > 31;
-
             // "YYYY-MM-DD" (already safe, just validate)
             let m = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
             if (m) {
-                if (isJunkDate(parseInt(m[1]), parseInt(m[2]), parseInt(m[3]))) return '';
                 const y = m[1], mo = m[2].padStart(2, '0'), d = m[3].padStart(2, '0');
                 return `${y}-${mo}-${d}`;
             }
@@ -3762,17 +3754,14 @@
             // "M/D/YYYY" or "MM/DD/YYYY" (the format in the user's sheet)
             m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
             if (m) {
-                if (isJunkDate(parseInt(m[3]), parseInt(m[1]), parseInt(m[2]))) return '';
                 const mo = m[1].padStart(2, '0'), d = m[2].padStart(2, '0'), y = m[3];
                 return `${y}-${mo}-${d}`;
             }
 
-            // Fallback: let the safe parser try, but build the result from
-            // LOCAL fields (not UTC/ISO) so we don't introduce a shift. If it
-            // can't be parsed at all, treat it as "no date" rather than
-            // inventing one.
-            const parsed = parseStoredDateSafe(str);
-            if (!parsed || isNaN(parsed.getTime())) return '';
+            // Fallback: let Date parse it, but build the result from LOCAL
+            // fields (not UTC/ISO) so we don't introduce a shift.
+            const parsed = parseStoredDateSafe(str) || new Date();
+            if (isNaN(parsed.getTime())) return str; // give up, return as-is
             const y = parsed.getFullYear();
             const mo = String(parsed.getMonth() + 1).padStart(2, '0');
             const d = String(parsed.getDate()).padStart(2, '0');
@@ -4028,86 +4017,39 @@
             document.getElementById('importAssetInput').value = '';
         };
 
-        // Runs the confirmed import. Everything is fetched ONCE up front and
-        // new records are written in batches — the previous version re-fetched
-        // whole tables for every single row, which made big imports (1500+
-        // rows) take forever and hammer the database.
+        // Finds an existing employee by name, or creates one on the fly so the
+        // imported history has someone valid to point at.
+        const findOrCreateEmployeeByName = async (name) => {
+            const trimmed = name.trim();
+            const employees = await getAllRecords('employees');
+            const existing = employees.find(e => e.name.trim().toLowerCase() === trimmed.toLowerCase());
+            if (existing) return existing;
+
+            const newId = await addRecord('employees', {
+                name: trimmed,
+                department: '',
+                jobTitle: '',
+                phone: '',
+                location: '',
+                email: '',
+                status: 'Active',
+                createdDate: new Date()
+            });
+            return { id: newId, name: trimmed };
+        };
+
         const runAssetImport = async () => {
-            if (!pendingImportRows.length) return;
-
-            const confirmBtn = document.getElementById('confirmImportBtn');
-            const originalLabel = confirmBtn.textContent;
-            confirmBtn.disabled = true;
-            confirmBtn.textContent = 'Importing...';
-
             let createdAssets = 0, updatedAssets = 0, createdAssignments = 0, skippedAssignments = 0, errors = 0;
 
-            try {
-                const existingAssets = await getAllRecords('assets');
-                const existingEmployees = await getAllRecords('employees');
-                const existingAssignments = await getAllRecords('assignments');
-                const existingCategories = await getAllRecords('categories');
+            for (const p of pendingImportRows) {
+                try {
+                    const existingAssets = await getRecordByIndex('assets', 'tag', p.tag).catch(() => []);
+                    let asset = existingAssets && existingAssets[0];
 
-                const assetByTag = {};
-                existingAssets.forEach(a => { if (a.tag) assetByTag[a.tag.toString().trim().toLowerCase()] = a; });
-                const employeeByName = {};
-                existingEmployees.forEach(e => { if (e.name) employeeByName[e.name.trim().toLowerCase()] = e; });
-                const assignmentsByAssetId = {};
-                existingAssignments.forEach(a => {
-                    (assignmentsByAssetId[a.assetId] = assignmentsByAssetId[a.assetId] || []).push(a);
-                });
-
-                // ── 1. Create all missing employees in one batch ───────────
-                const newEmployeeNames = [];
-                const seenNewEmployees = new Set();
-                pendingImportRows.forEach(p => p.history.forEach(h => {
-                    const key = h.employeeName.trim().toLowerCase();
-                    if (!key || employeeByName[key] || seenNewEmployees.has(key)) return;
-                    seenNewEmployees.add(key);
-                    newEmployeeNames.push(h.employeeName.trim());
-                }));
-                if (newEmployeeNames.length) {
-                    const inserted = await batchInsert('employees', newEmployeeNames.map(name => ({
-                        name,
-                        email: '',
-                        department: '',
-                        jobTitle: '',
-                        phone: '',
-                        location: '',
-                        status: 'Active',
-                        createdDate: new Date()
-                    })));
-                    inserted.forEach(row => {
-                        const emp = toCamel(row, 'employees');
-                        if (emp.name) employeeByName[emp.name.trim().toLowerCase()] = emp;
-                    });
-                }
-
-                // ── 2. Register any new category names so filters know them ─
-                const knownCategories = new Set(existingCategories.map(c => (c.name || '').trim().toLowerCase()));
-                const newCategories = [];
-                pendingImportRows.forEach(p => {
-                    const key = (p.category || '').trim().toLowerCase();
-                    if (key && !knownCategories.has(key)) {
-                        knownCategories.add(key);
-                        newCategories.push(p.category);
-                    }
-                });
-                if (newCategories.length) {
-                    await batchInsert('categories', newCategories.map(name => ({ name, createdDate: new Date() })));
-                }
-
-                // Builds the asset record for a plan entry. For brand-new assets
-                // the current holder comes straight from the plan; for existing
-                // assets these fields get recomputed from the merged history.
-                const planAssetRecord = (p, asset) => {
-                    const holder = p.currentEmployeeName
-                        ? employeeByName[p.currentEmployeeName.trim().toLowerCase()]
-                        : null;
-                    return {
+                    const assetData = {
                         name: p.name || p.tag,
-                        // Don't overwrite a real model/location/notes with blanks
-                        // on re-import; only fill in what the sheet actually has.
+                        // Don't overwrite a real model with blank/N-A on re-import;
+                        // only fill it in if the sheet actually has one.
                         model: p.model || (asset ? (asset.model || '') : ''),
                         tag: p.tag,
                         category: p.category,
@@ -4116,150 +4058,104 @@
                         price: p.price || (asset ? (asset.price || 0) : 0),
                         purchaseDate: p.purchaseDate || (asset ? (asset.purchaseDate || '') : ''),
                         notes: p.notes || (asset ? (asset.notes || '') : ''),
-                        assignedEmployeeId: holder ? holder.id : null,
-                        status: holder ? 'Assigned' : 'Unassigned',
-                        assignmentDate: holder ? (p.currentAssignmentDate || null) : null,
+                        assignedEmployeeId: asset ? asset.assignedEmployeeId : null,
+                        status: asset ? asset.status : 'Unassigned',
+                        assignmentDate: asset ? asset.assignmentDate : 'NA',
                         createdDate: asset ? asset.createdDate : new Date(),
                         lastUpdated: new Date()
                     };
-                };
 
-                // ── 3. Insert brand-new assets in batches ──────────────────
-                const newPlans = [], existingPlans = [];
-                pendingImportRows.forEach(p => {
-                    (assetByTag[p.tag.toLowerCase()] ? existingPlans : newPlans).push(p);
-                });
+                    if (asset) {
+                        assetData.id = asset.id;
+                        await updateRecord('assets', assetData);
+                        updatedAssets++;
+                    } else {
+                        const newId = await addRecord('assets', assetData);
+                        assetData.id = newId;
+                        createdAssets++;
+                    }
 
-                if (newPlans.length) {
-                    const inserted = await batchInsert('assets', newPlans.map(p => planAssetRecord(p, null)));
-                    inserted.forEach(row => {
-                        const a = toCamel(row, 'assets');
-                        if (a.tag) assetByTag[a.tag.toString().trim().toLowerCase()] = a;
-                    });
-                    createdAssets = inserted.length;
-                }
+                    // MERGE this file's history rows into the EXISTING assignment
+                    // history for this asset, rather than treating the file as
+                    // the full truth. This is what makes re-importing an updated
+                    // sheet (or a sheet that only has the latest snapshot) safe:
+                    // older assignments from previous imports/manual entries are
+                    // preserved, and only genuinely new assignment events get
+                    // added.
+                    const existingAssignments = await getAllRecords('assignments');
+                    const assetAssignments = existingAssignments.filter(a => a.assetId === assetData.id);
 
-                // ── 4. Build assignment history records ────────────────────
-                const newAssignmentRecords = [];
-
-                // New assets: no existing history to merge with.
-                for (const p of newPlans) {
-                    const asset = assetByTag[p.tag.toLowerCase()];
-                    if (!asset) { errors++; continue; }
                     for (const h of p.history) {
-                        const emp = employeeByName[h.employeeName.trim().toLowerCase()];
-                        if (!emp) continue;
-                        newAssignmentRecords.push({
-                            assetId: asset.id,
-                            assetName: asset.name || p.tag,
-                            employeeId: emp.id,
-                            employeeName: emp.name,
-                            assignmentDate: h.assignmentDate || null,
-                            unassignmentDate: h.unassignmentDate || null,
-                            status: (h.isCurrent && !h.unassignmentDate) ? 'Active' : 'Inactive',
-                            createdDate: new Date()
-                        });
-                        createdAssignments++;
-                    }
-                }
+                        const employee = await findOrCreateEmployeeByName(h.employeeName);
+                        const isActive = !h.unassignmentDate;
 
-                // Existing assets: MERGE the file's history into what's already
-                // stored. Same asset + employee + start date = the same event
-                // (update its end date instead of duplicating it). The file is
-                // authoritative about who currently holds the asset.
-                for (const p of existingPlans) {
-                    try {
-                        const asset = assetByTag[p.tag.toLowerCase()];
-                        const assetAssignments = assignmentsByAssetId[asset.id] || [];
-                        let fileActive = null;
+                        // An assignment event is considered "the same" as one we
+                        // already have if it's the same asset + employee + start
+                        // date. If we find a match, update its end date/status
+                        // instead of inserting a duplicate row.
+                        const duplicate = assetAssignments.find(a =>
+                            a.employeeId === employee.id &&
+                            (a.assignmentDate || '') === (h.assignmentDate || '')
+                        );
 
-                        for (const h of p.history) {
-                            const emp = employeeByName[h.employeeName.trim().toLowerCase()];
-                            if (!emp) continue;
-
-                            const duplicate = assetAssignments.find(a =>
-                                a.employeeId === emp.id &&
-                                (a.assignmentDate || '') === (h.assignmentDate || '')
-                            );
-
-                            if (duplicate) {
-                                const newUnassignDate = h.unassignmentDate || null;
-                                const newStatus = (h.isCurrent && !newUnassignDate) ? 'Active' : 'Inactive';
-                                if ((duplicate.unassignmentDate || null) !== newUnassignDate || duplicate.status !== newStatus) {
-                                    duplicate.unassignmentDate = newUnassignDate;
-                                    duplicate.status = newStatus;
-                                    await updateRecord('assignments', duplicate);
-                                }
-                                if (newStatus === 'Active') fileActive = duplicate;
-                                skippedAssignments++;
-                            } else {
-                                const rec = {
-                                    assetId: asset.id,
-                                    assetName: asset.name || p.tag,
-                                    employeeId: emp.id,
-                                    employeeName: emp.name,
-                                    assignmentDate: h.assignmentDate || null,
-                                    unassignmentDate: h.unassignmentDate || null,
-                                    status: (h.isCurrent && !h.unassignmentDate) ? 'Active' : 'Inactive',
-                                    createdDate: new Date()
-                                };
-                                if (rec.status === 'Active') fileActive = rec;
-                                newAssignmentRecords.push(rec);
-                                assetAssignments.push(rec); // visible to later dup-checks
-                                createdAssignments++;
+                        if (duplicate) {
+                            const newUnassignDate = h.unassignmentDate || null;
+                            if ((duplicate.unassignmentDate || null) !== newUnassignDate) {
+                                duplicate.unassignmentDate = newUnassignDate;
+                                duplicate.status = newUnassignDate ? 'Inactive' : 'Active';
+                                await updateRecord('assignments', duplicate);
                             }
+                            skippedAssignments++;
+                        } else {
+                            const newAssignment = {
+                                assetId: assetData.id,
+                                assetName: assetData.name,
+                                employeeId: employee.id,
+                                employeeName: employee.name,
+                                assignmentDate: h.assignmentDate || new Date().toISOString().split('T')[0],
+                                unassignmentDate: h.unassignmentDate || null,
+                                status: isActive ? 'Active' : 'Inactive',
+                                createdDate: new Date()
+                            };
+                            const newAssignId = await addRecord('assignments', newAssignment);
+                            newAssignment.id = newAssignId;
+                            assetAssignments.push(newAssignment);
+                            createdAssignments++;
                         }
-
-                        // Work out the single current holder. If the file names
-                        // one, it wins and every other active record is closed
-                        // out; otherwise the most recent stored active stands.
-                        let topActive = fileActive;
-                        if (!topActive) {
-                            topActive = assetAssignments
-                                .filter(a => a.status === 'Active')
-                                .sort((a, b) => (parseStoredDateSafe(b.assignmentDate)||new Date(0)) - (parseStoredDateSafe(a.assignmentDate)||new Date(0)))[0] || null;
-                        }
-                        for (const a of assetAssignments) {
-                            if (a !== topActive && a.status === 'Active') {
-                                a.status = 'Inactive';
-                                a.unassignmentDate = a.unassignmentDate || (topActive ? topActive.assignmentDate : null) || null;
-                                if (a.id) await updateRecord('assignments', a);
-                            }
-                        }
-
-                        const updated = planAssetRecord(p, asset);
-                        updated.id = asset.id;
-                        updated.assignedEmployeeId = topActive ? topActive.employeeId : null;
-                        updated.status = topActive ? 'Assigned' : 'Unassigned';
-                        updated.assignmentDate = topActive ? (topActive.assignmentDate || null) : null;
-
-                        // Only write the asset back if something actually
-                        // changed - re-importing the same sheet shouldn't fire
-                        // one update request per asset.
-                        const norm = (v) => (v === null || v === undefined || v === '' || v === 'NA') ? '' : String(v);
-                        const changed = ['name', 'model', 'category', 'condition', 'location', 'price',
-                            'purchaseDate', 'notes', 'assignedEmployeeId', 'status', 'assignmentDate']
-                            .some(k => norm(updated[k]) !== norm(asset[k]));
-                        if (changed) {
-                            await updateRecord('assets', updated);
-                            updatedAssets++;
-                        }
-                    } catch (err) {
-                        errors++;
-                        console.error('Error importing row for tag', p.tag, err);
                     }
-                }
 
-                // ── 5. Insert all new assignment records in batches ────────
-                if (newAssignmentRecords.length) {
-                    await batchInsert('assignments', newAssignmentRecords);
+                    // Recompute the asset's current holder from the FULL merged
+                    // history (not just this file's rows): whichever assignment
+                    // is still Active, if any, wins. If more than one is
+                    // somehow active, the most recently started one wins and
+                    // earlier ones are auto-closed out.
+                    const refreshedAssignments = (await getAllRecords('assignments')).filter(a => a.assetId === assetData.id);
+                    const activeOnes = refreshedAssignments
+                        .filter(a => a.status === 'Active')
+                        .sort((a, b) => (parseStoredDateSafe(b.assignmentDate)||new Date(0)) - (parseStoredDateSafe(a.assignmentDate)||new Date(0)));
+
+                    if (activeOnes.length > 1) {
+                        for (let i = 1; i < activeOnes.length; i++) {
+                            activeOnes[i].status = 'Inactive';
+                            activeOnes[i].unassignmentDate = activeOnes[0].assignmentDate;
+                            await updateRecord('assignments', activeOnes[i]);
+                        }
+                    }
+
+                    if (activeOnes.length > 0) {
+                        assetData.assignedEmployeeId = activeOnes[0].employeeId;
+                        assetData.status = 'Assigned';
+                        assetData.assignmentDate = activeOnes[0].assignmentDate;
+                    } else {
+                        assetData.assignedEmployeeId = null;
+                        assetData.status = 'Unassigned';
+                        assetData.assignmentDate = 'NA';
+                    }
+                    await updateRecord('assets', assetData);
+                } catch (err) {
+                    errors++;
+                    console.error('Error importing row for tag', p.tag, err);
                 }
-            } catch (err) {
-                errors++;
-                console.error('Import failed:', err);
-            } finally {
-                confirmBtn.disabled = false;
-                confirmBtn.textContent = originalLabel;
             }
 
             closeImportPreviewModal();
@@ -4268,8 +4164,6 @@
                 + (errors > 0 ? `, ${errors} error(s)` : '');
             showToast(summary, errors > 0 ? 'warning' : 'success');
 
-            await loadCategories();
-            await loadConditions();
             await loadAssets();
             await loadAssignments();
             await loadEmployeeSelects();
