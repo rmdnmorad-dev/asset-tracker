@@ -4929,8 +4929,6 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 
             document.getElementById('darkModeToggle').addEventListener('click', () => {
                 document.body.classList.toggle('light-theme');
-                const isLight = document.body.classList.contains('light-theme');
-                showToast(isLight ? 'Switched to light theme' : 'Switched to dark theme', 'info');
             });
 
             // Load data after all clicks wired
