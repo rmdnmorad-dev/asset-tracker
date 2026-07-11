@@ -286,12 +286,15 @@
   #settings:not([hidden]){animation:fadeUp .45s cubic-bezier(.22,1,.36,1) both}
   @keyframes popIn{from{opacity:0;transform:translateY(4px) scale(.985)}to{opacity:1;transform:none}}
   #combo.show,#wheel.show{animation:popIn .16s ease-out}
-  /* smooth light/dark cross-fade */
-  body,#toolbar,#sheet,#settings,.tc td,.cell,.leg td,.section,#settings input,#settings textarea{
+  /* smooth light/dark cross-fade — OPT-IN (only while html.themefade is set, the
+     no-view-transitions fallback). Keeping transitions off by default means the
+     circular reveal never fights per-element color animations and style recalcs. */
+  html.themefade body,html.themefade #toolbar,html.themefade #sheet,html.themefade #settings,
+  html.themefade .tc td,html.themefade .cell,html.themefade .leg td,html.themefade .section{
     transition:background-color .35s ease,color .35s ease,border-color .35s ease}
   body.dark{color-scheme:dark}
   /* press-down click feel, like the reference buttons (active:scale-[0.97]) */
-  .btn,.btn2,.rowbtn,.wsave,.wcancel{transition:transform .15s ease-out,background-color .35s ease,color .35s ease,border-color .35s ease}
+  .btn,.btn2,.rowbtn,.wsave,.wcancel{transition:transform .15s ease-out}
   .btn:active,.btn2:active,.rowbtn:active,.wsave:active,.wcancel:active,.citem:active,.sres:active{transform:scale(.96)}
   /* click ripple on anything */
   .clickfx{position:fixed;z-index:9999;pointer-events:none;width:12px;height:12px;border-radius:50%;
@@ -309,24 +312,28 @@
     -webkit-mask-composite:xor;
             mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
             mask-composite:exclude}
-  .beam{display:none;position:absolute;aspect-ratio:1/1;width:var(--bsz,56px);
-    background:linear-gradient(to left,var(--bfrom,#fff),var(--bvia,rgba(255,255,255,.4)),transparent);
+  /* the light is RADIALLY symmetric (an orb, not a rotating comet): a directional
+     gradient must whip 90° in ~2 frames at a small corner radius, which reads as
+     a lag no matter the frame rate — an orb has nothing visible to rotate. */
+  .beam{display:none;position:absolute;width:var(--bsz,56px);height:var(--bsz,56px);
+    background:radial-gradient(closest-side,var(--bfrom,#fff) 0%,var(--bvia,rgba(255,255,255,.4)) 42%,transparent 72%);
     offset-path:rect(0 auto auto 0 round var(--br,10px));
-    will-change:transform;
+    offset-rotate:0deg;
+    will-change:transform,offset-distance;
     animation:beamtravel var(--bdur,6s) linear infinite}
   @supports (offset-path: rect(0px auto auto 0px)){.beam{display:block}}
   @keyframes beamtravel{from{offset-distance:0%}to{offset-distance:100%}}
   #sheet{position:relative;border-radius:12px}
-  #sheet>.beamring{--br:12px;--bsz:80px;--bdur:9s;--bw:2px;--bfrom:#2563eb;--bvia:rgba(37,99,235,.35)}
+  #sheet>.beamring{--br:12px;--bsz:110px;--bdur:9s;--bw:2px;--bfrom:#2563eb;--bvia:rgba(37,99,235,.35)}
   body.dark #sheet>.beamring{--bfrom:#fff;--bvia:rgba(255,255,255,.35)}
   #settings{position:relative}
-  #settings>.beamring{--br:10px;--bsz:70px;--bdur:7s;--bfrom:#2563eb;--bvia:rgba(37,99,235,.35)}
+  #settings>.beamring{--br:10px;--bsz:90px;--bdur:7s;--bfrom:#2563eb;--bvia:rgba(37,99,235,.35)}
   body.dark #settings>.beamring{--bfrom:#fff;--bvia:rgba(255,255,255,.35)}
   /* credit: beam box around the logo + glow around/inside the letters */
   .grp.right{margin-left:auto;display:flex;gap:8px;align-items:center}
   .creditbox{position:relative;border:1px solid rgba(255,255,255,.18);border-radius:10px;
     padding:5px 12px;background:rgba(255,255,255,.04)}
-  .creditbox>.beamring{--br:10px;--bsz:36px;--bdur:4.5s;--bfrom:#fff;--bvia:rgba(255,255,255,.45);--bw:1.5px}
+  .creditbox>.beamring{--br:10px;--bsz:44px;--bdur:4.5s;--bfrom:#fff;--bvia:rgba(255,255,255,.45);--bw:1.5px}
   /* letters: STATIC glow (an animated filter repaints the vector every frame = lag);
      the pulse comes from a separate halo layer animating only opacity (GPU-cheap) */
   #credit svg{filter:drop-shadow(0 0 2.5px rgba(255,255,255,.7)) drop-shadow(0 0 8px rgba(147,197,253,.5))}
@@ -338,7 +345,10 @@
   ::view-transition-old(root),::view-transition-new(root){animation:none;mix-blend-mode:normal}
   ::view-transition-old(root){z-index:0}
   ::view-transition-new(root){z-index:1}
-  html.notrans *:not(.ticon){transition:none !important}
+  /* while the circle reveals, pause the beams/halo (only these 3 elements animate
+     at idle) so the page being live-captured is static — the whole frame budget
+     goes to the reveal itself */
+  html.revealing .beam,html.revealing .creditbox::before{animation-play-state:paused}
 
   /* theme toggle: rotating sun/moon, like the reference icon */
   #btnTheme{position:relative;width:40px;height:34px;padding:0;overflow:hidden}
@@ -2601,19 +2611,25 @@ function bindTheme(){
       state.settings.theme = state.settings.theme==='dark' ? 'light' : 'dark';
       save(); applyTheme();
     };
-    if(!document.startViewTransition){ toggle(); return; }
+    if(!document.startViewTransition){
+      // fallback: brief opt-in color cross-fade
+      document.documentElement.classList.add('themefade');
+      toggle();
+      setTimeout(()=>document.documentElement.classList.remove('themefade'), 450);
+      return;
+    }
     // the new theme spreads as a growing circle from the click point
     const b = btn.getBoundingClientRect();
     const x = e.clientX || b.left+b.width/2, y = e.clientY || b.top+b.height/2;
-    document.documentElement.classList.add('notrans');   // colors switch instantly; the circle IS the animation
+    document.documentElement.classList.add('revealing');   // pause the beams/halo during the sweep
     const vt = document.startViewTransition(toggle);
     vt.ready.then(()=>{
       const r = Math.hypot(Math.max(x, innerWidth-x), Math.max(y, innerHeight-y));
       document.documentElement.animate(
         { clipPath: ['circle(0px at '+x+'px '+y+'px)', 'circle('+r+'px at '+x+'px '+y+'px)'] },
-        { duration: 550, easing: 'cubic-bezier(.22,1,.36,1)', pseudoElement: '::view-transition-new(root)' });
+        { duration: 480, easing: 'cubic-bezier(.22,1,.36,1)', pseudoElement: '::view-transition-new(root)' });
     }).catch(()=>{});
-    vt.finished.finally(()=>document.documentElement.classList.remove('notrans'));
+    vt.finished.finally(()=>document.documentElement.classList.remove('revealing'));
   };
   applyTheme();
 }
