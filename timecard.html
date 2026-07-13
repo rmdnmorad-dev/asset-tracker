@@ -200,7 +200,7 @@
     padding:1px 8px;display:inline-block;width:110px}
 
   /* custom drop-down with per-item delete */
-  #combo{position:fixed;z-index:120;background:#fff;border:1px solid #cbd5e1;border-radius:8px;
+  #combo{color:#111;position:fixed;z-index:120;background:#fff;border:1px solid #cbd5e1;border-radius:8px;
     box-shadow:0 8px 26px rgba(0,0,0,.28);max-height:250px;overflow:auto;display:none;min-width:170px}
   #combo.show{display:block}
   .citem{display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:13px;cursor:pointer;font-family:Arial}
@@ -212,7 +212,7 @@
   .cempty{padding:8px 12px;font-size:12px;color:#94a3b8;font-family:Arial}
 
   /* iOS-style time wheel */
-  #wheel{position:fixed;z-index:120;background:#fff;border-radius:16px;
+  #wheel{color:#111;position:fixed;z-index:120;background:#fff;border-radius:16px;
     box-shadow:0 12px 44px rgba(0,0,0,.35);padding:12px 16px 12px;display:none;user-select:none}
   #wheel.show{display:block}
   #wheel .wtitle{text-align:center;font-size:13px;font-weight:600;color:#333;margin-bottom:6px;font-family:Arial}
@@ -941,8 +941,7 @@ const JOB_LEGEND = [
 // the drop-downs start empty and only contain values the user has typed before
 const HIST_FIELDS = ['task','notes','project','contractor','job','hours'];
 const TIME_FIELDS = ['tin','tout','lunch','meet','wfh','leave'];   // these get the time wheel instead
-// Task # is pick-only (from the TASKS legend), so it's not in the free-text history map
-const HIST_OF = {notes:'notes', project:'project', contractor:'contractor',
+const HIST_OF = {task:'task', notes:'notes', project:'project', contractor:'contractor',
                  job:'job', h:'hours'};
 // descriptions shown next to the codes inside the drop-downs (legends are editable)
 function dlLabels(field){
@@ -1178,8 +1177,8 @@ function buildTable(){
     for(let k=0; k<w.secRows[si]; k++, ri++){
       h += '<tr class="taskrow'+(SECTIONS[si].tall?' tall':'')+'">';
       for(const f of ['task','notes','project','contractor','job']){
-        if(f==='task'){          // Task # is a pick-only list fed by the TASKS legend
-          h += '<td class="b tinfo"><input class="cell task redtx taskpick" readonly title="Pick a task #" data-row="'+ri+'" data-f="task"></td>';
+        if(f==='task'){          // Task #: type anything (remembered) or pick from the TASKS legend
+          h += '<td class="b tinfo"><input class="cell task redtx taskpick" title="Type a task # or pick one" data-row="'+ri+'" data-f="task" spellcheck="false" autocomplete="off"></td>';
         }else{                   // NOTES / PROJECT / CONTRACTOR / JOB TYPE grow taller as you type
           h += '<td class="b tinfo"><textarea class="cell task redtx grow" rows="1" data-row="'+ri+'" data-f="'+f+'" spellcheck="false" autocomplete="off"></textarea></td>';
         }
@@ -1547,13 +1546,28 @@ function renderCombo(){
   // legend-fed pickers: Task # reads the 1st (TASKS) legend, Job Type the 2nd
   const legKind = comboInp.classList.contains('taskpick') ? 'task'
                 : comboInp.classList.contains('jobpick')  ? 'job' : null;
-  if(legKind){
-    const legend = legKind==='task' ? state.settings.taskLegend : state.settings.jobLegend;
+  if(legKind==='task'){
+    // Task #: legend codes first, then remembered custom entries — filtered as you type
+    const typed = comboInp.value.trim().toLowerCase();
+    const legend = state.settings.taskLegend.filter(l=>String(l[0]).trim());
+    const legHit = legend.filter(l=>!typed || String(l[0]).toLowerCase().includes(typed) ||
+                                             String(l[1]||'').toLowerCase().includes(typed));
+    const legCodes = new Set(legend.map(l=>String(l[0]).trim().toLowerCase()));
+    const custom = dlOptions('task').filter(v=>!legCodes.has(v.toLowerCase()))
+                                    .filter(v=>!typed || v.toLowerCase().includes(typed));
+    const rows = (comboInp.value ? '<div class="citem" data-v=""><span class="cv" style="color:#94a3b8">✕ clear this box</span></div>' : '')+
+      legHit.map(l=>'<div class="citem" data-v="'+esc(l[0])+'"><span class="cv">'+esc(l[0])+'</span>'+
+                    '<span class="cl">'+esc(l[1]||'')+'</span></div>').join('')+
+      custom.slice(0,40).map(v=>'<div class="citem" data-v="'+esc(v)+'"><span class="cv">'+esc(v)+'</span>'+
+                    '<b class="cx" title="Forget this value">✕</b></div>').join('');
+    combo.innerHTML = rows || '<div class="cempty">Type any task # — it is remembered for next time — or add a row to the TASKS legend.</div>';
+  }else if(legKind==='job'){
+    const legend = state.settings.jobLegend;
     const codes = legend.filter(l=>String(l[0]).trim());
     const rows = (comboInp.value ? '<div class="citem" data-v=""><span class="cv" style="color:#94a3b8">✕ clear this box</span></div>' : '')+
       codes.map(l=>'<div class="citem" data-v="'+esc(l[0])+'"><span class="cv">'+esc(l[0])+'</span>'+
                    '<span class="cl">'+esc(l[1]||'')+'</span></div>').join('');
-    combo.innerHTML = rows || '<div class="cempty">Add a row to the '+(legKind==='task'?'TASKS':'JOB TYPES')+' legend at the bottom of the sheet first.</div>';
+    combo.innerHTML = rows || '<div class="cempty">Add a row to the JOB TYPES legend at the bottom of the sheet first.</div>';
   }else{
     const field = HIST_OF[comboInp.dataset.f];
     const typed = comboInp.value.trim().toLowerCase();
