@@ -445,17 +445,15 @@
           <input type="number" id="remBefore1" min="0" max="720" style="width:52px"> and
           <input type="number" id="remBefore2" min="0" max="720" style="width:52px"> min before my Time Out</label>
       </div></div>
-    <div class="fld"><span>Make them fire even when closed / on iPhone</span>
+    <div class="fld"><span>Allow pop-up notifications</span>
       <div class="row" style="gap:8px;margin:0">
         <button class="btn2" id="btnNotify">🔔 Enable pop-ups</button>
-        <button class="btn2" id="btnIcs">📅 Add to Calendar (iPhone)</button>
       </div></div>
   </div>
   <div class="hint" style="margin-top:0">
     ⏰ <b>Reminders:</b> while this tool’s tab is open you get a pop-up, a beep and a flashing tab title —
     at your break time, and <b>30 &amp; 5 min before</b> the <b>Time Out</b> you typed for today.
-    To be reminded when the browser is <b>closed</b> or on your <b>iPhone</b>, tap <b>📅 Add to Calendar</b> —
-    it drops native alarms into Apple/Google Calendar (do this after you set today’s Time Out).
+    (Keep the tab open in the background for these to fire.)
   </div>
 
   <div class="hint">
@@ -2680,11 +2678,9 @@ function bindTheme(){
 }
 
 /* ================= reminders: break + check-out =================
-   In-app alarm (works while this tab is open): desktop notification + a
+   In-app alarm, works while this tab is open: desktop notification + a
    beep + a flashing browser-tab title + an on-screen banner. The check-out
-   alarm fires N minutes before the Time Out you set for today. For alarms
-   that survive the browser being closed (and for iPhone), the calendar
-   (.ics) button adds native alarms to Apple/Google Calendar. */
+   alarm fires N minutes before the Time Out you set for today. */
 let audioCtx = null, titleTimer = null, origTitle = document.title;
 function beep(){
   try{
@@ -2771,28 +2767,6 @@ function startReminders(){
   checkReminders();
   remTimer = setInterval(checkReminders, 20000);   // every 20s while the tab is open
 }
-// build a calendar (.ics) with native alarms for iPhone / laptop-when-closed
-function icsStamp(d){ return d.getFullYear()+pad2(d.getMonth()+1)+pad2(d.getDate())+'T'+pad2(d.getHours())+pad2(d.getMinutes())+'00'; }
-function buildIcs(){
-  const s = state.settings, now = new Date(), NL='\r\n';
-  const lines = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Timecard//Reminders//EN','CALSCALE:GREGORIAN'];
-  const mkDate = (min)=>{ const d=new Date(now); d.setHours(Math.floor(min/60), min%60, 0, 0); return d; };
-  const uid = ()=>Date.now()+'-'+Math.random().toString(36).slice(2)+'@timecard.local';
-  const ev = (start, title, alarms)=>{
-    lines.push('BEGIN:VEVENT','UID:'+uid(),'DTSTAMP:'+icsStamp(now),
-      'DTSTART:'+icsStamp(start),'DTEND:'+icsStamp(new Date(start.getTime()+5*60000)),
-      'SUMMARY:'+title);
-    alarms.forEach(m=>lines.push('BEGIN:VALARM','ACTION:DISPLAY','DESCRIPTION:'+title,
-      'TRIGGER:'+(m===0?'PT0M':'-PT'+m+'M'),'END:VALARM'));
-    lines.push('END:VEVENT');
-  };
-  let n = 0;
-  if(s.remBreak){ const bt=parseClock(s.remBreakTime); if(bt!=null){ ev(mkDate(bt),'🍽 Lunch break',[0]); n++; } }
-  if(s.remCheckout){ const out=todayCheckoutMin();
-    if(out!=null){ ev(mkDate(out),'🚪 Check out of the timecard',[+s.remBefore1||30, +s.remBefore2||5]); n++; } }
-  lines.push('END:VCALENDAR');
-  return { ics: lines.join(NL), count: n, hasCheckout: s.remCheckout && todayCheckoutMin()!=null };
-}
 function bindReminders(){
   const g = id=>document.getElementById(id);
   const cb = g('remBreak'), bt = g('remBreakTime'), cc = g('remCheckout'),
@@ -2808,15 +2782,8 @@ function bindReminders(){
   g('btnNotify').onclick = async ()=>{
     const r = await askNotify();
     toast(r==='granted' ? '🔔 Pop-up reminders are on for this browser.'
-        : r==='denied' ? '🔕 This browser is blocking notifications — you’ll still get the beep, tab flash and the calendar alarms.'
+        : r==='denied' ? '🔕 This browser is blocking notifications — you’ll still get the beep, the tab flash and the on-screen banner.'
         : '🔔 Allow notifications when your browser asks, so reminders pop up.', 8000);
-  };
-  g('btnIcs').onclick = ()=>{
-    const { ics, count, hasCheckout } = buildIcs();
-    if(!count){ toast('Set a break time and/or a Time Out for today first, then add to calendar.', 7000); return; }
-    download('Timecard_reminders_'+isoDate(new Date())+'.ics', new Blob([ics], {type:'text/calendar'}));
-    toast('📅 Calendar reminders downloaded — open the file to add them (fires on your iPhone/laptop even when closed).'+
-      (hasCheckout?'':'<br><span style="opacity:.85">Tip: enter today’s <b>Time Out</b> first to include the check-out alarm.</span>'), 12000);
   };
 }
 
