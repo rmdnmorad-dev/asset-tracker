@@ -2727,11 +2727,15 @@ function remFlag(kind){ return 'tcRem_'+isoDate(new Date())+'_'+kind; }
 function firedToday(kind){ try{ return localStorage.getItem(remFlag(kind))==='1'; }catch(e){ return false; } }
 function markFired(kind){ try{ localStorage.setItem(remFlag(kind),'1'); }catch(e){} }
 function todayWeekKey(){ return isoDate(weekEndingSunday(new Date())); }
-// today's Time Out, as minutes-since-midnight, if it belongs to the week on screen or the real current week
+// today's Time Out (minutes since midnight) — only when it's a REAL checkout, i.e.
+// later than Time In. A fresh day defaults to 12:00 PM in and out (equal), so the
+// untouched default is ignored: no reminder until you actually set a Time Out.
 function todayCheckoutMin(){
   const wk = state.weeks[todayWeekKey()]; if(!wk) return null;
-  const col = (new Date().getDay()+6)%7;               // Mon=0 … Sun=6
-  return parseClock((wk.days[col]||{}).tout);
+  const d = wk.days[(new Date().getDay()+6)%7] || {};    // Mon=0 … Sun=6
+  const tin = parseClock(d.tin), tout = parseClock(d.tout);
+  if(tin==null || tout==null || tout<=tin) return null;   // no positive worked span => not set
+  return tout;
 }
 function todayLunchTaken(){
   const wk = state.weeks[todayWeekKey()]; if(!wk) return false;
