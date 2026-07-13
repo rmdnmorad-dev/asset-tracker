@@ -436,6 +436,28 @@
       </div></div>
   </div>
 
+  <div class="row" style="align-items:flex-end">
+    <div class="fld"><span>⏰ REMINDERS — pop-up + beep while this tab is open</span>
+      <div class="subchecks">
+        <label><input type="checkbox" id="remBreak"> Break reminder at
+          <input type="text" id="remBreakTime" style="width:82px" placeholder="1:00 PM"></label>
+        <label><input type="checkbox" id="remCheckout"> Check-out reminder —
+          <input type="number" id="remBefore1" min="0" max="720" style="width:52px"> and
+          <input type="number" id="remBefore2" min="0" max="720" style="width:52px"> min before my Time Out</label>
+      </div></div>
+    <div class="fld"><span>Make them fire even when closed / on iPhone</span>
+      <div class="row" style="gap:8px;margin:0">
+        <button class="btn2" id="btnNotify">🔔 Enable pop-ups</button>
+        <button class="btn2" id="btnIcs">📅 Add to Calendar (iPhone)</button>
+      </div></div>
+  </div>
+  <div class="hint" style="margin-top:0">
+    ⏰ <b>Reminders:</b> while this tool’s tab is open you get a pop-up, a beep and a flashing tab title —
+    at your break time, and <b>30 &amp; 5 min before</b> the <b>Time Out</b> you typed for today.
+    To be reminded when the browser is <b>closed</b> or on your <b>iPhone</b>, tap <b>📅 Add to Calendar</b> —
+    it drops native alarms into Apple/Google Calendar (do this after you set today’s Time Out).
+  </div>
+
   <div class="hint">
     <b>How sending works:</b> each button creates a ready-to-send draft <b>file</b> (<b>.eml</b> or <b>.msg</b>,
     your choice above) with your <b>Hi</b> message and the timecard <b>already inside — nothing to paste</b>.
@@ -974,7 +996,10 @@ function defaultState(){
       phone:'962-788530881', email:'mramadan@isatts.com',
       co1:'JORDAN ISAT', co2:'SHMEISANI-AMMAN JORDAN', co3:'OFFICE# 714.927.0635 (MAJIC)',
       totalHoursLabel:'Total Hours',
-      sectionNames: SECTIONS.map(s=>s.name)
+      sectionNames: SECTIONS.map(s=>s.name),
+      // reminders
+      remBreak:true, remBreakTime:'1:00 PM',
+      remCheckout:true, remBefore1:30, remBefore2:5
     },
     history:{task:[],notes:[],project:[],contractor:[],job:[],tin:[],tout:[],lunch:[],dur:[],hours:[]},
     weeks:{}
@@ -998,6 +1023,11 @@ if(state.settings.message===undefined) state.settings.message = '';
 if(!state.settings.subjectMode) state.settings.subjectMode = 'auto';
 if(!state.settings.theme) state.settings.theme = 'light';
 if(state.settings.sendFormat!=='msg') state.settings.sendFormat = 'eml';
+if(state.settings.remBreak===undefined) state.settings.remBreak = true;
+if(!state.settings.remBreakTime) state.settings.remBreakTime = '1:00 PM';
+if(state.settings.remCheckout===undefined) state.settings.remCheckout = true;
+if(state.settings.remBefore1===undefined) state.settings.remBefore1 = 30;
+if(state.settings.remBefore2===undefined) state.settings.remBefore2 = 5;
 // 20 column widths: 5 info + 7×(narrow job, wide hours) + 1 total
 const DEFAULT_COLW = [112,88,154,148,154, 39,58,39,58,39,58,39,58,39,58,39,58,39,58, 89];
 if(!Array.isArray(state.settings.colWidths) || state.settings.colWidths.length!==20)
@@ -2555,7 +2585,8 @@ function sendDraft(kind, payload, icon, what){
     : AUTOTIP + (hasFile
       ? '<br><span style="opacity:.9">⚠ If <b>new Outlook</b> says “couldn’t be attached”, that’s its known .eml bug — flip the <b>“New Outlook”</b> switch (top-right) <b>off</b> once, or pick <b>.msg</b> in Settings instead.</span>'
       : '');
-  toast(icon+' A ready-to-send Outlook draft ('+ext+') was created with '+what+' — press <b>Send</b> when it opens.'+note, 20000);
+  const co = '<br><b style="color:#fbbf24">🚪 Don’t forget to check out!</b>';
+  toast(icon+' A ready-to-send Outlook draft ('+ext+') was created with '+what+' — press <b>Send</b> when it opens.'+co+note, 20000);
 }
 async function withBusy(btn, fn){
   btn.disabled=true;
@@ -2646,6 +2677,143 @@ function bindTheme(){
     vt.finished.finally(()=>document.documentElement.classList.remove('revealing'));
   };
   applyTheme();
+}
+
+/* ================= reminders: break + check-out =================
+   In-app alarm (works while this tab is open): desktop notification + a
+   beep + a flashing browser-tab title + an on-screen banner. The check-out
+   alarm fires N minutes before the Time Out you set for today. For alarms
+   that survive the browser being closed (and for iPhone), the calendar
+   (.ics) button adds native alarms to Apple/Google Calendar. */
+let audioCtx = null, titleTimer = null, origTitle = document.title;
+function beep(){
+  try{
+    audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)();
+    if(audioCtx.state==='suspended') audioCtx.resume();
+    [0,0.28,0.56].forEach(dt=>{
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain(), t = audioCtx.currentTime+dt;
+      o.type='sine'; o.frequency.setValueAtTime(880,t);
+      g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.35,t+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001,t+0.22);
+      o.connect(g).connect(audioCtx.destination); o.start(t); o.stop(t+0.24);
+    });
+  }catch(e){}
+}
+function flashTitle(msg){
+  clearInterval(titleTimer);
+  let on = true, n = 0;
+  titleTimer = setInterval(()=>{
+    document.title = on ? msg : origTitle; on = !on;
+    if(++n>40){ clearInterval(titleTimer); document.title = origTitle; }
+  }, 700);
+  // stop flashing as soon as the user comes back to the tab
+  const stop = ()=>{ if(!document.hidden){ clearInterval(titleTimer); document.title = origTitle;
+    document.removeEventListener('visibilitychange', stop); } };
+  document.addEventListener('visibilitychange', stop);
+}
+function askNotify(){
+  if(!('Notification' in window)) return Promise.resolve('unsupported');
+  if(Notification.permission==='granted' || Notification.permission==='denied') return Promise.resolve(Notification.permission);
+  return Notification.requestPermission().catch(()=>'default');
+}
+function fireReminder(title, body){
+  beep();
+  flashTitle('⏰ '+title);
+  try{ if('Notification' in window && Notification.permission==='granted')
+    new Notification(title, {body, tag:'timecard-reminder', requireInteraction:true}); }catch(e){}
+  toast('⏰ <b>'+esc(title)+'</b><br>'+esc(body), 15000);   // always-visible in-page fallback
+}
+function remFlag(kind){ return 'tcRem_'+isoDate(new Date())+'_'+kind; }
+function firedToday(kind){ try{ return localStorage.getItem(remFlag(kind))==='1'; }catch(e){ return false; } }
+function markFired(kind){ try{ localStorage.setItem(remFlag(kind),'1'); }catch(e){} }
+function todayWeekKey(){ return isoDate(weekEndingSunday(new Date())); }
+// today's Time Out, as minutes-since-midnight, if it belongs to the week on screen or the real current week
+function todayCheckoutMin(){
+  const wk = state.weeks[todayWeekKey()]; if(!wk) return null;
+  const col = (new Date().getDay()+6)%7;               // Mon=0 … Sun=6
+  return parseClock((wk.days[col]||{}).tout);
+}
+function todayLunchTaken(){
+  const wk = state.weeks[todayWeekKey()]; if(!wk) return false;
+  const col = (new Date().getDay()+6)%7;
+  return (parseDur((wk.days[col]||{}).lunch)||0) > 0;
+}
+function checkReminders(){
+  const s = state.settings, now = new Date(), nowMin = now.getHours()*60+now.getMinutes();
+  // break reminder — at the set time, if lunch not entered yet
+  if(s.remBreak){
+    const bt = parseClock(s.remBreakTime);
+    if(bt!=null && nowMin>=bt && nowMin<bt+30 && !todayLunchTaken() && !firedToday('break')){
+      markFired('break'); fireReminder('Lunch break time', 'Take your lunch break — then fill the LUNCH BREAK box.');
+    }
+  }
+  // check-out reminders — N minutes before today's Time Out
+  if(s.remCheckout){
+    const out = todayCheckoutMin();
+    if(out!=null){
+      [[+s.remBefore1||30,'co1'],[+s.remBefore2||5,'co2']].forEach(([mins,key])=>{
+        const t = out - mins;
+        if(nowMin>=t && nowMin<t+15 && nowMin<out+2 && !firedToday(key)){
+          markFired(key);
+          fireReminder('Check-out in '+mins+' min', 'You leave at '+fmtClock(out)+' — pack up and don’t forget to check out!');
+        }
+      });
+    }
+  }
+}
+let remTimer = null;
+function startReminders(){
+  clearInterval(remTimer);
+  checkReminders();
+  remTimer = setInterval(checkReminders, 20000);   // every 20s while the tab is open
+}
+// build a calendar (.ics) with native alarms for iPhone / laptop-when-closed
+function icsStamp(d){ return d.getFullYear()+pad2(d.getMonth()+1)+pad2(d.getDate())+'T'+pad2(d.getHours())+pad2(d.getMinutes())+'00'; }
+function buildIcs(){
+  const s = state.settings, now = new Date(), NL='\r\n';
+  const lines = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Timecard//Reminders//EN','CALSCALE:GREGORIAN'];
+  const mkDate = (min)=>{ const d=new Date(now); d.setHours(Math.floor(min/60), min%60, 0, 0); return d; };
+  const uid = ()=>Date.now()+'-'+Math.random().toString(36).slice(2)+'@timecard.local';
+  const ev = (start, title, alarms)=>{
+    lines.push('BEGIN:VEVENT','UID:'+uid(),'DTSTAMP:'+icsStamp(now),
+      'DTSTART:'+icsStamp(start),'DTEND:'+icsStamp(new Date(start.getTime()+5*60000)),
+      'SUMMARY:'+title);
+    alarms.forEach(m=>lines.push('BEGIN:VALARM','ACTION:DISPLAY','DESCRIPTION:'+title,
+      'TRIGGER:'+(m===0?'PT0M':'-PT'+m+'M'),'END:VALARM'));
+    lines.push('END:VEVENT');
+  };
+  let n = 0;
+  if(s.remBreak){ const bt=parseClock(s.remBreakTime); if(bt!=null){ ev(mkDate(bt),'🍽 Lunch break',[0]); n++; } }
+  if(s.remCheckout){ const out=todayCheckoutMin();
+    if(out!=null){ ev(mkDate(out),'🚪 Check out of the timecard',[+s.remBefore1||30, +s.remBefore2||5]); n++; } }
+  lines.push('END:VCALENDAR');
+  return { ics: lines.join(NL), count: n, hasCheckout: s.remCheckout && todayCheckoutMin()!=null };
+}
+function bindReminders(){
+  const g = id=>document.getElementById(id);
+  const cb = g('remBreak'), bt = g('remBreakTime'), cc = g('remCheckout'),
+        b1 = g('remBefore1'), b2 = g('remBefore2');
+  cb.checked = state.settings.remBreak; bt.value = state.settings.remBreakTime;
+  cc.checked = state.settings.remCheckout; b1.value = state.settings.remBefore1; b2.value = state.settings.remBefore2;
+  cb.addEventListener('change', ()=>{ state.settings.remBreak=cb.checked; save(); });
+  cc.addEventListener('change', ()=>{ state.settings.remCheckout=cc.checked; save(); });
+  bt.addEventListener('input', ()=>{ const m=parseClock(bt.value); state.settings.remBreakTime = m!=null?fmtClock(m):bt.value; save(); });
+  bt.addEventListener('blur', ()=>{ const m=parseClock(bt.value); if(m!=null){ bt.value=fmtClock(m); state.settings.remBreakTime=bt.value; save(); } });
+  [ [b1,'remBefore1'], [b2,'remBefore2'] ].forEach(([el,k])=>el.addEventListener('input', ()=>{
+    state.settings[k] = Math.max(0, Math.min(720, parseInt(el.value)||0)); save(); }));
+  g('btnNotify').onclick = async ()=>{
+    const r = await askNotify();
+    toast(r==='granted' ? '🔔 Pop-up reminders are on for this browser.'
+        : r==='denied' ? '🔕 This browser is blocking notifications — you’ll still get the beep, tab flash and the calendar alarms.'
+        : '🔔 Allow notifications when your browser asks, so reminders pop up.', 8000);
+  };
+  g('btnIcs').onclick = ()=>{
+    const { ics, count, hasCheckout } = buildIcs();
+    if(!count){ toast('Set a break time and/or a Time Out for today first, then add to calendar.', 7000); return; }
+    download('Timecard_reminders_'+isoDate(new Date())+'.ics', new Blob([ics], {type:'text/calendar'}));
+    toast('📅 Calendar reminders downloaded — open the file to add them (fires on your iPhone/laptop even when closed).'+
+      (hasCheckout?'':'<br><span style="opacity:.85">Tip: enter today’s <b>Time Out</b> first to include the check-out alarm.</span>'), 12000);
+  };
 }
 
 /* ---------------- click ripple (visual feedback on any click) ---------------- */
@@ -2747,6 +2915,8 @@ bindTheme();
 bindColResize();
 bindUndo();
 bindClickFx();
+bindReminders();
+startReminders();
 renderWeek();
 undoBase = JSON.stringify(state);       // baseline for undo (after the current week is materialised)
 updateUndoButtons();
