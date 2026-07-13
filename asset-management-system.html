@@ -1079,6 +1079,41 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
             gap: 0.5rem;
         }
 
+        /* ========== READ-ONLY VIEWER MODE ========== */
+        /* The .viewer-mode class is added to <html> the instant the exported
+           viewer loads, so every editing control is hidden before it paints
+           (no flash of edit buttons). */
+        .viewer-mode #addAssetBtn,
+        .viewer-mode #importAssetBtn,
+        .viewer-mode #addEmployeeBtn,
+        .viewer-mode #addPcBtn,
+        .viewer-mode #importPcBtn,
+        .viewer-mode #clearPcBtn,
+        .viewer-mode .nav-item[data-page="settings"],
+        .viewer-mode #assetsTable th:last-child,
+        .viewer-mode #assetsTable td:last-child,
+        .viewer-mode #employeesTable th:last-child,
+        .viewer-mode #employeesTable td:last-child,
+        .viewer-mode #pcTable th:last-child,
+        .viewer-mode #pcTable td:last-child {
+            display: none !important;
+        }
+        /* A little "Read-only" badge next to the logo in the viewer. */
+        .viewer-badge { display: none; }
+        .viewer-mode .viewer-badge {
+            display: inline-block;
+            margin-left: 8px;
+            padding: 2px 8px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-radius: 6px;
+            background: rgba(6, 182, 212, 0.15);
+            color: var(--primary-color);
+            vertical-align: middle;
+        }
+
         /* ========== LIGHT THEME ========== */
         body.light-theme {
             --primary-color: #0891B2;
@@ -1167,7 +1202,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         <div class="sidebar" id="sidebar">
             <div class="logo">
                 <i class="fas fa-cubes"></i>
-                <div class="logo-text">AssetHub</div>
+                <div class="logo-text">AssetHub<span class="viewer-badge">Read-only</span></div>
             </div>
 
             <div class="nav-section">
@@ -1419,10 +1454,19 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
                         <button class="btn btn-secondary" id="importDbBtn">
                             <i class="fas fa-upload"></i> Import Database
                         </button>
+                        <button class="btn btn-success" id="exportViewerBtn">
+                            <i class="fas fa-share-nodes"></i> Export Viewer (read-only)
+                        </button>
                         <button class="btn btn-danger" id="clearDbBtn">
                             <i class="fas fa-trash"></i> Clear All Data
                         </button>
                     </div>
+                    <p class="text-muted mb-3" style="font-size: 13px; max-width: 720px;">
+                        <strong>Export Viewer</strong> saves a read-only <code>asset-viewer.html</code> with a snapshot of
+                        your current data baked in. Share that single file (e.g. via OneDrive) — recipients can view
+                        everything but can't edit, and it works offline. To push an update, export again and replace the
+                        shared file.
+                    </p>
 
                     <div class="table-wrapper mt-3">
                         <h3 class="mb-3">Categories</h3>
@@ -1926,12 +1970,26 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         const LS_PREFIX = 'assetHub_';
         const LS_TABLES = ['assets', 'employees', 'assignments', 'categories', 'conditions'];
 
+        // VIEWER MODE: when this same HTML is exported as a read-only viewer
+        // (Settings → Export Viewer), the export injects a script that sets
+        // window.__VIEWER__ = true and window.__VIEWER_DATA__ = {a snapshot}.
+        // In that mode the data comes from the embedded snapshot instead of
+        // localStorage, and all writes become no-ops — so the shared file is
+        // a frozen, read-only copy that can't be edited.
+        const IS_VIEWER = (typeof window !== 'undefined') && window.__VIEWER__ === true;
+
         const _db  = {}; // in-memory mirror of each table
         const _seq = {}; // next auto-increment id per table
 
         const _lsKey = (table) => LS_PREFIX + table;
 
         const _loadTable = (table) => {
+            if (IS_VIEWER) {
+                const src = (window.__VIEWER_DATA__ && window.__VIEWER_DATA__[table]) || [];
+                _db[table] = Array.isArray(src) ? src.map(r => ({ ...r })) : [];
+                _seq[table] = _db[table].reduce((m, r) => Math.max(m, r.id || 0), 0) + 1;
+                return;
+            }
             try {
                 const raw = localStorage.getItem(_lsKey(table));
                 const arr = raw ? JSON.parse(raw) : [];
@@ -1941,6 +1999,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         };
 
         const _saveTable = (table) => {
+            if (IS_VIEWER) return; // read-only viewer never persists
             try { localStorage.setItem(_lsKey(table), JSON.stringify(_db[table])); }
             catch (e) { console.warn('localStorage save failed for', table, e.message); }
         };
@@ -2015,6 +2074,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         // by localStorage instead of the network — so it works offline.
         const supaFetch = async (method, table, body, params = '') => {
             if (!_db[table]) { _db[table] = []; _seq[table] = 1; }
+            // Read-only viewer: reads work, all writes are silently ignored.
+            if (IS_VIEWER && method !== 'GET') return [];
             const q = _parseParams(params);
             const nowIso = new Date().toISOString();
             const hasLastUpdated = !!(FIELD_TO_SQL[table] && FIELD_TO_SQL[table].lastUpdated);
@@ -3765,6 +3826,77 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
             document.getElementById('importDbInput').click();
         };
 
+        // Builds a read-only viewer copy of THIS tool with the current data
+        // baked in, and downloads it as asset-viewer.html. It reuses this
+        // page's own HTML (including the already-inlined Chart.js / icons /
+        // styles), so the viewer is fully self-contained and works offline —
+        // ideal for sharing on OneDrive with people who should only look.
+        const exportViewer = async () => {
+            if (IS_VIEWER) return; // a viewer can't spawn another viewer
+            const btn = document.getElementById('exportViewerBtn');
+            const label = btn ? btn.innerHTML : '';
+            if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Building viewer...'; }
+            try {
+                const data = {
+                    assets:      await getAllRecords('assets'),
+                    employees:   await getAllRecords('employees'),
+                    assignments: await getAllRecords('assignments'),
+                    categories:  await getAllRecords('categories'),
+                    conditions:  await getAllRecords('conditions'),
+                    pcAssets:    pcAssets.map(p => ({ ...p })),
+                    exportDate:  new Date().toISOString()
+                };
+
+                // Snapshot a CLONE of the page (so the live editor is untouched)
+                // and empty the dynamically-rendered containers first — the
+                // viewer re-renders them from the embedded data on load, so
+                // there's no need to ship thousands of pre-rendered table rows.
+                const clone = document.documentElement.cloneNode(true);
+                clone.querySelectorAll([
+                    '#assetsTableBody', '#employeesTableBody', '#assignmentsTableBody',
+                    '#pcTableBody', '#reportTableBody', '#categoriesTableBody', '#conditionsTableBody',
+                    '#kpiCards', '#chartsContainer', '#pcKpiCards', '#pcChartsContainer',
+                    '#toastContainer', '#importPreviewTableBody', '#pcImportPreviewBody'
+                ].join(',')).forEach(el => { el.innerHTML = ''; });
+                clone.querySelectorAll('.modal.active').forEach(m => m.classList.remove('active'));
+
+                let doc = '<!DOCTYPE html>\n' + clone.outerHTML;
+
+                // Escape every "<" in the JSON (as <) so the data can't
+                // break out of the injected script tag.
+                const json = JSON.stringify(data).replace(/</g, '\\u003c');
+
+                // The flag script must run BEFORE the app script. We insert it
+                // right after the opening <head> tag — which is unique and
+                // appears before any inlined library code. (We can't anchor on
+                // "</head>" because html2pdf's minified source contains that
+                // exact string, and String.replace would hit that copy first.)
+                // Adding .viewer-mode to <html> here hides edit controls before
+                // the first paint (no flash).
+                const inject = '<script>window.__VIEWER__=true;window.__VIEWER_DATA__=' + json +
+                    ';document.documentElement.classList.add("viewer-mode");<\/script>';
+
+                // Function replacements so "$" sequences in the data (e.g. "$&")
+                // are inserted literally, not treated as special replacement patterns.
+                doc = doc.replace('<head>', () => '<head>\n' + inject);
+                doc = doc.replace(/<title>[^<]*<\/title>/, () => '<title>Asset Viewer (Read-only)</title>');
+
+                const blob = new Blob([doc], { type: 'text/html' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'asset-viewer.html';
+                a.click();
+                setTimeout(() => window.URL.revokeObjectURL(url), 4000);
+                showToast('Viewer exported — share asset-viewer.html', 'success');
+            } catch (e) {
+                console.error('Export viewer failed:', e);
+                showToast('Could not export viewer', 'error');
+            } finally {
+                if (btn) { btn.disabled = false; btn.innerHTML = label; }
+            }
+        };
+
         const clearDatabase = async () => {
             if (!await showPasswordConfirm(
                 'This will delete ALL data including assets, employees, and assignments. This cannot be undone. Enter the password to continue.',
@@ -4650,6 +4782,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
             document.getElementById('addCategoryBtn').addEventListener('click', addCategory);
             document.getElementById('addConditionBtn').addEventListener('click', addCondition);
             document.getElementById('exportDbBtn').addEventListener('click', exportDatabase);
+            document.getElementById('exportViewerBtn').addEventListener('click', exportViewer);
             document.getElementById('importDbBtn').addEventListener('click', importDatabase);
             document.getElementById('clearDbBtn').addEventListener('click', clearDatabase);
 
@@ -5036,12 +5169,20 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         // iframes) block localStorage entirely — in that case the list simply
         // stays session-only, same as before.
         const savePcAssets = () => {
+            if (IS_VIEWER) return; // read-only viewer never persists
             try {
                 localStorage.setItem(PC_STORAGE_KEY, JSON.stringify({ pcAssets, pcIdCounter }));
             } catch (e) { /* storage unavailable */ }
         };
 
         const loadSavedPcAssets = () => {
+            // In the read-only viewer, PC data comes from the embedded snapshot.
+            if (IS_VIEWER) {
+                const src = (window.__VIEWER_DATA__ && window.__VIEWER_DATA__.pcAssets) || [];
+                pcAssets = Array.isArray(src) ? src.map(r => ({ ...r })) : [];
+                pcIdCounter = pcAssets.reduce((m, r) => Math.max(m, r.id || 0), 0) + 1;
+                return;
+            }
             try {
                 const raw = localStorage.getItem(PC_STORAGE_KEY);
                 if (!raw) return;
