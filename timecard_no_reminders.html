@@ -443,27 +443,6 @@
       </div></div>
   </div>
 
-  <!--REM_START-->
-  <div class="row" style="align-items:flex-end">
-    <div class="fld"><span>⏰ REMINDERS — pop-up + beep while this tab is open</span>
-      <div class="subchecks">
-        <label><input type="checkbox" id="remBreak"> Break reminder at
-          <input type="text" id="remBreakTime" style="width:82px" placeholder="1:00 PM"></label>
-        <label><input type="checkbox" id="remCheckout"> Check-out reminder —
-          <input type="number" id="remBefore1" min="0" max="720" style="width:52px"> and
-          <input type="number" id="remBefore2" min="0" max="720" style="width:52px"> min before my Time Out</label>
-      </div></div>
-    <div class="fld"><span>Allow pop-up notifications</span>
-      <div class="row" style="gap:8px;margin:0">
-        <button class="btn2" id="btnNotify">🔔 Enable pop-ups</button>
-      </div></div>
-  </div>
-  <div class="hint" style="margin-top:0">
-    ⏰ <b>Reminders:</b> while this tool’s tab is open you get a pop-up, a beep and a flashing tab title —
-    at your break time, and <b>30 &amp; 5 min before</b> the <b>Time Out</b> you typed for today.
-    (Keep the tab open in the background for these to fire.)
-  </div>
-  <!--REM_END-->
 
   <div class="hint">
     <b>How sending works:</b> each button creates a ready-to-send draft <b>file</b> (<b>.eml</b> or <b>.msg</b>,
@@ -1039,7 +1018,7 @@ if(state.settings.remBefore2===undefined) state.settings.remBefore2 = 5;
 if(state.settings.customDay===undefined) state.settings.customDay = false;
 if(state.settings.customDayIdx===undefined) state.settings.customDayIdx = null;
 // build flag: the reminders feature is compiled out of the "no reminders" version
-const REMINDERS = true;   /*REMINDERS_FLAG*/
+const REMINDERS = false;  /*REMINDERS_FLAG*/
 // 20 column widths: 5 info + 7×(narrow job, wide hours) + 1 total
 const DEFAULT_COLW = [112,88,154,148,154, 39,58,39,58,39,58,39,58,39,58,39,58,39,58, 89];
 if(!Array.isArray(state.settings.colWidths) || state.settings.colWidths.length!==20)
