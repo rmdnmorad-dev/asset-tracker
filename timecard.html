@@ -2471,6 +2471,19 @@ function buildHtmlEmail(prefixHtml, days){
     tot += -(parseDur(dd.lunch)||0)+(parseDur(dd.meet)||0)+(parseDur(dd.wfh)||0)+(parseDur(dd.leave)||0);
     weekMin += tot; dayVals[d] = tot; dayTaskTot[d] = 0;
   }
+  // yellow "Total Hours" cell: on a Daily send show the week-to-date total
+  // (Monday through the day being sent), not just that one day
+  let yellowTotal = weekMin;
+  if(DYS.length===1){
+    yellowTotal = 0;
+    for(let d=0; d<=DYS[0]; d++){
+      const dd = w.days[d];
+      const tin = parseClock(dd.tin), tout = parseClock(dd.tout);
+      let tot = 0; if(tin!=null && tout!=null) tot = tout - tin;
+      tot += -(parseDur(dd.lunch)||0)+(parseDur(dd.meet)||0)+(parseDur(dd.wfh)||0)+(parseDur(dd.leave)||0);
+      yellowTotal += tot;
+    }
+  }
   let h = '<html><body>'+(prefixHtml||'')+'<div style="font-family:Arial">';
   // header zone
   h += '<table cellspacing="0" cellpadding="2" style="border-collapse:collapse;width:960px;margin-bottom:4px"><tr>'+
@@ -2504,7 +2517,7 @@ function buildHtmlEmail(prefixHtml, days){
   }
   h += '<tr><td colspan="5" style="'+lblStyle+'">TOTAL WORK HOURS</td>';
   for(const d of DYS) h += '<td rowspan="2" style="'+B+'background:#FBD5B5;font-size:11px;text-align:center">'+fmtDur(dayVals[d])+'</td>';
-  h += '<td rowspan="2" style="'+B+'background:#FBD5B5;font-size:11px;text-align:center">'+fmtDur(weekMin)+'</td></tr>';
+  h += '<td rowspan="2" style="'+B+'background:#FBD5B5;font-size:11px;text-align:center">'+fmtDur(yellowTotal)+'</td></tr>';
   h += '<tr>';
   for(const c of ['TASK #','NOTES','PROJECT','CONTRACTOR','JOB TYPE'])
     h += '<td style="'+lblStyle+'font-size:10px">'+c+'</td>';
@@ -2807,7 +2820,7 @@ function startSiren(secs){
   const g = ctx.createGain(); g.gain.value = 0.0001; g.connect(ctx.destination);
   const o = ctx.createOscillator(); o.type = 'sawtooth'; o.connect(g);
   const t0 = ctx.currentTime, end = t0 + secs;
-  g.gain.exponentialRampToValueAtTime(0.6, t0+0.05);
+  g.gain.exponentialRampToValueAtTime(0.18, t0+0.05);   // gentler volume (~30%)
   for(let t=t0; t<end; t+=0.7){
     o.frequency.setValueAtTime(660, t);
     o.frequency.linearRampToValueAtTime(1100, t+0.35);
