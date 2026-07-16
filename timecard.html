@@ -187,6 +187,14 @@
 
   .todayhl{box-shadow:inset 0 -3px 0 #2563eb}
   .customhl{box-shadow:inset 0 -4px 0 #eab308}
+  .tasknex{position:relative}
+  .nexbtn{display:none;position:absolute;left:2px;top:50%;transform:translateY(-50%);width:19px;height:19px;padding:0;
+    border:1px solid #9aa7bd;border-radius:5px;background:#eef2f7;cursor:pointer;font-size:11px;line-height:16px;text-align:center;z-index:4}
+  .nexbtn:hover{background:#dbe4f0}
+  .nexbtn.sent{background:#22c55e;border-color:#15803d;color:#fff}
+  body.dark .nexbtn{background:#2b3140;border-color:#4b5563;color:#cbd5e1}
+  body.dark .nexbtn.sent{background:#16a34a;color:#fff}
+  body.capturing .nexbtn{display:none !important}
   #sheet.customday .dayhdr{cursor:grab}
   #sheet.customday .dayhdr:active{cursor:grabbing}
   #customDaySel{font-size:12px;padding:1px 3px;max-width:170px}
@@ -419,7 +427,7 @@
 
   @media print{
     #toolbar,#settings,#toast,.beamring,.clickfx,#alarmfx,#alarmbanner{display:none !important}
-    .rowbtns,.colgrip{display:none !important}
+    .rowbtns,.colgrip,.nexbtn{display:none !important}
     #sheetWrap{padding:0;overflow:visible}
     #sheet{box-shadow:none;border:none;margin:0}
     body{background:#fff}
@@ -500,10 +508,12 @@
       <input type="text" id="setNexusUrl" placeholder="https://nexus.tcs.local/protected.php"></div>
   </div>
   <div class="hint" style="margin-top:0">
-    🚀 <b>Nexus:</b> click <b>🚀 Nexus</b> to log the current day's tasks. <b>One-time setup:</b> install the free
-    <b>Tampermonkey</b> extension and add the uploader script (the <code>.user.js</code> file provided), then keep
-    Nexus logged in. Each click opens a Nexus tab, asks you to confirm, and auto-submits each task
-    (search → Edit → Hours → Draft Package → hours + date → Submit).
+    🚀 <b>Nexus:</b> every 6-digit task with hours today gets a small <b>🚀</b> button to the left of its number —
+    click it to log just that one task; it turns <b style="color:#16a34a">green ✓</b> once sent (and stays green so you
+    won't double-send). The toolbar <b>🚀 Nexus</b> button sends every <i>un-sent</i> task for the day at once.
+    <b>One-time setup:</b> install the free <b>Tampermonkey</b> extension, add the uploader script (the
+    <code>.user.js</code> file), and stay logged into Nexus. Each send opens a Nexus tab, you confirm, and it
+    auto-does search → Edit → Hours → Draft Package → hours + date → Submit.
   </div>
 
   <!--REM_START-->
@@ -1109,6 +1119,10 @@ if(state.settings.remBefore2===undefined) state.settings.remBefore2 = 5;
 if(state.settings.customDay===undefined) state.settings.customDay = false;
 if(state.settings.customDayIdx===undefined) state.settings.customDayIdx = null;
 if(!state.settings.nexusUrl) state.settings.nexusUrl = 'https://nexus.tcs.local/protected.php';
+// which (date|task) hours have been sent to Nexus — stored on its own (not in undo history)
+let nexusSent = {};
+try{ nexusSent = JSON.parse(localStorage.getItem('jordanIsatNexusSentV1')||'{}') || {}; }catch(e){ nexusSent = {}; }
+function saveNexusSent(){ try{ localStorage.setItem('jordanIsatNexusSentV1', JSON.stringify(nexusSent)); }catch(e){} }
 // build flag: the reminders feature is compiled out of the "no reminders" version
 const REMINDERS = true;   /*REMINDERS_FLAG*/
 // 20 column widths: 5 info + 7×(narrow job, wide hours) + 1 total
@@ -1291,7 +1305,8 @@ function buildTable(){
       h += '<tr class="taskrow'+(SECTIONS[si].tall?' tall':'')+'">';
       for(const f of ['task','notes','project','contractor','job']){
         if(f==='task'){          // Task #: type anything (remembered) or pick from the TASKS legend
-          h += '<td class="b tinfo"><input class="cell task redtx taskpick" title="Type a task # or pick one" data-row="'+ri+'" data-f="task" spellcheck="false" autocomplete="off"></td>';
+          h += '<td class="b tinfo tasknex"><button type="button" class="nexbtn" data-row="'+ri+'" tabindex="-1"></button>'+
+               '<input class="cell task redtx taskpick" title="Type a task # or pick one" data-row="'+ri+'" data-f="task" spellcheck="false" autocomplete="off"></td>';
         }else{                   // NOTES / PROJECT / CONTRACTOR / JOB TYPE grow taller as you type
           h += '<td class="b tinfo"><textarea class="cell task redtx grow" rows="1" data-row="'+ri+'" data-f="'+f+'" spellcheck="false" autocomplete="off"></textarea></td>';
         }
@@ -1434,6 +1449,7 @@ function recalc(){
   }
   for(let d=0; d<7; d++) document.getElementById('bt'+d).textContent = fmtNum(dayTaskTot[d]);
   document.getElementById('btAll').textContent = fmtNum(grand);
+  updateNexusButtons();
 }
 
 function bindSheetInputs(){
@@ -1491,6 +1507,8 @@ function bindSheetInputs(){
   });
   // + / − row buttons in the section headers and legends
   host.addEventListener('click', e=>{
+    const nx = e.target.closest('.nexbtn');
+    if(nx){ e.preventDefault(); e.stopPropagation(); onNexusRowClick(nx); return; }
     const btn = e.target.closest('button.rowbtn');
     if(!btn) return;
     if(btn.classList.contains('legadd') || btn.classList.contains('legdel')){
@@ -2803,19 +2821,68 @@ function gatherNexusTasks(){
   }
   return { tasks, day:DAYS[col], date:usDatePad(dates[col]) };
 }
+function isNexusSent(date, task){ return !!nexusSent[date+'|'+task]; }
+function markNexusSent(date, task, val){
+  const k = date+'|'+task;
+  if(val) nexusSent[k] = Date.now(); else delete nexusSent[k];
+  saveNexusSent(); updateNexusButtons();
+}
+// open the Nexus tab (reusing one named tab) with a set of tasks packed in the URL
+function openNexusWith(tasks){
+  const json = JSON.stringify(tasks);
+  const payload = btoa(unescape(encodeURIComponent(json)));
+  try{ navigator.clipboard.writeText(json); }catch(e){}
+  const base = (state.settings.nexusUrl||'https://nexus.tcs.local/protected.php').trim();
+  const url = base + (base.indexOf('#')>=0?'&':'#') + 'tcup=' + encodeURIComponent(payload);
+  return window.open(url, 'tcnexus');
+}
+// the little 🚀/✓ button on each 6-digit task row: show only when it has hours today
+function updateNexusButtons(){
+  const host = document.getElementById('tblhost'); if(!host) return;
+  const w = week(), col = dailyCol(), date = usDatePad(weekDates()[col]);
+  host.querySelectorAll('.nexbtn').forEach(btn=>{
+    const r = w.rows[+btn.dataset.row];
+    const t = r ? String(r.task||'').trim() : '';
+    const hrs = r ? num(r.ha[col]) + num(r.h[col]) : 0;
+    const show = /^\d{6}$/.test(t) && hrs>0;
+    btn.style.display = show ? 'block' : 'none';     // CSS default is none, so set explicitly when shown
+    if(!show) return;
+    const sent = isNexusSent(date, t);
+    btn.classList.toggle('sent', sent);
+    btn.textContent = sent ? '✓' : '🚀';
+    btn.title = (sent ? 'Already sent to Nexus for ' : 'Send to Nexus for ')+date+' — task '+t+' ('+fmtNum(hrs)+'h)';
+    btn.dataset.task = t; btn.dataset.hours = fmtNum(hrs); btn.dataset.date = date;
+  });
+}
+function onNexusRowClick(btn){
+  const t = btn.dataset.task, hrs = btn.dataset.hours, date = btn.dataset.date;
+  if(!t) return;
+  if(btn.classList.contains('sent') && !confirm('Task '+t+' is already marked sent to Nexus for '+date+'.\nSend it again?')) return;
+  openNexusWith([{ task:t, hours:+hrs, date:date, milestone:'DRAFT PACKAGE' }]);
+  markNexusSent(date, t, true);          // green now (optimistic; the Nexus tab confirms/undoes it)
+  toast('🚀 Sending task <b>'+esc(t)+'</b> ('+esc(hrs)+'h) to Nexus for '+date+'. Confirm the pop-up in the Nexus tab.', 9000);
+}
+// toolbar button: send every UNSENT 6-digit task for the day at once
 async function sendToNexus(){
   const { tasks, day, date } = gatherNexusTasks();
   if(!tasks.length){ toast('🚀 No 6-digit task numbers with hours on <b>'+day+' '+date+'</b> to send to Nexus.', 9000); return; }
-  const json = JSON.stringify(tasks);
-  const payload = btoa(unescape(encodeURIComponent(json)));        // UTF-8 safe base64
-  try{ await navigator.clipboard.writeText(json); }catch(e){}       // also on clipboard (bookmarklet fallback)
-  const base = (state.settings.nexusUrl||'https://nexus.tcs.local/protected.php').trim();
-  const url = base + (base.indexOf('#')>=0?'&':'#') + 'tcup=' + encodeURIComponent(payload);
-  const wnd = window.open(url, '_blank');
-  const list = tasks.map(t=>t.task+'='+t.hours+'h').join(', ');
-  toast('🚀 Sending <b>'+tasks.length+'</b> task(s) for <b>'+day+' '+date+'</b> to Nexus (<b>'+esc(list)+'</b>).<br>'+
-    (wnd ? 'Confirm the pop-up in the Nexus tab — it will fill &amp; submit each one.'
-         : '⚠ Your browser blocked the new tab — allow pop-ups for this tool, then click 🚀 Nexus again.'), 16000);
+  const unsent = tasks.filter(t=>!isNexusSent(date, t.task));
+  if(!unsent.length){ toast('✅ All '+tasks.length+' task(s) for <b>'+day+' '+date+'</b> are already marked sent. Use a task’s green ✓ button to resend one.', 11000); return; }
+  openNexusWith(unsent);
+  unsent.forEach(t=>markNexusSent(date, t.task, true));
+  toast('🚀 Sending <b>'+unsent.length+'</b> unsent task(s) for <b>'+day+' '+date+'</b> to Nexus. Confirm the pop-up there.', 14000);
+}
+// the Nexus helper posts back per-task success/failure (best-effort, real confirmation)
+function bindNexusMessages(){
+  window.addEventListener('message', e=>{
+    const d = e.data;
+    if(!d || d.__tcnexus!==true || !d.task || !d.date) return;
+    if(d.ok){ markNexusSent(d.date, d.task, true); }
+    else {
+      markNexusSent(d.date, d.task, false);
+      toast('⚠ Nexus could not submit task <b>'+esc(d.task)+'</b>'+(d.err?': '+esc(d.err):'')+'. Its button is back to unsent — try again.', 13000);
+    }
+  });
 }
 
 /* ---------------- tamper-resistant credit ---------------- */
@@ -3154,6 +3221,7 @@ bindColResize();
 bindUndo();
 bindClickFx();
 bindSavePill();
+bindNexusMessages();
 bindCustomDayDrag();
 if(REMINDERS){ bindReminders(); startReminders(); }
 renderWeek();

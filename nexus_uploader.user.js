@@ -119,6 +119,9 @@
 
     if(q.i >= q.tasks.length){                       // finished — report
       localStorage.removeItem(LSKEY);
+      // tell the timecard which tasks went in (so its 🚀/✓ buttons reflect reality)
+      try{ if(window.opener) q.results.forEach(r=>window.opener.postMessage(
+        {__tcnexus:true, task:r.task, date:r.date, ok:r.ok, err:r.err}, '*')); }catch(e){}
       const ok = q.results.filter(r=>r.ok).length;
       const bad = q.results.filter(r=>!r.ok);
       status('✅ <b>Nexus upload finished:</b> '+ok+'/'+q.tasks.length+' submitted.'
@@ -134,13 +137,13 @@
     try{
       const submit = await fillTask(t);
       // commit success + advance BEFORE the submit (a full-page POST would reload us mid-step)
-      console.log('[tcup] filled OK', t.task); q.i++; q.results.push({task:t.task, ok:true}); q.ts=Date.now();
+      console.log('[tcup] filled OK', t.task); q.i++; q.results.push({task:t.task, date:t.date, ok:true}); q.ts=Date.now();
       localStorage.setItem(LSKEY, JSON.stringify(q));
       submit.click();
       await sleep(2600);              // if it was AJAX (no reload), move on ourselves
       location.reload();
     }catch(e){
-      console.log('[tcup] FAIL', t.task, e.message); q.i++; q.results.push({task:t.task, ok:false, err:e.message}); q.ts=Date.now();
+      console.log('[tcup] FAIL', t.task, e.message); q.i++; q.results.push({task:t.task, date:t.date, ok:false, err:e.message}); q.ts=Date.now();
       localStorage.setItem(LSKEY, JSON.stringify(q));
       await sleep(600);
       location.reload();
