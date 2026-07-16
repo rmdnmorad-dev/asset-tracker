@@ -450,6 +450,7 @@
   <div class="sep"></div>
   <div class="grp">
     <button class="btn" id="btnSavePdf" title="Save a PDF of the sheet to your computer">⬇ Save PDF</button>
+    <button class="btn" id="btnNexus" title="Log today's 6-digit tasks + hours to Nexus">🚀 Nexus</button>
     <button class="btn" id="btnSearch" title="Search every timecard (Ctrl+F)">🔍 Search</button>
     <button class="btn" id="btnSettings">⚙ Settings</button>
   </div>
@@ -492,6 +493,17 @@
         <label><input type="checkbox" id="fmtEml"> .eml <span style="color:#888;font-weight:normal">— recommended · opens as a ready draft in classic Outlook, Apple Mail, Windows Mail</span></label>
         <label><input type="checkbox" id="fmtMsg"> .msg <span style="color:#888;font-weight:normal">— classic Outlook desktop only (new Outlook can only attach it)</span></label>
       </div></div>
+  </div>
+
+  <div class="row">
+    <div class="fld" style="flex:1;min-width:300px"><span>🚀 NEXUS HOURS UPLOAD — the 🚀 Nexus button logs today's 6-digit tasks (hours + Draft Package) to this URL</span>
+      <input type="text" id="setNexusUrl" placeholder="https://nexus.tcs.local/protected.php"></div>
+  </div>
+  <div class="hint" style="margin-top:0">
+    🚀 <b>Nexus:</b> click <b>🚀 Nexus</b> to log the current day's tasks. <b>One-time setup:</b> install the free
+    <b>Tampermonkey</b> extension and add the uploader script (the <code>.user.js</code> file provided), then keep
+    Nexus logged in. Each click opens a Nexus tab, asks you to confirm, and auto-submits each task
+    (search → Edit → Hours → Draft Package → hours + date → Submit).
   </div>
 
   <!--REM_START-->
@@ -1055,6 +1067,7 @@ function defaultState(){
       subject:'{type} Timecard-{date}',
       subjectV2:true, subjectMode:'auto', sendFormat:'eml',
       customDay:false, customDayIdx:null,      // custom single day for a Daily send
+      nexusUrl:'https://nexus.tcs.local/protected.php',
       taskLegend: TASK_LEGEND.map(t=>[t[0],t[1]]),
       jobLegend: JOB_LEGEND.map(t=>[t[0],t[1]]),
       employee:'Morad Ramadan', manager:'C. Hattar',
@@ -1095,6 +1108,7 @@ if(state.settings.remBefore1===undefined) state.settings.remBefore1 = 30;
 if(state.settings.remBefore2===undefined) state.settings.remBefore2 = 5;
 if(state.settings.customDay===undefined) state.settings.customDay = false;
 if(state.settings.customDayIdx===undefined) state.settings.customDayIdx = null;
+if(!state.settings.nexusUrl) state.settings.nexusUrl = 'https://nexus.tcs.local/protected.php';
 // build flag: the reminders feature is compiled out of the "no reminders" version
 const REMINDERS = true;   /*REMINDERS_FLAG*/
 // 20 column widths: 5 info + 7×(narrow job, wide hours) + 1 total
@@ -1635,7 +1649,7 @@ function bindSettings(){
     p.hidden = !p.hidden;
   };
   const updPreview = ()=>{ document.getElementById('subjPreview').textContent = '→  '+subjectText(); };
-  const map = [['setTo','emailTo'],['setCc','emailCc'],['setSubject','subject'],['setMessage','message']];
+  const map = [['setTo','emailTo'],['setCc','emailCc'],['setSubject','subject'],['setMessage','message'],['setNexusUrl','nexusUrl']];
   for(const [id,key] of map){
     const el = document.getElementById(id);
     el.value = state.settings[key]||'';
@@ -2767,6 +2781,38 @@ function bindEmailButtons(){
     download(fileBase()+'.pdf', await buildSearchablePdf(sendDays()));
     toast('⬇ <b>'+fileBase()+'.pdf</b> saved — you can select and copy its text.', 8000);
   });
+  const bn = document.getElementById('btnNexus');
+  if(bn) bn.onclick = ev=>withBusy(ev.currentTarget, sendToNexus);
+}
+
+/* ---------------- Nexus hours upload ----------------
+   Collects the current day's 6-digit tasks + hours and hands them to the
+   Nexus tab (via the URL) where the Tampermonkey helper logs each one. */
+function usDatePad(d){ return pad2(d.getMonth()+1)+'/'+pad2(d.getDate())+'/'+d.getFullYear(); }
+function gatherNexusTasks(){
+  const w = week(), dates = weekDates(), col = dailyCol();
+  const tasks = [];
+  for(const r of w.rows){
+    const t = String(r.task||'').trim();
+    if(!/^\d{6}$/.test(t)) continue;                 // only 6-digit task numbers
+    const hrs = num(r.ha[col]) + num(r.h[col]);
+    if(hrs>0) tasks.push({ task:t, hours:+fmtNum(hrs), date:usDatePad(dates[col]), milestone:'DRAFT PACKAGE' });
+  }
+  return { tasks, day:DAYS[col], date:usDatePad(dates[col]) };
+}
+async function sendToNexus(){
+  const { tasks, day, date } = gatherNexusTasks();
+  if(!tasks.length){ toast('🚀 No 6-digit task numbers with hours on <b>'+day+' '+date+'</b> to send to Nexus.', 9000); return; }
+  const json = JSON.stringify(tasks);
+  const payload = btoa(unescape(encodeURIComponent(json)));        // UTF-8 safe base64
+  try{ await navigator.clipboard.writeText(json); }catch(e){}       // also on clipboard (bookmarklet fallback)
+  const base = (state.settings.nexusUrl||'https://nexus.tcs.local/protected.php').trim();
+  const url = base + (base.indexOf('#')>=0?'&':'#') + 'tcup=' + encodeURIComponent(payload);
+  const wnd = window.open(url, '_blank');
+  const list = tasks.map(t=>t.task+'='+t.hours+'h').join(', ');
+  toast('🚀 Sending <b>'+tasks.length+'</b> task(s) for <b>'+day+' '+date+'</b> to Nexus (<b>'+esc(list)+'</b>).<br>'+
+    (wnd ? 'Confirm the pop-up in the Nexus tab — it will fill &amp; submit each one.'
+         : '⚠ Your browser blocked the new tab — allow pop-ups for this tool, then click 🚀 Nexus again.'), 16000);
 }
 
 /* ---------------- tamper-resistant credit ---------------- */
