@@ -2569,15 +2569,18 @@ function buildHtmlEmail(prefixHtml, days){
          escHtml(s.sectionNames[si]||SECTIONS[si].name)+'</td></tr>';
     for(let k=0; k<w.secRows[si]; k++, ri++){
       const r = w.rows[ri];
-      let rowTot = 0;
       h += '<tr>';
       for(const f of ['task','notes','project','contractor','job'])
         h += '<td style="'+B+'background:#D9D9D9;color:#FF0000;font-size:11px;text-align:center;height:22px">'+escHtml(r[f]||'')+'</td>';
       for(const d of DYS){
         const v = num(r.ha[d]) + num(r.h[d]);
-        rowTot += v; dayTaskTot[d] += v;
+        dayTaskTot[d] += v;
         h += '<td style="'+B+'background:#D7E3BC;color:#FF0000;font-size:11px;text-align:center">'+(v ? fmtNum(v) : '')+'</td>';
       }
+      // green row total (rightmost): week-to-date per task on a Daily send, else the full week
+      let rowTot = 0;
+      if(DYS.length===1){ for(let d=0; d<=DYS[0]; d++) rowTot += num(r.ha[d]) + num(r.h[d]); }
+      else { for(const d of DYS) rowTot += num(r.ha[d]) + num(r.h[d]); }
       grand += rowTot;
       h += '<td style="'+B+'background:#D7E3BC;font-size:11px;text-align:center">'+fmtNum(rowTot)+'</td></tr>';
     }
