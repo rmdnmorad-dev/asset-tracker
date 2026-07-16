@@ -392,6 +392,31 @@
   body.capturing .beamring,body.capturing .clickfx,body.capturing #alarmfx,body.capturing #alarmbanner{display:none !important}
   body.capturing #sheet{border-radius:0}
 
+  /* ---------- phones / small screens ---------- */
+  @media (max-width: 820px){
+    html,body{max-width:100%;overflow-x:hidden}          /* only the sheet scrolls sideways, not the page */
+    #toolbar{position:static;padding:6px 8px;gap:5px}     /* not sticky: give the small screen back to the sheet */
+    #toolbar .btn{padding:7px 9px;font-size:12px}
+    #toolbar .btn2{padding:7px 9px}
+    #toolbar > label{display:none}                        /* "Week ending" label — save room */
+    #toolbar .sep{display:none}
+    #toolbar input[type=date]{font-size:12px;padding:5px}
+    .grp.right{margin-left:0}
+    #savePill{font-size:11px;padding:3px 8px}
+    #credit svg{height:20px}
+    .creditbox{padding:4px 8px}
+    #sheetWrap{padding:10px 6px 34px;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+    #sheet{box-shadow:0 2px 8px rgba(0,0,0,.18)}
+    #settings{margin:10px 6px 0;padding:12px;max-width:none}
+    #settings .row{gap:10px}
+    #settings .fld{flex:1 1 100% !important;min-width:0 !important}
+    #settings .fld > input,#settings .fld > textarea{width:100%;box-sizing:border-box}
+    #combo,#wheel{max-width:92vw}
+    #alarmbanner .ab-in{font-size:13px;padding:10px 12px;gap:10px;flex-wrap:wrap;justify-content:center}
+    #toast{left:8px;right:8px;bottom:10px;transform:none;max-width:none}
+    #toast.show{animation:none}
+  }
+
   @media print{
     #toolbar,#settings,#toast,.beamring,.clickfx,#alarmfx,#alarmbanner{display:none !important}
     .rowbtns,.colgrip{display:none !important}
