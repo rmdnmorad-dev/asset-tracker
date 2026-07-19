@@ -2817,7 +2817,7 @@ function gatherNexusTasks(){
     const t = String(r.task||'').trim();
     if(!/^\d{6}$/.test(t)) continue;                 // only 6-digit task numbers
     const hrs = num(r.ha[col]) + num(r.h[col]);
-    if(hrs>0) tasks.push({ task:t, hours:+fmtNum(hrs), date:usDatePad(dates[col]), milestone:'DRAFT PACKAGE' });
+    if(hrs>0) tasks.push({ task:t, hours:+fmtNum(hrs), date:usDatePad(dates[col]), milestone:'DRAFT PACKAGE', desc:(r.notes||'').trim() });
   }
   return { tasks, day:DAYS[col], date:usDatePad(dates[col]) };
 }
@@ -2852,13 +2852,14 @@ function updateNexusButtons(){
     btn.textContent = sent ? '✓' : '🚀';
     btn.title = (sent ? 'Already sent to Nexus for ' : 'Send to Nexus for ')+date+' — task '+t+' ('+fmtNum(hrs)+'h)';
     btn.dataset.task = t; btn.dataset.hours = fmtNum(hrs); btn.dataset.date = date;
+    btn.dataset.desc = (r.notes||'').trim();
   });
 }
 function onNexusRowClick(btn){
   const t = btn.dataset.task, hrs = btn.dataset.hours, date = btn.dataset.date;
   if(!t) return;
   if(btn.classList.contains('sent') && !confirm('Task '+t+' is already marked sent to Nexus for '+date+'.\nSend it again?')) return;
-  openNexusWith([{ task:t, hours:+hrs, date:date, milestone:'DRAFT PACKAGE' }]);
+  openNexusWith([{ task:t, hours:+hrs, date:date, milestone:'DRAFT PACKAGE', desc:btn.dataset.desc||'' }]);
   markNexusSent(date, t, true);          // green now (optimistic; the Nexus tab confirms/undoes it)
   toast('🚀 Sending task <b>'+esc(t)+'</b> ('+esc(hrs)+'h) to Nexus for '+date+'. Confirm the pop-up in the Nexus tab.', 9000);
 }
