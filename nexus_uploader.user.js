@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Timecard → Nexus hours uploader
 // @namespace    timecard.local
-// @version      3.6
+// @version      3.7
 // @description  Fills the timecard's daily tasks into Nexus (Draft Package, hours, date, notes). YOU click Submit. Reads tasks from the clipboard (reliable) or the URL. Has a "Copy page HTML" button so selectors can be pinned to the real page.
 // @match        *://nexus.tcs.local/*
 // @run-at        document-idle
@@ -123,20 +123,24 @@
     const hoursTab = await waitFor(()=>{ const m=[...document.querySelectorAll('.modal,.modal-dialog,[role="dialog"]')].find(visible)||document.body; return clickableByText(m,'Hours'); }, 8000);
     if(hoursTab){ fullClick(hoursTab); log('✓ Opened the <b>Hours</b> tab'); }
 
-    // wait for the Hours form — whether it was opened by the script OR by you clicking
-    let form = await waitFor(()=>{ const f=document.querySelector('#form-input_hours'); return visible(f)?f:null; }, 6000);
-    if(!form){
+    // wait for the VISIBLE Hours field — the page may have hidden duplicate copies of the form,
+    // so anchor on the one you can actually see (found via the visible hours input).
+    const findVisible = sel => [...document.querySelectorAll(sel)].find(visible) || null;
+    let hoursField = await waitFor(()=>findVisible('input[name="ts_hours"]'), 6000);
+    if(!hoursField){
       log('👉 <b>Open Edit → the Hours tab</b> for task '+t.task+'. I’ll fill it the instant it shows.');
-      form = await waitFor(()=>{ const f=document.querySelector('#form-input_hours'); return visible(f)?f:null; }, 120000);
+      hoursField = await waitFor(()=>findVisible('input[name="ts_hours"]'), 120000);
     }
-    if(!form) throw new Error('the Hours form never appeared');
-    const ms = form.querySelector('select[name="ms_select"]');
+    if(!hoursField) throw new Error('the Hours form never appeared');
+    const form = hoursField.closest('form') || document;
+    const inForm = sel => [...form.querySelectorAll(sel)].find(visible) || form.querySelector(sel);
+    const ms = inForm('select[name="ms_select"]');
     if(ms){ setVal(ms, t.milestone||'DRAFT PACKAGE');
       const opt=ms.querySelector('option[value="'+(t.milestone||'DRAFT PACKAGE')+'"]'); const id=opt&&opt.getAttribute('data-ms-id');
       if(id){ const hid=form.querySelector('input[name="ts_ms_id"]'); if(hid) setVal(hid,id); } }
-    setVal(form.querySelector('input[name="ts_hours"]'), t.hours);
-    const dateEl=form.querySelector('input[name="ts_date"]'); if(dateEl){ dateEl.removeAttribute('readonly'); setVal(dateEl, t.date); }
-    const desc=form.querySelector('textarea[name="ts_emp_description"]'); if(desc) setVal(desc, t.desc||'');
+    setVal(hoursField, t.hours);
+    const dateEl=inForm('input[name="ts_date"]'); if(dateEl){ dateEl.removeAttribute('readonly'); setVal(dateEl, t.date); }
+    const desc=inForm('textarea[name="ts_emp_description"]'); if(desc) setVal(desc, t.desc||'');
     log('✅ <b>Filled!</b> Draft Package, '+t.hours+'h, '+t.date+(t.desc?', notes':'')+'. Now check it and click <b>Submit</b>.');
     return form;
   }
@@ -160,7 +164,8 @@
     log('— — <b>Task '+(q.i+1)+'/'+q.tasks.length+'</b> ('+t.task+') — —');
     try{
       const form=await fillTask(t);
-      const submit=form.querySelector('button[name="btn_submit-inputHours"]')||form.querySelector('[type="submit"]');
+      const submit=[...document.querySelectorAll('button[name="btn_submit-inputHours"]')].find(visible)
+        || form.querySelector('button[name="btn_submit-inputHours"]') || form.querySelector('[type="submit"]');
       log('✋ <b>Review, then click Submit</b> in Nexus to log this task.');
       setButtons([
         {label:'Skip this task', fn:()=>{ post(t.task,t.date,false,'skipped'); const qq=getQ(); qq.i++; qq.results.push({task:t.task,date:t.date,ok:false,err:'skipped'}); setQ(qq); closeAnyModal().then(processNext); }},
