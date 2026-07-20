@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Timecard → Nexus hours uploader
 // @namespace    timecard.local
-// @version      3.2
+// @version      3.3
 // @description  Fills the timecard's daily tasks into Nexus (Draft Package, hours, date, notes). YOU click Submit. Reads tasks from the clipboard (reliable) or the URL. Has a "Copy page HTML" button so selectors can be pinned to the real page.
 // @match        https://nexus.tcs.local/*
 // @run-at        document-idle
@@ -81,6 +81,7 @@
         || document.querySelector('tr[data-id="'+task+'"]')
         || document.querySelector('tr[data-row="'+task+'"]')
         || [...document.querySelectorAll('table tbody tr')].find(tr=>{
+             if(!visible(tr)) return false;
              const id=tr.getAttribute('data-id')||tr.getAttribute('data-row');
              if(id===task) return true;
              return [...tr.querySelectorAll('.highlight, span, td')].some(el=>{ const tx=el.textContent.trim(); return tx===task || tx.endsWith('.'+task); });
@@ -107,8 +108,15 @@
       throw new Error('task row not found. Rows on screen: '+(ids.length?ids.join(', '):'none'));
     }
     log('✓ Found the task row');
-    const edit = row.querySelector('button.btn-edit') || clickableByText(row,'Edit') || row.querySelector('.btn-edit');
-    if(!edit) throw new Error('Edit button not found in the row');
+    let edit = row.querySelector('button.btn-edit, a.btn-edit, .btn-edit')
+      || clickableByText(row,'Edit')
+      || [...row.querySelectorAll('button,a,i,span,[role="button"],[onclick]')].find(el=>visible(el) &&
+           /\bedit\b|pencil|fa-edit|fa-pencil/i.test((el.className||'')+' '+(el.getAttribute('title')||'')+' '+(el.getAttribute('data-original-title')||'')+' '+(el.textContent||'')));
+    if(!edit){ edit = [...row.querySelectorAll('button,a[href="#"],a[role="button"],[onclick]')].find(visible); if(edit) log('⚠ Using the row’s first button as Edit'); }
+    if(!edit){
+      const cls=[...row.querySelectorAll('button,a,[role="button"]')].filter(visible).map(b=>b.tagName.toLowerCase()+'.'+((b.className||'').trim().split(/\s+/)[0]||'?')).slice(0,8);
+      throw new Error('no Edit button in the row. Buttons there: '+(cls.join(', ')||'none'));
+    }
     edit.click(); log('✓ Clicked <b>Edit</b>');
     const hoursTab = await waitFor(()=>{ const modal=[...document.querySelectorAll('.modal,.modal-dialog,[role="dialog"]')].find(visible)||document.body; return clickableByText(modal,'Hours'); }, 15000);
     if(!hoursTab) throw new Error('Hours tab not found in the pop-up');
