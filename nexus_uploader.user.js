@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Timecard → Nexus hours uploader
 // @namespace    timecard.local
-// @version      3.1
+// @version      3.2
 // @description  Fills the timecard's daily tasks into Nexus (Draft Package, hours, date, notes). YOU click Submit. Reads tasks from the clipboard (reliable) or the URL. Has a "Copy page HTML" button so selectors can be pinned to the real page.
 // @match        https://nexus.tcs.local/*
 // @run-at        document-idle
@@ -37,12 +37,18 @@
   function panel(){
     let p = document.getElementById('tcup-panel');
     if(!p){
+      if(!document.getElementById('tcup-anim')){
+        const st=document.createElement('style'); st.id='tcup-anim';
+        st.textContent='@keyframes tcupPulse{0%,100%{box-shadow:0 0 0 3px #22c55e,0 0 20px 4px rgba(34,197,94,.85),0 12px 40px rgba(0,0,0,.6)}'
+          +'50%{box-shadow:0 0 0 3px #22c55e,0 0 44px 14px rgba(34,197,94,.95),0 12px 40px rgba(0,0,0,.6)}}';
+        document.documentElement.appendChild(st);
+      }
       p = document.createElement('div'); p.id='tcup-panel';
-      p.style.cssText='position:fixed;z-index:2147483647;right:14px;bottom:14px;width:360px;background:#0f172a;color:#e2e8f0;'
-        +'border:1px solid #334155;border-radius:10px;font:13px/1.45 Arial;box-shadow:0 10px 34px rgba(0,0,0,.55)';
-      p.innerHTML='<div style="padding:9px 12px;font-weight:bold;background:#1e293b;border-radius:10px 10px 0 0">🚀 Timecard → Nexus</div>'
-        +'<div id="tcup-log" style="max-height:240px;overflow:auto;padding:8px 12px"></div>'
-        +'<div id="tcup-btns" style="padding:8px 12px;border-top:1px solid #334155"></div>';
+      p.style.cssText='position:fixed;z-index:2147483647;right:16px;bottom:16px;width:370px;background:#0b1220;color:#e2e8f0;'
+        +'border:3px solid #22c55e;border-radius:12px;font:13px/1.45 Arial;animation:tcupPulse 1.6s ease-in-out infinite';
+      p.innerHTML='<div style="padding:11px 14px;font-weight:bold;font-size:15px;color:#052e13;background:linear-gradient(90deg,#4ade80,#22c55e);border-radius:9px 9px 0 0;letter-spacing:.3px">🚀 TIMECARD HELPER — this box</div>'
+        +'<div id="tcup-log" style="max-height:240px;overflow:auto;padding:9px 14px"></div>'
+        +'<div id="tcup-btns" style="padding:9px 14px;border-top:1px solid #1e293b"></div>';
       document.documentElement.appendChild(p);
       logBox = p.querySelector('#tcup-log');
     }
@@ -199,7 +205,7 @@
 
   function diagnostics(){
     const s=findSearch();
-    log('🚀 <b>Nexus helper ready.</b>');
+    log('✅ <b>Helper is running.</b> This green glowing box is mine.');
     log('Search box: '+(s?'✓ found (placeholder="'+(s.getAttribute('placeholder')||'')+'")':'<b style="color:#fca5a5">NOT found</b>'));
     const rows=document.querySelectorAll('tr[data-id],tr[data-row]');
     log('Task rows detected: '+rows.length);
