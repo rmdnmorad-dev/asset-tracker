@@ -261,15 +261,19 @@
   .sres .swhere{color:#64748b;font-size:12px;min-width:230px}
   .sres .sval{color:#0f172a;font-weight:600}
   .sres mark{background:#fde047;padding:0 1px;border-radius:2px}
-  /* search hit: a RED highlight box placed in page coordinates over the found
-     cell, appended to <body> at the top layer — so nothing (theme, cell
-     colour, table stacking/re-render, or reduce-motion) can hide it.
-     Removed after 10 seconds. */
-  .tc-flashov{position:absolute;z-index:2147483000;pointer-events:none;border-radius:3px;
-    background:rgba(220,38,38,.40);
-    box-shadow:inset 0 0 0 3px #dc2626, 0 0 24px 9px rgba(220,38,38,.8);
-    animation:flashpulse 1s ease-in-out infinite}
-  @keyframes flashpulse{0%,100%{opacity:1}50%{opacity:.5}}
+  /* search hit: highlight the found cell itself in RED for 10s. Everything is
+     !important and on the real cell (no separate layer, no coordinates), so it
+     renders in every browser (incl. Opera) and can't be hidden by the cell's
+     own colour or stacking. Uses outline (always reliable) + a red tint + glow. */
+  td.tcflash, .tcflash{
+    outline:4px solid #dc2626 !important; outline-offset:-4px !important;
+    background-color:#ffd9d9 !important;
+    box-shadow:0 0 0 3px #dc2626, 0 0 24px 9px rgba(220,38,38,.85) !important;
+    position:relative !important; z-index:900 !important;
+    animation:tcflashpulse 1s ease-in-out infinite !important}
+  @keyframes tcflashpulse{
+    0%,100%{box-shadow:0 0 0 3px #dc2626, 0 0 24px 9px rgba(220,38,38,.9)}
+    50%{box-shadow:0 0 0 5px #ef4444, 0 0 34px 13px rgba(220,38,38,.5)}}
 
   /* toast */
   #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);max-width:640px;
@@ -2014,32 +2018,18 @@ function jumpToResult(r){
   if(r.wk!==weekKey) setWeek(r.wk);
   let el;
   if(r.sel.day!==undefined){
-    el = document.querySelector('input.cell[data-day="'+r.sel.day+'"][data-f="'+r.sel.f+'"]');
+    el = document.querySelector('.cell[data-day="'+r.sel.day+'"][data-f="'+r.sel.f+'"]');
   }else if(r.sel.di!==undefined){
-    el = document.querySelector('input.cell[data-row="'+r.sel.row+'"][data-f="'+r.sel.f+'"][data-di="'+r.sel.di+'"]');
+    el = document.querySelector('.cell[data-row="'+r.sel.row+'"][data-f="'+r.sel.f+'"][data-di="'+r.sel.di+'"]');
   }else{
-    el = document.querySelector('input.cell[data-row="'+r.sel.row+'"][data-f="'+r.sel.f+'"]');
+    el = document.querySelector('.cell[data-row="'+r.sel.row+'"][data-f="'+r.sel.f+'"]');
   }
   if(!el) return;
-  el.scrollIntoView({block:'center'});                       // instant, so the cell's position is correct right now
-  document.querySelectorAll('.tc-flashov').forEach(n=>n.remove());
-  const cell = el.closest('td') || el;                       // highlight the whole cell/box
-  const place = ()=>{
-    const r = cell.getBoundingClientRect();
-    let ov = document.querySelector('.tc-flashov');
-    if(!ov){ ov = document.createElement('div'); ov.className = 'tc-flashov'; document.body.appendChild(ov); }
-    ov.style.left   = (r.left + window.pageXOffset - 1) + 'px';
-    ov.style.top    = (r.top  + window.pageYOffset - 1) + 'px';
-    ov.style.width  = (r.width  + 2) + 'px';
-    ov.style.height = (r.height + 2) + 'px';
-    return ov;
-  };
-  const ov = place();
-  // keep it glued to the cell for the 10s (in case the page scrolls/resizes)
-  const track = ()=>place();
-  window.addEventListener('scroll', track, {passive:true});
-  window.addEventListener('resize', track);
-  setTimeout(()=>{ window.removeEventListener('scroll', track); window.removeEventListener('resize', track); ov.remove(); }, 10000);
+  el.scrollIntoView({block:'center', behavior:'smooth'});
+  document.querySelectorAll('.tcflash').forEach(n=>n.classList.remove('tcflash'));  // clear any earlier highlight
+  const cell = el.closest('td') || el;                                              // the whole cell/box
+  cell.classList.add('tcflash');
+  setTimeout(()=>cell.classList.remove('tcflash'), 10000);                          // 10 seconds
 }
 function openSearch(){
   closePopups();
