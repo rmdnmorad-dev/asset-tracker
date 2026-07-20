@@ -261,16 +261,15 @@
   .sres .swhere{color:#64748b;font-size:12px;min-width:230px}
   .sres .sval{color:#0f172a;font-weight:600}
   .sres mark{background:#fde047;padding:0 1px;border-radius:2px}
-  /* search hit: a real yellow overlay element is placed over the whole cell
-     for 10s. Static colours (so it shows even with "reduce motion" on) and an
-     extreme z-index (so it sits above the input's text). Works over any cell
-     colour, in BOTH light and dark mode. */
-  .flashhost{position:relative !important}
-  .tc-flashov{position:absolute;left:0;top:0;right:0;bottom:0;z-index:2147483000;pointer-events:none;
-    border-radius:2px;background:rgba(253,224,71,.82);
-    box-shadow:inset 0 0 0 3px #f59e0b, 0 0 22px 7px rgba(245,158,11,.9);
+  /* search hit: a RED highlight box placed in page coordinates over the found
+     cell, appended to <body> at the top layer — so nothing (theme, cell
+     colour, table stacking/re-render, or reduce-motion) can hide it.
+     Removed after 10 seconds. */
+  .tc-flashov{position:absolute;z-index:2147483000;pointer-events:none;border-radius:3px;
+    background:rgba(220,38,38,.40);
+    box-shadow:inset 0 0 0 3px #dc2626, 0 0 24px 9px rgba(220,38,38,.8);
     animation:flashpulse 1s ease-in-out infinite}
-  @keyframes flashpulse{0%,100%{opacity:1}50%{opacity:.6}}
+  @keyframes flashpulse{0%,100%{opacity:1}50%{opacity:.5}}
 
   /* toast */
   #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);max-width:640px;
@@ -2022,16 +2021,25 @@ function jumpToResult(r){
     el = document.querySelector('input.cell[data-row="'+r.sel.row+'"][data-f="'+r.sel.f+'"]');
   }
   if(!el) return;
-  el.scrollIntoView({block:'center', behavior:'smooth'});
-  // clear any earlier highlight, then drop a yellow overlay over the WHOLE cell
+  el.scrollIntoView({block:'center'});                       // instant, so the cell's position is correct right now
   document.querySelectorAll('.tc-flashov').forEach(n=>n.remove());
-  document.querySelectorAll('.flashhost').forEach(n=>n.classList.remove('flashhost'));
-  const box = el.closest('td') || el;
-  box.classList.add('flashhost');
-  const ov = document.createElement('div');
-  ov.className = 'tc-flashov';
-  box.appendChild(ov);
-  setTimeout(()=>{ ov.remove(); box.classList.remove('flashhost'); }, 10000);   // 10 seconds
+  const cell = el.closest('td') || el;                       // highlight the whole cell/box
+  const place = ()=>{
+    const r = cell.getBoundingClientRect();
+    let ov = document.querySelector('.tc-flashov');
+    if(!ov){ ov = document.createElement('div'); ov.className = 'tc-flashov'; document.body.appendChild(ov); }
+    ov.style.left   = (r.left + window.pageXOffset - 1) + 'px';
+    ov.style.top    = (r.top  + window.pageYOffset - 1) + 'px';
+    ov.style.width  = (r.width  + 2) + 'px';
+    ov.style.height = (r.height + 2) + 'px';
+    return ov;
+  };
+  const ov = place();
+  // keep it glued to the cell for the 10s (in case the page scrolls/resizes)
+  const track = ()=>place();
+  window.addEventListener('scroll', track, {passive:true});
+  window.addEventListener('resize', track);
+  setTimeout(()=>{ window.removeEventListener('scroll', track); window.removeEventListener('resize', track); ov.remove(); }, 10000);
 }
 function openSearch(){
   closePopups();
