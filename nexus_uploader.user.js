@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Timecard → Nexus hours uploader
 // @namespace    timecard.local
-// @version      3.0
-// @description  Fills the timecard's daily tasks into Nexus (Draft Package, hours, date, notes). YOU click Submit. Reads tasks from the clipboard (reliable) or the URL.
+// @version      3.1
+// @description  Fills the timecard's daily tasks into Nexus (Draft Package, hours, date, notes). YOU click Submit. Reads tasks from the clipboard (reliable) or the URL. Has a "Copy page HTML" button so selectors can be pinned to the real page.
 // @match        https://nexus.tcs.local/*
 // @run-at        document-idle
 // @grant        none
@@ -158,6 +158,7 @@
       post(t.task,t.date,false,e.message);
       const qq=getQ()||q; qq.i++; qq.results.push({task:t.task,date:t.date,ok:false,err:e.message}); qq.ts=Date.now(); setQ(qq);
       setButtons([
+        HTMLBTN,
         {label:'Skip to next', fn:()=>closeAnyModal().then(processNext)},
         {label:'Stop', bg:'#7f1d1d', fg:'#fff', fn:()=>{ clearQ(); setButtons([{label:'Close',fn:()=>panel().remove()}]); }}
       ]);
@@ -175,6 +176,27 @@
     let tasks; try{ tasks=JSON.parse(txt); }catch(e){ log('❌ The clipboard isn’t timecard tasks. In the timecard, click a task’s 🚀 button (that copies them), then come back and click this.'); return; }
     startQueue(tasks);
   }
+
+  /* ---------- capture the page's structure so the selectors can be pinned ---------- */
+  // Copies a trimmed snapshot of the live DOM: keeps every tag, class, id, name,
+  // placeholder, role and data-* (that's what the clicks key off), drops
+  // scripts/styles/svg/images, and truncates long text so no bulk data leaks.
+  function snapshot(){
+    const clone = document.documentElement.cloneNode(true);
+    clone.querySelectorAll('#tcup-panel,script,style,svg,noscript,link,img,iframe,canvas,picture,video,audio').forEach(n=>n.remove());
+    try{
+      const walk=document.createTreeWalker(clone, NodeFilter.SHOW_TEXT, null);
+      let n; while((n=walk.nextNode())){ const t=n.nodeValue; if(t && t.length>60) n.nodeValue=t.slice(0,60)+'…'; }
+    }catch(e){}
+    return clone.outerHTML;
+  }
+  async function copyHtml(){
+    const html=snapshot();
+    try{ await navigator.clipboard.writeText(html); log('📋 Copied <b>'+Math.ceil(html.length/1024)+' KB</b> of page HTML. Paste it back to support.'); }
+    catch(e){ log('❌ Clipboard blocked: '+e.message+'. Open DevTools console and run: <code>copy(document.documentElement.outerHTML)</code>'); }
+  }
+  const HTMLBTN = {label:'📋 Copy page HTML', bg:'#334155', fg:'#fff', fn:copyHtml};
+
   function diagnostics(){
     const s=findSearch();
     log('🚀 <b>Nexus helper ready.</b>');
@@ -187,6 +209,7 @@
     }
     setButtons([
       {label:'▶ Fill tasks from clipboard', bg:'#2563eb', fg:'#fff', fn:fillFromClipboard},
+      HTMLBTN,
       {label:'Close', fn:()=>panel().remove()}
     ]);
   }
