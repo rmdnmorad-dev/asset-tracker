@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Timecard → Nexus hours uploader
 // @namespace    timecard.local
-// @version      3.3
+// @version      3.4
 // @description  Fills the timecard's daily tasks into Nexus (Draft Package, hours, date, notes). YOU click Submit. Reads tasks from the clipboard (reliable) or the URL. Has a "Copy page HTML" button so selectors can be pinned to the real page.
 // @match        https://nexus.tcs.local/*
 // @run-at        document-idle
@@ -102,21 +102,20 @@
     if(!search) throw new Error('search box not found on this page');
     log('🔎 Searching <b>'+t.task+'</b>…');
     runSearch(search, t.task);
-    const row = await waitFor(()=>findRow(t.task), 15000);
-    if(!row){
-      const ids=[...document.querySelectorAll('tr[data-id],tr[data-row]')].map(r=>r.getAttribute('data-id')||r.getAttribute('data-row')).slice(0,15);
-      throw new Error('task row not found. Rows on screen: '+(ids.length?ids.join(', '):'none'));
+    // the Edit button carries data-row="<task>" — target it directly (no table-row hunting)
+    let edit = await waitFor(()=>{
+      const b = document.querySelector('.btn-edit[data-row="'+t.task+'"], button.btn-edit[data-row="'+t.task+'"]');
+      return (b && visible(b)) ? b : null;
+    }, 15000);
+    if(!edit){                                    // fallback: find a row by its task text, then its Edit button
+      const row = findRow(t.task);
+      if(row) edit = row.querySelector('.btn-edit, button.btn-edit') || clickableByText(row,'Edit');
     }
-    log('✓ Found the task row');
-    let edit = row.querySelector('button.btn-edit, a.btn-edit, .btn-edit')
-      || clickableByText(row,'Edit')
-      || [...row.querySelectorAll('button,a,i,span,[role="button"],[onclick]')].find(el=>visible(el) &&
-           /\bedit\b|pencil|fa-edit|fa-pencil/i.test((el.className||'')+' '+(el.getAttribute('title')||'')+' '+(el.getAttribute('data-original-title')||'')+' '+(el.textContent||'')));
-    if(!edit){ edit = [...row.querySelectorAll('button,a[href="#"],a[role="button"],[onclick]')].find(visible); if(edit) log('⚠ Using the row’s first button as Edit'); }
     if(!edit){
-      const cls=[...row.querySelectorAll('button,a,[role="button"]')].filter(visible).map(b=>b.tagName.toLowerCase()+'.'+((b.className||'').trim().split(/\s+/)[0]||'?')).slice(0,8);
-      throw new Error('no Edit button in the row. Buttons there: '+(cls.join(', ')||'none'));
+      const seen=[...document.querySelectorAll('.btn-edit[data-row]')].map(b=>b.getAttribute('data-row')).slice(0,20);
+      throw new Error('Edit button for '+t.task+' not found. Task did not appear in the results. Edit buttons on screen: '+(seen.join(', ')||'none'));
     }
+    log('✓ Found task <b>'+t.task+'</b>');
     edit.click(); log('✓ Clicked <b>Edit</b>');
     const hoursTab = await waitFor(()=>{ const modal=[...document.querySelectorAll('.modal,.modal-dialog,[role="dialog"]')].find(visible)||document.body; return clickableByText(modal,'Hours'); }, 15000);
     if(!hoursTab) throw new Error('Hours tab not found in the pop-up');
@@ -222,8 +221,7 @@
       log('Text inputs I can see: '+(inps.join(', ')||'none'));
     }
     setButtons([
-      {label:'▶ Fill tasks from clipboard', bg:'#2563eb', fg:'#fff', fn:fillFromClipboard},
-      HTMLBTN,
+      {label:'▶ FILL THE TASK', bg:'#2563eb', fg:'#fff', fn:fillFromClipboard},
       {label:'Close', fn:()=>panel().remove()}
     ]);
   }
