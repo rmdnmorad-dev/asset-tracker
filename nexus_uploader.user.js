@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Timecard → Nexus hours uploader
 // @namespace    timecard.local
-// @version      3.5
+// @version      3.6
 // @description  Fills the timecard's daily tasks into Nexus (Draft Package, hours, date, notes). YOU click Submit. Reads tasks from the clipboard (reliable) or the URL. Has a "Copy page HTML" button so selectors can be pinned to the real page.
 // @match        *://nexus.tcs.local/*
 // @run-at        document-idle
@@ -96,32 +96,40 @@
     if(btn) btn.click();
   }
 
+  // a "real" click: some sites only react to the full pointer/mouse sequence
+  function fullClick(el){
+    if(!el) return;
+    try{ el.scrollIntoView({block:'center'}); }catch(e){}
+    ['pointerover','pointerenter','mouseover','pointerdown','mousedown','pointerup','mouseup','click']
+      .forEach(type=>{ try{ el.dispatchEvent(new MouseEvent(type,{bubbles:true,cancelable:true,view:window})); }catch(e){} });
+    try{ el.click(); }catch(e){}
+  }
+
   /* ---------- fill ONE task (never submits) ---------- */
   async function fillTask(t){
-    const search = await waitFor(()=>findSearch(), 20000);   // the page can take ~10s to load
+    const search = await waitFor(()=>findSearch(), 25000);   // the page can take ~10s to load
     if(!search) throw new Error('search box not found on this page');
     log('🔎 Searching <b>'+t.task+'</b>…');
     runSearch(search, t.task);
-    // the Edit button carries data-row="<task>" — target it directly (no table-row hunting)
-    let edit = await waitFor(()=>{
-      const b = document.querySelector('.btn-edit[data-row="'+t.task+'"], button.btn-edit[data-row="'+t.task+'"]');
-      return (b && visible(b)) ? b : null;
-    }, 15000);
-    if(!edit){                                    // fallback: find a row by its task text, then its Edit button
-      const row = findRow(t.task);
-      if(row) edit = row.querySelector('.btn-edit, button.btn-edit') || clickableByText(row,'Edit');
+
+    // try to open the Edit modal ourselves; if the site blocks script-clicks, we guide the user
+    const edit = await waitFor(()=>
+      document.querySelector('.btn-edit[data-row="'+t.task+'"]') || [...document.querySelectorAll('.btn-edit')].filter(visible)[0]
+    , 25000);
+    if(edit){ fullClick(edit); log('✓ Opened <b>Edit</b>'); }
+    else log('👉 <b>Click the Edit</b> button next to task '+t.task+'.');
+
+    // try to open the Hours tab
+    const hoursTab = await waitFor(()=>{ const m=[...document.querySelectorAll('.modal,.modal-dialog,[role="dialog"]')].find(visible)||document.body; return clickableByText(m,'Hours'); }, 8000);
+    if(hoursTab){ fullClick(hoursTab); log('✓ Opened the <b>Hours</b> tab'); }
+
+    // wait for the Hours form — whether it was opened by the script OR by you clicking
+    let form = await waitFor(()=>{ const f=document.querySelector('#form-input_hours'); return visible(f)?f:null; }, 6000);
+    if(!form){
+      log('👉 <b>Open Edit → the Hours tab</b> for task '+t.task+'. I’ll fill it the instant it shows.');
+      form = await waitFor(()=>{ const f=document.querySelector('#form-input_hours'); return visible(f)?f:null; }, 120000);
     }
-    if(!edit){
-      const seen=[...document.querySelectorAll('.btn-edit[data-row]')].map(b=>b.getAttribute('data-row')).slice(0,20);
-      throw new Error('Edit button for '+t.task+' not found. Task did not appear in the results. Edit buttons on screen: '+(seen.join(', ')||'none'));
-    }
-    log('✓ Found task <b>'+t.task+'</b>');
-    edit.click(); log('✓ Clicked <b>Edit</b>');
-    const hoursTab = await waitFor(()=>{ const modal=[...document.querySelectorAll('.modal,.modal-dialog,[role="dialog"]')].find(visible)||document.body; return clickableByText(modal,'Hours'); }, 15000);
-    if(!hoursTab) throw new Error('Hours tab not found in the pop-up');
-    hoursTab.click(); log('✓ Opened the <b>Hours</b> tab');
-    const form = await waitFor(()=>{ const f=document.querySelector('#form-input_hours'); return visible(f)?f:null; }, 15000);
-    if(!form) throw new Error('Hours form did not load');
+    if(!form) throw new Error('the Hours form never appeared');
     const ms = form.querySelector('select[name="ms_select"]');
     if(ms){ setVal(ms, t.milestone||'DRAFT PACKAGE');
       const opt=ms.querySelector('option[value="'+(t.milestone||'DRAFT PACKAGE')+'"]'); const id=opt&&opt.getAttribute('data-ms-id');
@@ -129,7 +137,7 @@
     setVal(form.querySelector('input[name="ts_hours"]'), t.hours);
     const dateEl=form.querySelector('input[name="ts_date"]'); if(dateEl){ dateEl.removeAttribute('readonly'); setVal(dateEl, t.date); }
     const desc=form.querySelector('textarea[name="ts_emp_description"]'); if(desc) setVal(desc, t.desc||'');
-    log('✓ Filled milestone, hours ('+t.hours+'), date'+(t.desc?' &amp; notes':''));
+    log('✅ <b>Filled!</b> Draft Package, '+t.hours+'h, '+t.date+(t.desc?', notes':'')+'. Now check it and click <b>Submit</b>.');
     return form;
   }
   async function closeAnyModal(){
