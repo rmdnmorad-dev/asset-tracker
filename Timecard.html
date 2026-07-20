@@ -261,13 +261,14 @@
   .sres .swhere{color:#64748b;font-size:12px;min-width:230px}
   .sres .sval{color:#0f172a;font-weight:600}
   .sres mark{background:#fde047;padding:0 1px;border-radius:2px}
-  .flash{animation:flashcell 2.3s ease-out;position:relative;z-index:5;border-radius:3px}
+  /* search hit: fill the WHOLE cell yellow with a pulsing box for 10s */
+  .flash{animation:flashcell 10s ease-out;position:relative;z-index:6}
+  td.flash input,td.flash textarea,td.flash .cell{background:transparent !important}  /* yellow fills the whole box */
   @keyframes flashcell{
-    0%,8%{background:#fde047;box-shadow:0 0 0 3px #f59e0b,0 0 16px 5px rgba(245,158,11,.9)}
-    28%{background:#fff3bf;box-shadow:0 0 0 6px #fbbf24,0 0 28px 11px rgba(245,158,11,.55)}
-    48%{background:#fde047;box-shadow:0 0 0 3px #f59e0b,0 0 16px 5px rgba(245,158,11,.9)}
-    68%{background:#fff3bf;box-shadow:0 0 0 6px #fbbf24,0 0 28px 11px rgba(245,158,11,.55)}
-    100%{background:transparent;box-shadow:0 0 0 0 rgba(245,158,11,0)}}
+    0%,3%{background:#fde047;box-shadow:inset 0 0 0 3px #f59e0b,0 0 20px 6px rgba(245,158,11,.9)}
+    50%{background:#fef08a;box-shadow:inset 0 0 0 4px #fbbf24,0 0 30px 10px rgba(245,158,11,.5)}
+    90%{background:#fde047;box-shadow:inset 0 0 0 3px #f59e0b,0 0 20px 6px rgba(245,158,11,.85)}
+    100%{background:transparent;box-shadow:none}}
 
   /* toast */
   #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);max-width:640px;
@@ -517,6 +518,13 @@
   <div class="hint" style="margin-top:10px">
     🧠 <b>Drop-down memory:</b> every value you type in the sheet is remembered and offered as a drop-down
     next time. To forget a value, open the drop-down and click the <b style="color:#b91c1c">✕</b> next to it.
+  </div>
+  <div class="hint" style="margin-top:10px">
+    ↔ <b>Box width (horizontal size):</b> any box can be made wider or narrower. Move your pointer to the
+    <b>right edge of a column heading</b> — TASK #, NOTES, PROJECT, CONTRACTOR, JOB TYPE, or any day
+    (MON–SUN) — the cursor turns into a <b>↔ resize arrow</b> and the edge lights up blue; <b>drag it left or
+    right</b> to resize that whole column. On a phone, press-and-drag that same edge. Each width is
+    <b>saved automatically</b> and used for every week; it also carries into the emailed / PDF timecard.
   </div>
   <div class="row" style="margin-top:12px">
     <button class="btn2" id="btnBackup">💾 Save settings &amp; memory (backup)</button>
@@ -2013,8 +2021,11 @@ function jumpToResult(r){
   }
   if(!el) return;
   el.scrollIntoView({block:'center', behavior:'smooth'});
-  el.classList.add('flash');
-  setTimeout(()=>el.classList.remove('flash'), 2500);
+  document.querySelectorAll('.flash').forEach(n=>n.classList.remove('flash'));  // clear any earlier highlight
+  const box = el.closest('td') || el;                                            // highlight the whole cell/box
+  void box.offsetWidth;                                                          // restart the animation
+  box.classList.add('flash');
+  setTimeout(()=>box.classList.remove('flash'), 10000);                          // 10 seconds
 }
 function openSearch(){
   closePopups();
