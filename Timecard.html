@@ -261,9 +261,13 @@
   .sres .swhere{color:#64748b;font-size:12px;min-width:230px}
   .sres .sval{color:#0f172a;font-weight:600}
   .sres mark{background:#fde047;padding:0 1px;border-radius:2px}
-  .flash{animation:flashcell 2.4s ease-out}
-  @keyframes flashcell{0%{background:#fde047;box-shadow:0 0 0 3px #f59e0b}
-    60%{background:#fde047;box-shadow:0 0 0 3px #f59e0b}100%{background:transparent;box-shadow:none}}
+  .flash{animation:flashcell 2.3s ease-out;position:relative;z-index:5;border-radius:3px}
+  @keyframes flashcell{
+    0%,8%{background:#fde047;box-shadow:0 0 0 3px #f59e0b,0 0 16px 5px rgba(245,158,11,.9)}
+    28%{background:#fff3bf;box-shadow:0 0 0 6px #fbbf24,0 0 28px 11px rgba(245,158,11,.55)}
+    48%{background:#fde047;box-shadow:0 0 0 3px #f59e0b,0 0 16px 5px rgba(245,158,11,.9)}
+    68%{background:#fff3bf;box-shadow:0 0 0 6px #fbbf24,0 0 28px 11px rgba(245,158,11,.55)}
+    100%{background:transparent;box-shadow:0 0 0 0 rgba(245,158,11,0)}}
 
   /* toast */
   #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);max-width:640px;
@@ -380,8 +384,36 @@
   body.capturing .beamring,body.capturing .clickfx{display:none !important}
   body.capturing #sheet{border-radius:0}
 
+  /* custom background image: a fixed full-screen layer behind everything
+     (works on iOS, where background-attachment:fixed does not). Any image
+     size fills the screen with cover; only the margins around the timecard
+     and Settings show it. */
+  #bgLayer{position:fixed;inset:0;z-index:-1;pointer-events:none;
+    background-size:cover;background-position:center center;background-repeat:no-repeat}
+  body.hasbg{background:#000}
+
+  /* ---------- phones / small screens (iOS + Android) ---------- */
+  @media (max-width: 860px){
+    html,body{overflow-x:hidden}          /* no sideways page jitter; the sheet scrolls inside its own box */
+    #toolbar{padding:6px 8px;gap:5px}
+    .btn{padding:9px 11px;font-size:13px}
+    #toolbar label{display:none}
+    .grp.right{margin-left:auto}
+    #settings{margin:10px 8px 0;padding:12px 12px;max-width:none;border-radius:12px}
+    #settings .row{gap:10px}
+    #settings .fld{flex:1 1 100%;min-width:0}
+    #settings .fld input,#settings .fld textarea,#settings .fld select{width:100%;box-sizing:border-box}
+    #settings input,#settings textarea{font-size:16px}   /* iOS won't zoom when a field is 16px+ */
+    #sheetWrap{padding:10px 6px 30px;-webkit-overflow-scrolling:touch}
+    #searchWrap{left:8px;right:8px;width:auto}
+    #combo{max-width:92vw}
+  }
+  @media (max-width: 860px){
+    .cell{font-size:15px}                 /* easier to tap/read on a phone */
+  }
+
   @media print{
-    #toolbar,#settings,#toast,.beamring,.clickfx{display:none !important}
+    #toolbar,#settings,#toast,.beamring,.clickfx,#bgLayer{display:none !important}
     .rowbtns,.colgrip{display:none !important}
     #sheetWrap{padding:0;overflow:visible}
     #sheet{box-shadow:none;border:none;margin:0}
@@ -390,6 +422,7 @@
 </style>
 </head>
 <body>
+<div id="bgLayer"></div>
 
 <div id="toolbar">
   <div class="grp">
@@ -456,6 +489,15 @@
       </div></div>
   </div>
 
+  <div class="row" style="margin-top:2px">
+    <div class="fld" style="flex:1 1 100%;min-width:260px"><span>BACKGROUND IMAGE — shows behind the timecard (any size fills the screen)</span>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:4px 2px">
+        <button class="btn2" type="button" id="btnBgPick">🖼 Choose image…</button>
+        <button class="btn2" type="button" id="btnBgClear">✕ Remove</button>
+        <input type="file" id="bgFile" accept="image/*" style="display:none">
+        <span id="bgName" style="font-size:11px;color:#777"></span>
+      </div></div>
+  </div>
 
   <div class="hint">
     <b>How sending works:</b> each button creates a ready-to-send draft <b>file</b> (<b>.eml</b> or <b>.msg</b>,
@@ -1564,6 +1606,35 @@ function bindCustomDayDrag(){
   host.addEventListener('pointerup', end);
   host.addEventListener('pointercancel', end);
 }
+/* custom background image (behind the timecard) */
+function applyBg(){
+  const layer = document.getElementById('bgLayer');
+  const img = (state.settings && state.settings.bgImage) || '';
+  if(layer) layer.style.backgroundImage = img ? 'url("'+img+'")' : '';
+  document.body.classList.toggle('hasbg', !!img);
+  const nm = document.getElementById('bgName'); if(nm) nm.textContent = img ? '✓ custom image set' : '';
+}
+function pickBgFile(f){
+  const rd = new FileReader();
+  rd.onload = ()=>{
+    const im = new Image();
+    im.onload = ()=>{
+      // shrink big photos so they fit in this browser's storage (any resolution is fine)
+      const maxSide = 2200, scale = Math.min(1, maxSide/im.width, maxSide/im.height);
+      const cw = Math.max(1, Math.round(im.width*scale)), ch = Math.max(1, Math.round(im.height*scale));
+      const c = document.createElement('canvas'); c.width = cw; c.height = ch;
+      c.getContext('2d').drawImage(im, 0, 0, cw, ch);
+      let url; try{ url = c.toDataURL('image/jpeg', 0.85); }catch(_){ url = rd.result; }
+      const prev = state.settings.bgImage;
+      state.settings.bgImage = url;
+      try{ save(); }catch(err){ state.settings.bgImage = prev||''; toast('⚠ That image is too large to save here. Try a smaller one.'); return; }
+      applyBg(); toast('🖼 Background image set.');
+    };
+    im.onerror = ()=>toast('⚠ Could not read that image file.');
+    im.src = rd.result;
+  };
+  rd.readAsDataURL(f);
+}
 function bindSettings(){
   document.getElementById('btnSettings').onclick = ()=>{
     const p = document.getElementById('settings');
@@ -1619,6 +1690,13 @@ function bindSettings(){
     };
     rd.readAsText(f);
   });
+  // custom background image
+  document.getElementById('btnBgPick').onclick = ()=>document.getElementById('bgFile').click();
+  document.getElementById('bgFile').addEventListener('change', e=>{
+    const f = e.target.files[0]; e.target.value=''; if(f) pickBgFile(f);
+  });
+  document.getElementById('btnBgClear').onclick = ()=>{ state.settings.bgImage=''; save(); applyBg(); toast('Background image removed.'); };
+  applyBg();
 }
 
 /* ---------------- custom drop-down (learned values, ✕ to forget) ---------------- */
@@ -2709,6 +2787,42 @@ async function withBusy(btn, fn){
   catch(e){ console.error(e); toast('⚠ Something went wrong: '+esc(e.message||e)); }
   finally{ btn.disabled=false; }
 }
+/* ---------------- phone sending (mail app + share sheet) ---------------- */
+function isMobile(){
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+         (navigator.maxTouchPoints>1 && /Mac/i.test(navigator.platform||navigator.userAgent));
+}
+function canShareFiles(files){ try{ return !!(navigator.canShare && navigator.canShare({files})); }catch(e){ return false; } }
+function mailtoUrl(subject, body){
+  const to = splitEmails(state.settings.emailTo).join(',');
+  const cc = splitEmails(state.settings.emailCc).join(',');
+  const q = [];
+  if(cc) q.push('cc='+encodeURIComponent(cc));
+  q.push('subject='+encodeURIComponent(subject));
+  q.push('body='+encodeURIComponent(body));
+  return 'mailto:'+encodeURIComponent(to)+'?'+q.join('&');
+}
+// share an image/PDF to the phone's Mail app; returns true if handled
+async function mobileShareFile(bytes, name, mime){
+  const to = splitEmails(state.settings.emailTo).join(', ');
+  const cc = splitEmails(state.settings.emailCc).join(', ');
+  const body = (state.settings.message||'').trim();
+  const file = new File([bytes], name, {type:mime});
+  if(canShareFiles([file])){
+    try{
+      await navigator.share({files:[file], title:subjectText(),
+        text:(body?body+'\n\n':'')+'To: '+to+(cc?'   Cc: '+cc:'')});
+      try{ await navigator.clipboard.writeText(to+(cc?', '+cc:'')); }catch(_){}
+      toast('📤 Choose your Mail app — the timecard is attached. Recipients are copied; paste into To/Cc.', 16000);
+      return true;
+    }catch(e){ if(e && e.name==='AbortError') return true; }
+  }
+  // couldn't share: save the file, then open the mail app pre-addressed to attach it
+  download(name, new Blob([bytes], {type:mime}));
+  location.href = mailtoUrl(subjectText(), (body?body+'\n\n':'')+'(The timecard '+(mime.indexOf('pdf')>=0?'PDF':'image')+' was just saved to your device — attach it here.)');
+  toast('✉ Mail app opening. The '+(mime.indexOf('pdf')>=0?'PDF':'image')+' was saved to your device — tap the attach/paper-clip and pick it.', 18000);
+  return true;
+}
 function bindEmailButtons(){
   document.getElementById('btnImg').onclick = ev=>withBusy(ev.currentTarget, async ()=>{
     if(!ensureRecipient()) return;
@@ -2717,12 +2831,19 @@ function bindEmailButtons(){
     const canvas = await captureForSend(days);
     const blob = await canvasBlob(canvas,'image/png');
     const bytes = new Uint8Array(await blob.arrayBuffer());
+    if(isMobile()){ await mobileShareFile(bytes, fileBase()+'.png', 'image/png'); return; }
     sendDraft('image', {bytes, name: fileBase()+'.png', msgHtml: msgParts().html, bodyText: (state.settings.message||'').trim()},
               '📷', 'your message and the timecard picture inside the body');
   });
   document.getElementById('btnTxt').onclick = ev=>withBusy(ev.currentTarget, async ()=>{
     if(!ensureRecipient()) return;
     const days = sendDays(), mp = msgParts();
+    if(isMobile()){
+      const body = ((state.settings.message||'').trim() ? (state.settings.message).trim()+'\n\n' : '') + buildPlainText(days);
+      toast('✉ Opening your mail app with the timecard in the message…', 9000);
+      location.href = mailtoUrl(subjectText(), body);
+      return;
+    }
     sendDraft('text', {bodyHtml: buildHtmlEmail(mp.html, days), bodyText: mp.text + buildPlainText(days)},
               '📝', 'your message and the whole timecard written in the body');
   });
@@ -2731,6 +2852,7 @@ function bindEmailButtons(){
     toast('📄 Building the PDF…');
     const pdf = await buildSearchablePdf(sendDays());
     const bytes = new Uint8Array(await pdf.arrayBuffer());
+    if(isMobile()){ await mobileShareFile(bytes, fileBase()+'.pdf', 'application/pdf'); return; }
     sendDraft('pdf', {bytes, name: fileBase()+'.pdf', msgHtml: msgParts().html, bodyText: (state.settings.message||'').trim()},
               '📄', 'your message and the PDF (an exact copy of the sheet) attached');
   });
