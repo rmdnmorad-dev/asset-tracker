@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         Timecard → Nexus hours uploader
 // @namespace    timecard.local
-// @version      3.4
+// @version      3.5
 // @description  Fills the timecard's daily tasks into Nexus (Draft Package, hours, date, notes). YOU click Submit. Reads tasks from the clipboard (reliable) or the URL. Has a "Copy page HTML" button so selectors can be pinned to the real page.
-// @match        https://nexus.tcs.local/*
+// @match        *://nexus.tcs.local/*
 // @run-at        document-idle
 // @grant        none
 // ==/UserScript==
@@ -98,7 +98,7 @@
 
   /* ---------- fill ONE task (never submits) ---------- */
   async function fillTask(t){
-    const search = findSearch();
+    const search = await waitFor(()=>findSearch(), 20000);   // the page can take ~10s to load
     if(!search) throw new Error('search box not found on this page');
     log('🔎 Searching <b>'+t.task+'</b>…');
     runSearch(search, t.task);
@@ -234,5 +234,7 @@
     if(q) clearQ();
     panel(); diagnostics();                                        // idle: show status + the clipboard button
   }
-  setTimeout(boot, 1000);
+  function start(){ setTimeout(boot, 1500); }   // let the ~10s page finish loading before we act
+  if(document.readyState==='complete') start();
+  else window.addEventListener('load', start);
 })();
