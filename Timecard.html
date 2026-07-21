@@ -84,8 +84,11 @@
   .btn:hover{background:#4b5563}
   .btn:disabled{opacity:.5;cursor:wait}
   #btnUndo:disabled,#btnRedo:disabled{opacity:.4;cursor:default}
-  .btn.send{background:#2563eb;border-color:#3b82f6;font-weight:bold}
-  .btn.send:hover{background:#1d4ed8}
+  .btn.send{background:var(--sendbg,#2563eb);border-color:var(--sendbg,#2563eb);color:var(--sendfg,#fff);font-weight:bold}
+  .btn.send:hover{filter:brightness(1.12)}
+  #toolbar.lightbar{color:#111}
+  #toolbar.lightbar label{color:#334155}
+  #toolbar.lightbar .btn{color:#fff}   /* buttons keep their own dark bg, stay readable */
   #weekPick{border:1px solid #4b5563;background:#111827;color:#fff;border-radius:6px;
     padding:6px 8px;font-size:13px;color-scheme:dark}
   #toolbar label{font-size:12px;color:#9ca3af}
@@ -552,10 +555,10 @@
   </div>
 
   <div class="row" style="margin-top:2px">
-    <div class="fld"><span>BEAM COLOUR — the glowing light that travels around the sheet &amp; panels</span>
-      <div style="display:flex;gap:10px;align-items:center;padding:4px 2px">
-        <input type="color" id="beamColor" style="width:54px;height:32px;padding:0;border:1px solid #94a3b8;border-radius:6px;cursor:pointer">
-        <span style="font-size:11px;color:#777">Pick any colour you like.</span>
+    <div class="fld"><span>COLOURS — beam glow, top bar &amp; send buttons</span>
+      <div style="display:flex;gap:16px;align-items:center;padding:4px 2px;flex-wrap:wrap">
+        <label style="display:flex;gap:6px;align-items:center;font-weight:normal"><input type="color" id="beamColor" style="width:46px;height:30px;padding:0;border:1px solid #94a3b8;border-radius:6px;cursor:pointer"> Beam &amp; send buttons</label>
+        <label style="display:flex;gap:6px;align-items:center;font-weight:normal"><input type="color" id="barColor" style="width:46px;height:30px;padding:0;border:1px solid #94a3b8;border-radius:6px;cursor:pointer"> Top bar</label>
       </div></div>
     <div class="fld" style="flex:1;min-width:220px"><span>SECTIONS — untick one to hide it from the sheet &amp; the emails</span>
       <div class="subchecks" id="secToggles"></div></div>
@@ -1070,7 +1073,8 @@ const DAYS = ['MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY','SUN
 const SECTIONS = [
   {name:'Administration Work', rows:3, tall:false},
   {name:'Training',            rows:3, tall:false},
-  {name:'IT Work',             rows:8, tall:true }
+  {name:'IT Work',             rows:8, tall:true },
+  {name:'Custom Section',      rows:1, tall:false}   // hidden until enabled in Settings; rename it in the sheet
 ];
 const N_ROWS = SECTIONS.reduce((a,s)=>a+s.rows,0); // 14
 const TASK_LEGEND = [
@@ -1158,8 +1162,12 @@ if(state.settings.remBefore1===undefined) state.settings.remBefore1 = 30;
 if(state.settings.remBefore2===undefined) state.settings.remBefore2 = 5;
 if(state.settings.customDay===undefined) state.settings.customDay = false;
 if(state.settings.customDayIdx===undefined) state.settings.customDayIdx = null;
-if(!Array.isArray(state.settings.hiddenSections)) state.settings.hiddenSections = SECTIONS.map(()=>false);
+if(!Array.isArray(state.settings.hiddenSections)) state.settings.hiddenSections = SECTIONS.map((s,i)=>i>=3);
+while(state.settings.hiddenSections.length < SECTIONS.length) state.settings.hiddenSections.push(true);   // new sections hidden by default
+if(!Array.isArray(state.settings.sectionNames)) state.settings.sectionNames = SECTIONS.map(s=>s.name);
+while(state.settings.sectionNames.length < SECTIONS.length) state.settings.sectionNames.push(SECTIONS[state.settings.sectionNames.length].name);
 if(!state.settings.beamColor) state.settings.beamColor = '#8ab4ff';
+if(!state.settings.barColor) state.settings.barColor = '#1f2937';
 if(!state.settings.games) state.settings.games = {on:false, reaction:true, sequence:true, number:true, chimp:true, visual:true};
 if(!state.taskInfo || typeof state.taskInfo!=='object') state.taskInfo = {};   // 6-digit task # -> {project, contractor}
 // build flag: the reminders feature is compiled out of the "no reminders" version
@@ -1207,6 +1215,7 @@ function week(){
   let w = state.weeks[weekKey];
   if(!w) w = state.weeks[weekKey] = defaultWeek();
   if(!w.secRows) w.secRows = SECTIONS.map(s=>s.rows);
+  while(w.secRows.length < SECTIONS.length){ w.secRows.push(1); w.rows.push(defaultRow()); }   // add newly-defined sections
   const need = w.secRows.reduce((a,b)=>a+b,0);
   while(w.rows.length < need) w.rows.push(defaultRow());
   w.rows.forEach(r=>{ if(!r.ha) r.ha=['','','','','','','']; });
@@ -1827,10 +1836,14 @@ function bindSettings(){
   });
   document.getElementById('btnBgClear').onclick = ()=>{ state.settings.bgImage=''; save(); applyBg(); toast('Background image removed.'); };
   applyBg();
-  // beam colour
+  // beam / send-button colour
   const bc = document.getElementById('beamColor');
   bc.value = state.settings.beamColor || '#8ab4ff';
   bc.addEventListener('input', ()=>{ state.settings.beamColor = bc.value; save(); applyBeam(); });
+  // top-bar colour
+  const barc = document.getElementById('barColor');
+  barc.value = state.settings.barColor || '#1f2937';
+  barc.addEventListener('input', ()=>{ state.settings.barColor = barc.value; save(); applyBar(); });
   // section show / hide
   buildSectionToggles();
   // mini-games
@@ -3287,14 +3300,27 @@ function bindUndo(){
   });
 }
 
-/* ---------------- beam colour ---------------- */
+/* ---------------- beam colour + toolbar colour ---------------- */
 function hexToRgba(hex, a){
   hex = String(hex||'#8ab4ff').replace('#',''); if(hex.length===3) hex = hex.split('').map(x=>x+x).join('');
   const n = parseInt(hex,16)||0; return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+a+')';
 }
+function luminance(hex){
+  hex = String(hex||'#000').replace('#',''); if(hex.length===3) hex = hex.split('').map(x=>x+x).join('');
+  const n = parseInt(hex,16)||0; return (0.2126*((n>>16)&255) + 0.7152*((n>>8)&255) + 0.0722*(n&255)) / 255;
+}
 function applyBeam(){
   const c = state.settings.beamColor || '#8ab4ff', via = hexToRgba(c, .35);
   document.querySelectorAll('.beamring').forEach(b=>{ b.style.setProperty('--bfrom', c); b.style.setProperty('--bvia', via); });
+  // the send buttons take the beam colour (with readable text)
+  document.documentElement.style.setProperty('--sendbg', c);
+  document.documentElement.style.setProperty('--sendfg', luminance(c) > 0.62 ? '#111' : '#fff');
+}
+function applyBar(){
+  const bar = document.getElementById('toolbar'); if(!bar) return;
+  const c = state.settings.barColor || '#1f2937';
+  bar.style.background = c;
+  bar.classList.toggle('lightbar', luminance(c) > 0.55);
 }
 /* ---------------- hide / show sections ---------------- */
 function buildSectionToggles(){
@@ -3328,7 +3354,8 @@ function gameReaction(){
   c.appendChild(stage); c.appendChild(score);
   let st='idle', t0=0, timer=null, best=null;
   const toWait = ()=>{ st='wait'; stage.className='greact wait'; stage.textContent='Wait for green…';
-    timer = setTimeout(()=>{ st='go'; stage.className='greact go'; stage.textContent='CLICK!'; t0=performance.now(); }, 1200+rint(3300)); };
+    timer = setTimeout(()=>{ st='go'; stage.className='greact go'; stage.textContent='CLICK!';
+      requestAnimationFrame(ts=>{ t0 = ts; }); }, 1200+rint(3300)); };   // start the clock at the frame the green is painted (like the real site)
   stage.addEventListener('pointerdown', ()=>{
     if(st==='idle'||st==='result'||st==='too') toWait();
     else if(st==='wait'){ clearTimeout(timer); st='too'; stage.className='greact too'; stage.textContent='Too soon! Click to retry'; }
@@ -3468,6 +3495,7 @@ bindCustomDayDrag();
 if(REMINDERS){ bindReminders(); startReminders(); }
 renderWeek();
 applyBeam();
+applyBar();
 applyGames();
 undoBase = JSON.stringify(state);       // baseline for undo (after the current week is materialised)
 updateUndoButtons();
