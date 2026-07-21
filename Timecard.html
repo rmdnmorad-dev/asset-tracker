@@ -427,11 +427,9 @@
 
   /* ---------- side mini-games (hidden until enabled in Settings) ---------- */
   .gpanel{position:fixed;top:64px;bottom:12px;width:212px;z-index:55;overflow-y:auto;overflow-x:hidden;
-    display:none;flex-direction:column;gap:12px;padding:10px 8px;
-    background:rgba(15,20,32,.55);backdrop-filter:blur(3px);border-radius:12px}
+    display:none;flex-direction:column;gap:12px;padding:10px 8px;background:transparent}
   .gpanel.show{display:flex}
   #gamesLeft{left:8px} #gamesRight{right:8px}
-  body:not(.dark) .gpanel{background:rgba(255,255,255,.72);border:1px solid #d7deea}
   .gcard{background:#0f1626;color:#e8eefc;border:1px solid #2a3550;border-radius:12px;
     padding:10px;box-shadow:0 6px 18px rgba(0,0,0,.28);font-family:Arial}
   body:not(.dark) .gcard{background:#fff;color:#0f172a;border-color:#dbe2ee;box-shadow:0 6px 16px rgba(30,50,90,.12)}
@@ -572,7 +570,9 @@
         <label><input type="checkbox" id="gNumber"> Number Memory</label>
         <label><input type="checkbox" id="gChimp"> Chimp Test</label>
         <label><input type="checkbox" id="gVisual"> Visual Memory</label>
-        <span style="font-size:11px;color:#777">(shown on wide screens only)</span>
+      </div>
+      <div style="margin-top:6px;font-size:12px;font-weight:bold;color:#b91c1c;background:#fee2e2;border:1px solid #fca5a5;border-radius:6px;padding:6px 9px">
+        ⚠ Don’t play while you have tasks / work not done! <span style="font-weight:normal;color:#7f1d1d">(Games show on wide screens only.)</span>
       </div></div>
   </div>
 
@@ -3338,33 +3338,41 @@ function gameReaction(){
   return c;
 }
 function gameNumber(){
-  const c = gcard('🔢','Number Memory','Remember the number.');
+  const c = gcard('🔢','Number Memory','Type it, then press Enter.');
   const big = document.createElement('div'); big.className='gbig';
   const inp = document.createElement('input'); inp.className='ginput'; inp.inputMode='numeric'; inp.style.cssText='display:none;margin-top:6px';
   const btn = document.createElement('button'); btn.className='gbtn'; btn.textContent='Start'; btn.style.marginTop='6px';
   const score = document.createElement('div'); score.className='gscore';
   c.appendChild(big); c.appendChild(inp); c.appendChild(btn); c.appendChild(score);
   let level=1, num='';
-  const show = ()=>{ num=''; for(let i=0;i<level;i++) num+=rint(10);
+  function show(){
+    num=''; for(let i=0;i<level;i++) num+=rint(10);
     big.textContent=num; inp.style.display='none'; btn.style.display='none'; score.textContent='Level '+level+' — memorise!';
-    setTimeout(()=>{ big.textContent='• • •'; inp.value=''; inp.style.display='block'; btn.textContent='Check'; btn.style.display='inline-block'; try{inp.focus();}catch(e){} }, 900+level*350); };
-  btn.onclick = ()=>{
-    if(btn.textContent==='Start'||btn.textContent==='Next'){ show(); return; }
-    if(inp.value.trim()===num){ level++; big.textContent='✓'; score.textContent='✓ Correct — level '+level; }
-    else { score.textContent='✗ It was '+num+' — back to level 1'; big.textContent='✗'; level=1; }
-    inp.style.display='none'; btn.textContent='Next';
-  };
+    setTimeout(()=>{ big.textContent='• • •'; inp.value=''; inp.style.display='block'; try{inp.focus();}catch(e){}
+      score.textContent='Type it, then press Enter'; }, 900+level*350);
+  }
+  function check(){
+    if(inp.style.display==='none') return;
+    inp.style.display='none';
+    if(inp.value.trim()===num){ level++; big.textContent='✓'; score.textContent='✓ Correct — level '+level; setTimeout(show, 850); }   // auto next level
+    else { big.textContent='✗'; score.textContent='✗ It was '+num+' — reached level '+level; level=1; setTimeout(show, 1700); }        // auto restart
+  }
+  inp.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); check(); } });   // Enter confirms
+  btn.onclick = ()=>{ level=1; show(); };
   return c;
 }
 function gameVisual(){
-  const c = gcard('🟦','Visual Memory','Remember the lit squares.');
+  const c = gcard('🟦','Visual Memory','3 lives — find the lit squares.');
+  const hearts = document.createElement('div'); hearts.className='gscore'; hearts.style.margin='0 0 4px';
   const grid = document.createElement('div'); grid.className='grid';
   const btn = document.createElement('button'); btn.className='gbtn'; btn.textContent='Start'; btn.style.marginTop='6px';
   const info = document.createElement('div'); info.className='gscore';
-  c.appendChild(grid); c.appendChild(btn); c.appendChild(info);
-  let level=2, lit, picked, phase='idle';
-  const build = ()=>{
-    const n = Math.min(3+Math.floor(level/2), 6); const total=n*n;
+  c.appendChild(hearts); c.appendChild(grid); c.appendChild(btn); c.appendChild(info);
+  let level=1, lives=3, lit, picked, phase='idle';
+  function drawHearts(){ hearts.textContent = '❤️'.repeat(lives) + '🖤'.repeat(Math.max(0,3-lives)); }
+  function build(){
+    btn.style.display='none';
+    const n = Math.min(3+Math.floor(level/2), 6), total=n*n;
     grid.style.gridTemplateColumns='repeat('+n+',1fr)'; grid.innerHTML='';
     const count = Math.min(level+2, total-1);
     lit = new Set(); while(lit.size<count) lit.add(rint(total));
@@ -3372,20 +3380,22 @@ function gameVisual(){
     for(let i=0;i<total;i++){ const t=document.createElement('div'); t.className='gtile'; t.dataset.i=i; grid.appendChild(t); }
     info.textContent='Level '+level+' — watch'; phase='show';
     [...grid.children].forEach((t,i)=>{ if(lit.has(i)) t.classList.add('lit'); });
-    setTimeout(()=>{ [...grid.children].forEach(t=>t.classList.remove('lit')); phase='play'; info.textContent='Click the '+count+' squares'; }, 700+level*220);
-  };
+    setTimeout(()=>{ [...grid.children].forEach(t=>t.classList.remove('lit')); phase='play'; info.textContent='Find the '+count+' squares'; }, 700+level*220);
+  }
   grid.addEventListener('pointerdown', e=>{
     if(phase!=='play') return; const t=e.target.closest('.gtile'); if(!t) return; const i=+t.dataset.i;
-    if(picked.has(i)) return;
+    if(picked.has(i) || t.classList.contains('bad')) return;
     if(lit.has(i)){ t.classList.add('ok'); picked.add(i);
-      if(picked.size===lit.size){ phase='idle'; level++; info.textContent='✓ Level '+level; btn.textContent='Next'; } }
-    else { t.classList.add('bad'); phase='idle'; info.textContent='✗ Back to level 2'; level=2; btn.textContent='Retry'; }
+      if(picked.size===lit.size){ phase='done'; level++; info.textContent='✓ Level '+level; setTimeout(build, 650); } }   // auto next level
+    else { t.classList.add('bad'); lives--; drawHearts();
+      if(lives<=0){ phase='done'; info.textContent='💀 Reached level '+level; level=1; lives=3; setTimeout(()=>{ drawHearts(); build(); }, 1400); } }
   });
-  btn.onclick = build;
+  btn.onclick = ()=>{ level=1; lives=3; drawHearts(); build(); };
+  drawHearts();
   return c;
 }
 function gameSequence(){
-  const c = gcard('🧩','Sequence Memory','Repeat the flashing pattern.');
+  const c = gcard('🧩','Sequence Memory','Repeat the pattern.');
   const grid = document.createElement('div'); grid.className='grid'; grid.style.gridTemplateColumns='repeat(3,1fr)';
   for(let i=0;i<9;i++){ const t=document.createElement('div'); t.className='gtile'; t.dataset.i=i; grid.appendChild(t); }
   const btn = document.createElement('button'); btn.className='gbtn'; btn.textContent='Start'; btn.style.marginTop='6px';
@@ -3393,40 +3403,40 @@ function gameSequence(){
   c.appendChild(grid); c.appendChild(btn); c.appendChild(info);
   let seq=[], step=0, phase='idle';
   const flash = (i,cls)=>{ const t=grid.children[i]; t.classList.add(cls); setTimeout(()=>t.classList.remove(cls), 260); };
-  const play = ()=>{ phase='show'; info.textContent='Watch ('+seq.length+')'; let k=0;
-    const iv=setInterval(()=>{ if(k>=seq.length){ clearInterval(iv); phase='play'; step=0; info.textContent='Your turn'; return; } flash(seq[k],'blu'); k++; }, 560); };
+  function play(){ phase='show'; info.textContent='Watch ('+seq.length+')'; btn.style.display='none'; let k=0;
+    const iv=setInterval(()=>{ if(k>=seq.length){ clearInterval(iv); phase='play'; step=0; info.textContent='Your turn'; return; } flash(seq[k],'blu'); k++; }, 560); }
+  function nextLevel(){ seq.push(rint(9)); play(); }             // auto: add a tile and play
   grid.addEventListener('pointerdown', e=>{
     if(phase!=='play') return; const t=e.target.closest('.gtile'); if(!t) return; const i=+t.dataset.i; flash(i,'blu');
-    if(i===seq[step]){ step++; if(step===seq.length){ phase='idle'; info.textContent='✓ '+seq.length+' — Next'; btn.textContent='Next'; } }
-    else { phase='idle'; info.textContent='✗ Reached '+seq.length+' — Start over'; seq=[]; btn.textContent='Start'; }
+    if(i===seq[step]){ step++; if(step===seq.length){ phase='done'; info.textContent='✓ '+seq.length; setTimeout(nextLevel, 650); } }   // auto next level
+    else { phase='done'; info.textContent='✗ Reached '+seq.length; seq=[]; setTimeout(nextLevel, 1300); }                              // auto restart
   });
-  btn.onclick = ()=>{ if(btn.textContent==='Start') seq=[]; seq.push(rint(9)); play(); };
+  btn.onclick = ()=>{ seq=[]; nextLevel(); };
   return c;
 }
 function gameChimp(){
-  const c = gcard('🐵','Chimp Test','Click the numbers 1,2,3…');
+  const c = gcard('🐵','Chimp Test','Click 1,2,3… in order.');
   const grid = document.createElement('div'); grid.className='grid';
   const btn = document.createElement('button'); btn.className='gbtn'; btn.textContent='Start'; btn.style.marginTop='6px';
   const info = document.createElement('div'); info.className='gscore';
   c.appendChild(grid); c.appendChild(btn); c.appendChild(info);
-  let level=4, expect=1, cols=5;
-  const build = ()=>{
-    grid.style.gridTemplateColumns='repeat('+cols+',1fr)'; grid.innerHTML=''; expect=1;
+  let level=4, expect=1, cols=5, phase='idle';
+  function build(){
+    btn.style.display='none'; grid.style.gridTemplateColumns='repeat('+cols+',1fr)'; grid.innerHTML=''; expect=1; phase='play';
     const total=cols*cols, spots=[]; while(spots.length<Math.min(level,total)){ const p=rint(total); if(spots.indexOf(p)<0) spots.push(p); }
     for(let i=0;i<total;i++){ const t=document.createElement('div'); t.className='gtile'; grid.appendChild(t);
       const idx=spots.indexOf(i);
       if(idx>=0){ t.textContent=idx+1; t.dataset.n=idx+1; t.classList.add('blu'); }
       else { t.style.background='transparent'; t.style.cursor='default'; } }
     info.textContent='Level '+level+' — click 1→'+level;
-  };
+  }
   grid.addEventListener('pointerdown', e=>{
-    const t=e.target.closest('.gtile'); if(!t||!t.dataset.n) return; const n=+t.dataset.n;
+    if(phase!=='play') return; const t=e.target.closest('.gtile'); if(!t||!t.dataset.n) return; const n=+t.dataset.n;
     if(n===expect){ t.classList.remove('blu'); t.classList.add('ok');
       if(expect===1) [...grid.children].forEach(x=>{ if(x.dataset.n) x.textContent=''; });   // hide after the first click
-      expect++; if(expect>level){ level++; phase_done(); } }
-    else { info.textContent='✗ Back to level 4'; level=4; btn.textContent='Retry'; [...grid.children].forEach(x=>{ if(x.dataset.n) x.classList.add('bad'); }); }
+      expect++; if(expect>level){ phase='done'; level++; info.textContent='✓ Level '+level; setTimeout(build, 700); } }   // auto next level
+    else { phase='done'; info.textContent='✗ Reached level '+level; level=4; setTimeout(build, 1300); }                    // auto restart
   });
-  function phase_done(){ info.textContent='✓ Level '+level; btn.textContent='Next'; }
   btn.onclick = build;
   return c;
 }
