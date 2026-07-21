@@ -418,6 +418,52 @@
     .cell{font-size:15px}                 /* easier to tap/read on a phone */
   }
 
+  /* true vertical centring of what you type in the task rows (single OR multi-line) */
+  tr.taskrow td{vertical-align:middle}
+  tr.taskrow td.tinfo, tr.taskrow td.tgreen{vertical-align:middle}
+  textarea.cell{min-height:0}
+  tr.taskrow.tall textarea.cell{min-height:0}
+  input.cell{line-height:1.15}
+
+  /* ---------- side mini-games (hidden until enabled in Settings) ---------- */
+  .gpanel{position:fixed;top:64px;bottom:12px;width:212px;z-index:55;overflow-y:auto;overflow-x:hidden;
+    display:none;flex-direction:column;gap:12px;padding:10px 8px;
+    background:rgba(15,20,32,.55);backdrop-filter:blur(3px);border-radius:12px}
+  .gpanel.show{display:flex}
+  #gamesLeft{left:8px} #gamesRight{right:8px}
+  body:not(.dark) .gpanel{background:rgba(255,255,255,.72);border:1px solid #d7deea}
+  .gcard{background:#0f1626;color:#e8eefc;border:1px solid #2a3550;border-radius:12px;
+    padding:10px;box-shadow:0 6px 18px rgba(0,0,0,.28);font-family:Arial}
+  body:not(.dark) .gcard{background:#fff;color:#0f172a;border-color:#dbe2ee;box-shadow:0 6px 16px rgba(30,50,90,.12)}
+  .gcard h4{margin:0 0 3px;font-size:13px;display:flex;align-items:center;gap:6px}
+  .gcard .gsub{font-size:10.5px;opacity:.65;margin:0 0 8px}
+  .gstage{position:relative;border-radius:9px;overflow:hidden;user-select:none}
+  .gbtn{border:0;border-radius:7px;padding:7px 10px;font-size:12px;font-weight:bold;cursor:pointer;
+    background:#2563eb;color:#fff}
+  .gbtn.sec{background:#334155}
+  .gbtn:active{transform:scale(.96)}
+  .gbig{font-size:22px;font-weight:800;letter-spacing:1px;text-align:center}
+  .gscore{font-size:11px;opacity:.8;margin-top:6px;text-align:center}
+  .grid{display:grid;gap:5px;touch-action:manipulation}
+  .gtile{aspect-ratio:1/1;border-radius:7px;background:#22304d;cursor:pointer;transition:background .08s,transform .08s;
+    display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#fff}
+  body:not(.dark) .gtile{background:#c7d2e6}
+  .gtile.lit{background:#4ade80}
+  .gtile.blu{background:#3b82f6;color:#fff}
+  .gtile.bad{background:#ef4444}
+  .gtile.ok{background:#22c55e}
+  .greact{height:120px;border-radius:9px;display:flex;align-items:center;justify-content:center;
+    text-align:center;font-weight:bold;font-size:13px;cursor:pointer;color:#fff;background:#1d4ed8;padding:6px}
+  .greact.wait{background:#b45309} .greact.go{background:#16a34a} .greact.too{background:#dc2626}
+  .ginput{width:100%;box-sizing:border-box;border-radius:7px;border:1px solid #47506a;background:#0b1220;color:#fff;
+    padding:7px;font-size:15px;text-align:center}
+  body:not(.dark) .ginput{background:#fff;color:#111;border-color:#94a3b8}
+  @media (max-width: 1500px){ .gpanel{width:190px} }
+  /* make room for the panels so they sit BESIDE the sheet, not over it */
+  body.games-on #sheetWrap{margin-left:228px;margin-right:228px}
+  @media (max-width: 1500px){ body.games-on #sheetWrap{margin-left:206px;margin-right:206px} }
+  @media (max-width: 1200px){ #gamesLeft,#gamesRight{display:none !important} body.games-on #sheetWrap{margin-left:0;margin-right:0} }  /* not enough room beside the sheet */
+
   @media print{
     #toolbar,#settings,#toast,.beamring,.clickfx,#bgLayer{display:none !important}
     .rowbtns,.colgrip{display:none !important}
@@ -429,6 +475,8 @@
 </head>
 <body>
 <div id="bgLayer"></div>
+<div id="gamesLeft" class="gpanel"></div>
+<div id="gamesRight" class="gpanel"></div>
 
 <div id="toolbar">
   <div class="grp">
@@ -502,6 +550,29 @@
         <button class="btn2" type="button" id="btnBgClear">✕ Remove</button>
         <input type="file" id="bgFile" accept="image/*" style="display:none">
         <span id="bgName" style="font-size:11px;color:#777"></span>
+      </div></div>
+  </div>
+
+  <div class="row" style="margin-top:2px">
+    <div class="fld"><span>BEAM COLOUR — the glowing light that travels around the sheet &amp; panels</span>
+      <div style="display:flex;gap:10px;align-items:center;padding:4px 2px">
+        <input type="color" id="beamColor" style="width:54px;height:32px;padding:0;border:1px solid #94a3b8;border-radius:6px;cursor:pointer">
+        <span style="font-size:11px;color:#777">Pick any colour you like.</span>
+      </div></div>
+    <div class="fld" style="flex:1;min-width:220px"><span>SECTIONS — untick one to hide it from the sheet &amp; the emails</span>
+      <div class="subchecks" id="secToggles"></div></div>
+  </div>
+
+  <div class="row" style="margin-top:2px">
+    <div class="fld" style="flex:1 1 100%"><span>MINI-GAMES — brain games on the left &amp; right of the sheet (a quick break)</span>
+      <div class="subchecks" style="flex-flow:row wrap;gap:5px 16px">
+        <label><input type="checkbox" id="gamesOn"> <b>Show the side games</b></label>
+        <label><input type="checkbox" id="gReaction"> Reaction Time</label>
+        <label><input type="checkbox" id="gSequence"> Sequence Memory</label>
+        <label><input type="checkbox" id="gNumber"> Number Memory</label>
+        <label><input type="checkbox" id="gChimp"> Chimp Test</label>
+        <label><input type="checkbox" id="gVisual"> Visual Memory</label>
+        <span style="font-size:11px;color:#777">(shown on wide screens only)</span>
       </div></div>
   </div>
 
@@ -1031,10 +1102,12 @@ function defaultDay(){ return {tin:'12:00 PM', lunch:'0:00', tout:'12:00 PM', me
 function defaultRow(){ return {task:'',notes:'',project:'',contractor:'',job:'',
                                ha:['','','','','','',''], h:['','','','','','','']}; }
 function defaultWeek(){
+  const secRows = SECTIONS.map(()=>1);                 // every section starts with a single green row
+  const n = secRows.reduce((a,b)=>a+b,0);
   return {
-    secRows: SECTIONS.map(s=>s.rows),
+    secRows: secRows,
     days: Array.from({length:7}, defaultDay),
-    rows: Array.from({length:N_ROWS}, defaultRow)
+    rows: Array.from({length:n}, defaultRow)
   };
 }
 function defaultState(){
@@ -1085,6 +1158,10 @@ if(state.settings.remBefore1===undefined) state.settings.remBefore1 = 30;
 if(state.settings.remBefore2===undefined) state.settings.remBefore2 = 5;
 if(state.settings.customDay===undefined) state.settings.customDay = false;
 if(state.settings.customDayIdx===undefined) state.settings.customDayIdx = null;
+if(!Array.isArray(state.settings.hiddenSections)) state.settings.hiddenSections = SECTIONS.map(()=>false);
+if(!state.settings.beamColor) state.settings.beamColor = '#8ab4ff';
+if(!state.settings.games) state.settings.games = {on:false, reaction:true, sequence:true, number:true, chimp:true, visual:true};
+if(!state.taskInfo || typeof state.taskInfo!=='object') state.taskInfo = {};   // 6-digit task # -> {project, contractor}
 // build flag: the reminders feature is compiled out of the "no reminders" version
 const REMINDERS = false;  /*REMINDERS_FLAG*/
 // 20 column widths: 5 info + 7×(narrow job, wide hours) + 1 total
@@ -1256,6 +1333,7 @@ function buildTable(){
   const w = week(), names = state.settings.sectionNames;
   let ri = 0;
   for(let si=0; si<SECTIONS.length; si++){
+    if((state.settings.hiddenSections||[])[si]){ ri += w.secRows[si]; continue; }   // hidden in Settings
     h += '<tr><td class="b section" colspan="20">'+
          '<span class="rowbtns">'+
          '<button type="button" class="rowbtn rowadd" data-sec="'+si+'" title="Add a row to this section">+</button>'+
@@ -1412,6 +1490,21 @@ function recalc(){
   document.getElementById('btAll').textContent = fmtNum(grand);
 }
 
+// Enter in a task-row cell jumps to the same column one row down (like Excel);
+// returns false when there is no row below (then we just confirm the value).
+function focusBelow(t){
+  if(!t || t.dataset.row===undefined) return false;
+  const ri = +t.dataset.row + 1;
+  let sel = '.cell[data-row="'+ri+'"][data-f="'+t.dataset.f+'"]';
+  if(t.dataset.di!==undefined) sel += '[data-di="'+t.dataset.di+'"]';
+  const next = document.querySelector(sel);
+  if(!next) return false;
+  closePopups();
+  next.focus();
+  try{ if(next.select) next.select(); }catch(e){}
+  next.scrollIntoView({block:'nearest'});
+  return true;
+}
 function bindSheetInputs(){
   const host = document.getElementById('tblhost');
   host.addEventListener('focusin', e=>{
@@ -1456,11 +1549,10 @@ function bindSheetInputs(){
     const t = e.target;
     if(!t.classList) return;
     if(t.classList.contains('cell')){
-      if(t.tagName==='TEXTAREA' && e.shiftKey) return;
+      if(t.tagName==='TEXTAREA' && e.shiftKey) return;   // Shift+Enter = new line in NOTES etc.
       e.preventDefault();
       commitValue(t, true);                 // save + pretty-format now
-      t.blur();
-      closePopups();
+      if(!focusBelow(t)){ t.blur(); closePopups(); }      // move down one row; last row just confirms
     }else if(t.classList.contains('legcell') || t.classList.contains('secname')){
       e.preventDefault(); t.blur();         // legends & section names too
     }
@@ -1524,6 +1616,31 @@ function commitValue(inp, finalize){
     w.rows[+inp.dataset.row][inp.dataset.f][+inp.dataset.di] = v;
   }else{
     w.rows[+inp.dataset.row][inp.dataset.f] = v;
+  }
+  // remember Project + Contractor per 6-digit task #, and auto-fill them for a repeated task #
+  if(finalize && inp.dataset.row!==undefined){
+    const r = w.rows[+inp.dataset.row];
+    const task = String(r.task||'').trim();
+    if(/^\d{6}$/.test(task)){
+      state.taskInfo = state.taskInfo || {};
+      if(inp.dataset.f==='task'){
+        const mem = state.taskInfo[task];
+        if(mem){
+          let did = false;
+          if(!String(r.project||'').trim() && mem.project){ r.project = mem.project; did = true; }
+          if(!String(r.contractor||'').trim() && mem.contractor){ r.contractor = mem.contractor; did = true; }
+          if(did){
+            const pj = document.querySelector('.cell[data-row="'+inp.dataset.row+'"][data-f="project"]');
+            const co = document.querySelector('.cell[data-row="'+inp.dataset.row+'"][data-f="contractor"]');
+            if(pj){ pj.value = r.project; autoGrow(pj); }
+            if(co){ co.value = r.contractor; autoGrow(co); }
+          }
+        }
+      }else if(inp.dataset.f==='project' || inp.dataset.f==='contractor'){
+        const m = state.taskInfo[task] = state.taskInfo[task] || {};
+        m[inp.dataset.f] = String(r[inp.dataset.f]||'').trim();
+      }
+    }
   }
   recalc(); save();
 }
@@ -1710,6 +1827,18 @@ function bindSettings(){
   });
   document.getElementById('btnBgClear').onclick = ()=>{ state.settings.bgImage=''; save(); applyBg(); toast('Background image removed.'); };
   applyBg();
+  // beam colour
+  const bc = document.getElementById('beamColor');
+  bc.value = state.settings.beamColor || '#8ab4ff';
+  bc.addEventListener('input', ()=>{ state.settings.beamColor = bc.value; save(); applyBeam(); });
+  // section show / hide
+  buildSectionToggles();
+  // mini-games
+  [['gamesOn','on'],['gReaction','reaction'],['gSequence','sequence'],['gNumber','number'],['gChimp','chimp'],['gVisual','visual']].forEach(([id,key])=>{
+    const el = document.getElementById(id); if(!el) return;
+    el.checked = !!state.settings.games[key];
+    el.addEventListener('change', ()=>{ state.settings.games[key] = el.checked; save(); applyGames(); });
+  });
 }
 
 /* ---------------- custom drop-down (learned values, ✕ to forget) ---------------- */
@@ -2608,6 +2737,7 @@ function buildHtmlEmail(prefixHtml, days){
   let ri = 0;
   const infoSpan = DYS.length + 6;
   for(let si=0; si<SECTIONS.length; si++){
+    if((s.hiddenSections||[])[si]){ ri += w.secRows[si]; continue; }   // hidden sections are left out of the send
     h += '<tr><td colspan="'+infoSpan+'" style="'+B+'background:#FFFFFF;color:#0070C0;font-weight:bold;font-size:15px;text-align:center;padding:4px">'+
          escHtml(s.sectionNames[si]||SECTIONS[si].name)+'</td></tr>';
     for(let k=0; k<w.secRows[si]; k++, ri++){
@@ -2684,6 +2814,7 @@ function buildPlainText(days){
   let ri=0;
   const dayTot={}; DYS.forEach(d=>dayTot[d]=0); let grand=0;
   for(let si=0; si<SECTIONS.length; si++){
+    if((s.hiddenSections||[])[si]){ ri += w.secRows[si]; continue; }   // hidden sections are left out
     const lines=[];
     for(let k=0;k<w.secRows[si];k++,ri++){
       const r=w.rows[ri];
@@ -3156,6 +3287,162 @@ function bindUndo(){
   });
 }
 
+/* ---------------- beam colour ---------------- */
+function hexToRgba(hex, a){
+  hex = String(hex||'#8ab4ff').replace('#',''); if(hex.length===3) hex = hex.split('').map(x=>x+x).join('');
+  const n = parseInt(hex,16)||0; return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+a+')';
+}
+function applyBeam(){
+  const c = state.settings.beamColor || '#8ab4ff', via = hexToRgba(c, .35);
+  document.querySelectorAll('.beamring').forEach(b=>{ b.style.setProperty('--bfrom', c); b.style.setProperty('--bvia', via); });
+}
+/* ---------------- hide / show sections ---------------- */
+function buildSectionToggles(){
+  const host = document.getElementById('secToggles'); if(!host) return;
+  host.innerHTML = '';
+  SECTIONS.forEach((s,i)=>{
+    const lab = document.createElement('label');
+    const cb = document.createElement('input'); cb.type = 'checkbox';
+    cb.checked = !(state.settings.hiddenSections||[])[i];
+    cb.addEventListener('change', ()=>{ state.settings.hiddenSections[i] = !cb.checked; save(); renderWeek(); });
+    lab.appendChild(cb); lab.appendChild(document.createTextNode(' '+(state.settings.sectionNames[i]||s.name)));
+    host.appendChild(lab);
+  });
+}
+
+/* =========================================================
+   Side mini-games (Human Benchmark style). Hidden until turned
+   on in Settings. Fresh randomness every round (no fixed loops).
+   ========================================================= */
+const GAMES = ['reaction','sequence','number','chimp','visual'];
+function rint(n){ return Math.floor(Math.random()*n); }               // 0..n-1
+function gcard(icon, title, sub){
+  const c = document.createElement('div'); c.className = 'gcard';
+  c.innerHTML = '<h4>'+icon+' '+title+'</h4><p class="gsub">'+sub+'</p>';
+  return c;
+}
+function gameReaction(){
+  const c = gcard('⚡','Reaction Time','Click when it turns green.');
+  const stage = document.createElement('div'); stage.className='greact'; stage.textContent='Click to start';
+  const score = document.createElement('div'); score.className='gscore'; score.textContent='Best: —';
+  c.appendChild(stage); c.appendChild(score);
+  let st='idle', t0=0, timer=null, best=null;
+  const toWait = ()=>{ st='wait'; stage.className='greact wait'; stage.textContent='Wait for green…';
+    timer = setTimeout(()=>{ st='go'; stage.className='greact go'; stage.textContent='CLICK!'; t0=performance.now(); }, 1200+rint(3300)); };
+  stage.addEventListener('pointerdown', ()=>{
+    if(st==='idle'||st==='result'||st==='too') toWait();
+    else if(st==='wait'){ clearTimeout(timer); st='too'; stage.className='greact too'; stage.textContent='Too soon! Click to retry'; }
+    else if(st==='go'){ const ms=Math.round(performance.now()-t0); st='result'; if(best==null||ms<best) best=ms;
+      stage.className='greact'; stage.textContent=ms+' ms — click to retry'; score.textContent='Best: '+best+' ms'; }
+  });
+  return c;
+}
+function gameNumber(){
+  const c = gcard('🔢','Number Memory','Remember the number.');
+  const big = document.createElement('div'); big.className='gbig';
+  const inp = document.createElement('input'); inp.className='ginput'; inp.inputMode='numeric'; inp.style.cssText='display:none;margin-top:6px';
+  const btn = document.createElement('button'); btn.className='gbtn'; btn.textContent='Start'; btn.style.marginTop='6px';
+  const score = document.createElement('div'); score.className='gscore';
+  c.appendChild(big); c.appendChild(inp); c.appendChild(btn); c.appendChild(score);
+  let level=1, num='';
+  const show = ()=>{ num=''; for(let i=0;i<level;i++) num+=rint(10);
+    big.textContent=num; inp.style.display='none'; btn.style.display='none'; score.textContent='Level '+level+' — memorise!';
+    setTimeout(()=>{ big.textContent='• • •'; inp.value=''; inp.style.display='block'; btn.textContent='Check'; btn.style.display='inline-block'; try{inp.focus();}catch(e){} }, 900+level*350); };
+  btn.onclick = ()=>{
+    if(btn.textContent==='Start'||btn.textContent==='Next'){ show(); return; }
+    if(inp.value.trim()===num){ level++; big.textContent='✓'; score.textContent='✓ Correct — level '+level; }
+    else { score.textContent='✗ It was '+num+' — back to level 1'; big.textContent='✗'; level=1; }
+    inp.style.display='none'; btn.textContent='Next';
+  };
+  return c;
+}
+function gameVisual(){
+  const c = gcard('🟦','Visual Memory','Remember the lit squares.');
+  const grid = document.createElement('div'); grid.className='grid';
+  const btn = document.createElement('button'); btn.className='gbtn'; btn.textContent='Start'; btn.style.marginTop='6px';
+  const info = document.createElement('div'); info.className='gscore';
+  c.appendChild(grid); c.appendChild(btn); c.appendChild(info);
+  let level=2, lit, picked, phase='idle';
+  const build = ()=>{
+    const n = Math.min(3+Math.floor(level/2), 6); const total=n*n;
+    grid.style.gridTemplateColumns='repeat('+n+',1fr)'; grid.innerHTML='';
+    const count = Math.min(level+2, total-1);
+    lit = new Set(); while(lit.size<count) lit.add(rint(total));
+    picked = new Set();
+    for(let i=0;i<total;i++){ const t=document.createElement('div'); t.className='gtile'; t.dataset.i=i; grid.appendChild(t); }
+    info.textContent='Level '+level+' — watch'; phase='show';
+    [...grid.children].forEach((t,i)=>{ if(lit.has(i)) t.classList.add('lit'); });
+    setTimeout(()=>{ [...grid.children].forEach(t=>t.classList.remove('lit')); phase='play'; info.textContent='Click the '+count+' squares'; }, 700+level*220);
+  };
+  grid.addEventListener('pointerdown', e=>{
+    if(phase!=='play') return; const t=e.target.closest('.gtile'); if(!t) return; const i=+t.dataset.i;
+    if(picked.has(i)) return;
+    if(lit.has(i)){ t.classList.add('ok'); picked.add(i);
+      if(picked.size===lit.size){ phase='idle'; level++; info.textContent='✓ Level '+level; btn.textContent='Next'; } }
+    else { t.classList.add('bad'); phase='idle'; info.textContent='✗ Back to level 2'; level=2; btn.textContent='Retry'; }
+  });
+  btn.onclick = build;
+  return c;
+}
+function gameSequence(){
+  const c = gcard('🧩','Sequence Memory','Repeat the flashing pattern.');
+  const grid = document.createElement('div'); grid.className='grid'; grid.style.gridTemplateColumns='repeat(3,1fr)';
+  for(let i=0;i<9;i++){ const t=document.createElement('div'); t.className='gtile'; t.dataset.i=i; grid.appendChild(t); }
+  const btn = document.createElement('button'); btn.className='gbtn'; btn.textContent='Start'; btn.style.marginTop='6px';
+  const info = document.createElement('div'); info.className='gscore';
+  c.appendChild(grid); c.appendChild(btn); c.appendChild(info);
+  let seq=[], step=0, phase='idle';
+  const flash = (i,cls)=>{ const t=grid.children[i]; t.classList.add(cls); setTimeout(()=>t.classList.remove(cls), 260); };
+  const play = ()=>{ phase='show'; info.textContent='Watch ('+seq.length+')'; let k=0;
+    const iv=setInterval(()=>{ if(k>=seq.length){ clearInterval(iv); phase='play'; step=0; info.textContent='Your turn'; return; } flash(seq[k],'blu'); k++; }, 560); };
+  grid.addEventListener('pointerdown', e=>{
+    if(phase!=='play') return; const t=e.target.closest('.gtile'); if(!t) return; const i=+t.dataset.i; flash(i,'blu');
+    if(i===seq[step]){ step++; if(step===seq.length){ phase='idle'; info.textContent='✓ '+seq.length+' — Next'; btn.textContent='Next'; } }
+    else { phase='idle'; info.textContent='✗ Reached '+seq.length+' — Start over'; seq=[]; btn.textContent='Start'; }
+  });
+  btn.onclick = ()=>{ if(btn.textContent==='Start') seq=[]; seq.push(rint(9)); play(); };
+  return c;
+}
+function gameChimp(){
+  const c = gcard('🐵','Chimp Test','Click the numbers 1,2,3…');
+  const grid = document.createElement('div'); grid.className='grid';
+  const btn = document.createElement('button'); btn.className='gbtn'; btn.textContent='Start'; btn.style.marginTop='6px';
+  const info = document.createElement('div'); info.className='gscore';
+  c.appendChild(grid); c.appendChild(btn); c.appendChild(info);
+  let level=4, expect=1, cols=5;
+  const build = ()=>{
+    grid.style.gridTemplateColumns='repeat('+cols+',1fr)'; grid.innerHTML=''; expect=1;
+    const total=cols*cols, spots=[]; while(spots.length<Math.min(level,total)){ const p=rint(total); if(spots.indexOf(p)<0) spots.push(p); }
+    for(let i=0;i<total;i++){ const t=document.createElement('div'); t.className='gtile'; grid.appendChild(t);
+      const idx=spots.indexOf(i);
+      if(idx>=0){ t.textContent=idx+1; t.dataset.n=idx+1; t.classList.add('blu'); }
+      else { t.style.background='transparent'; t.style.cursor='default'; } }
+    info.textContent='Level '+level+' — click 1→'+level;
+  };
+  grid.addEventListener('pointerdown', e=>{
+    const t=e.target.closest('.gtile'); if(!t||!t.dataset.n) return; const n=+t.dataset.n;
+    if(n===expect){ t.classList.remove('blu'); t.classList.add('ok');
+      if(expect===1) [...grid.children].forEach(x=>{ if(x.dataset.n) x.textContent=''; });   // hide after the first click
+      expect++; if(expect>level){ level++; phase_done(); } }
+    else { info.textContent='✗ Back to level 4'; level=4; btn.textContent='Retry'; [...grid.children].forEach(x=>{ if(x.dataset.n) x.classList.add('bad'); }); }
+  });
+  function phase_done(){ info.textContent='✓ Level '+level; btn.textContent='Next'; }
+  btn.onclick = build;
+  return c;
+}
+const GAME_FACTORY = { reaction:gameReaction, sequence:gameSequence, number:gameNumber, chimp:gameChimp, visual:gameVisual };
+function applyGames(){
+  const g = state.settings.games || {};
+  const L = document.getElementById('gamesLeft'), R = document.getElementById('gamesRight');
+  if(!L||!R) return;
+  L.innerHTML=''; R.innerHTML='';
+  const enabled = g.on ? GAMES.filter(name=>g[name]) : [];
+  enabled.forEach((name,i)=>{ (i%2===0 ? L : R).appendChild(GAME_FACTORY[name]()); });
+  L.classList.toggle('show', L.children.length>0);
+  R.classList.toggle('show', R.children.length>0);
+  document.body.classList.toggle('games-on', L.children.length>0 || R.children.length>0);
+}
+
 /* ---------------- init ---------------- */
 bindSheetInputs();
 bindHeader();
@@ -3170,6 +3457,8 @@ bindClickFx();
 bindCustomDayDrag();
 if(REMINDERS){ bindReminders(); startReminders(); }
 renderWeek();
+applyBeam();
+applyGames();
 undoBase = JSON.stringify(state);       // baseline for undo (after the current week is materialised)
 updateUndoButtons();
 if(!state.settings.emailTo){
