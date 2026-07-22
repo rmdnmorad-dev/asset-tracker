@@ -585,17 +585,12 @@
   </div>
 
   <div class="row" style="margin-top:2px">
-    <div class="fld" style="flex:1 1 100%"><span>MINI-GAMES — brain games on the left &amp; right of the sheet (a quick break)</span>
+    <div class="fld" style="flex:1 1 100%"><span>REACTION TIME — a quick brain game on the side of the sheet (a quick break)</span>
       <div class="subchecks" style="flex-flow:row wrap;gap:5px 16px">
-        <label><input type="checkbox" id="gamesOn"> <b>Show the side games</b></label>
-        <label><input type="checkbox" id="gReaction"> Reaction Time</label>
-        <label><input type="checkbox" id="gSequence"> Sequence Memory</label>
-        <label><input type="checkbox" id="gNumber"> Number Memory</label>
-        <label><input type="checkbox" id="gChimp"> Chimp Test</label>
-        <label><input type="checkbox" id="gVisual"> Visual Memory</label>
+        <label><input type="checkbox" id="gamesOn"> <b>Show the Reaction Time game</b></label>
       </div>
       <div style="margin-top:6px;font-size:12px;font-weight:bold;color:#b91c1c;background:#fee2e2;border:1px solid #fca5a5;border-radius:6px;padding:6px 9px">
-        ⚠ Don’t play while you have tasks / work not done! <span style="font-weight:normal;color:#7f1d1d">(Games show on wide screens only.)</span>
+        ⚠ Don’t play while you have tasks / work not done! <span style="font-weight:normal;color:#7f1d1d">(The game shows on wide screens only.)</span>
       </div></div>
   </div>
 
@@ -1188,7 +1183,7 @@ if(!Array.isArray(state.settings.sectionNames)) state.settings.sectionNames = SE
 while(state.settings.sectionNames.length < SECTIONS.length) state.settings.sectionNames.push(SECTIONS[state.settings.sectionNames.length].name);
 if(!state.settings.beamColor) state.settings.beamColor = '#8ab4ff';
 if(!state.settings.barColor) state.settings.barColor = '#1f2937';
-if(!state.settings.games) state.settings.games = {on:false, reaction:true, sequence:true, number:true, chimp:true, visual:true};
+if(!state.settings.games) state.settings.games = {on:false, reaction:true};
 if(!state.taskInfo || typeof state.taskInfo!=='object') state.taskInfo = {};   // 6-digit task # -> {project, contractor}
 // build flag: the reminders feature is compiled out of the "no reminders" version
 const REMINDERS = false;  /*REMINDERS_FLAG*/
@@ -1963,12 +1958,12 @@ function bindSettings(){
   barc.addEventListener('input', ()=>{ state.settings.barColor = barc.value; save(); applyBar(); });
   // section show / hide
   buildSectionToggles();
-  // mini-games
-  [['gamesOn','on'],['gReaction','reaction'],['gSequence','sequence'],['gNumber','number'],['gChimp','chimp'],['gVisual','visual']].forEach(([id,key])=>{
-    const el = document.getElementById(id); if(!el) return;
-    el.checked = !!state.settings.games[key];
-    el.addEventListener('change', ()=>{ state.settings.games[key] = el.checked; save(); applyGames(); });
-  });
+  // reaction-time game (single master toggle)
+  const gOn = document.getElementById('gamesOn');
+  if(gOn){
+    gOn.checked = !!state.settings.games.on;
+    gOn.addEventListener('change', ()=>{ state.settings.games.on = gOn.checked; save(); applyGames(); });
+  }
 }
 
 /* ---------------- custom drop-down (learned values, ✕ to forget) ---------------- */
@@ -3457,7 +3452,7 @@ function buildSectionToggles(){
    Side mini-games (Human Benchmark style). Hidden until turned
    on in Settings. Fresh randomness every round (no fixed loops).
    ========================================================= */
-const GAMES = ['reaction','sequence','number','chimp','visual'];
+const GAMES = ['reaction'];
 function rint(n){ return Math.floor(Math.random()*n); }               // 0..n-1
 function gcard(icon, title, sub){
   const c = document.createElement('div'); c.className = 'gcard';
@@ -3481,127 +3476,22 @@ function gameReaction(){
   });
   return c;
 }
-function gameNumber(){
-  const c = gcard('🔢','Number Memory','Type it, then press Enter.');
-  const big = document.createElement('div'); big.className='gbig';
-  const inp = document.createElement('input'); inp.className='ginput'; inp.inputMode='numeric'; inp.style.cssText='display:none;margin-top:6px';
-  const btn = document.createElement('button'); btn.className='gbtn'; btn.textContent='Start'; btn.style.marginTop='6px';
-  const score = document.createElement('div'); score.className='gscore';
-  c.appendChild(big); c.appendChild(inp); c.appendChild(btn); c.appendChild(score);
-  let level=1, num='';
-  function show(){
-    num=''; for(let i=0;i<level;i++) num+=rint(10);
-    big.textContent=num; inp.style.display='none'; btn.style.display='none'; score.textContent='Level '+level+' — memorise!';
-    setTimeout(()=>{ big.textContent='• • •'; inp.value=''; inp.style.display='block'; try{inp.focus();}catch(e){}
-      score.textContent='Type it, then press Enter'; }, 900+level*350);
-  }
-  function check(){
-    if(inp.style.display==='none') return;
-    inp.style.display='none';
-    if(inp.value.trim()===num){ level++; big.textContent='✓'; score.textContent='✓ Correct — level '+level; setTimeout(show, 850); }   // auto next level
-    else { big.textContent='✗'; score.textContent='✗ It was '+num+' — reached level '+level; level=1; setTimeout(show, 1700); }        // auto restart
-  }
-  inp.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); check(); } });   // Enter confirms
-  btn.onclick = ()=>{ level=1; show(); };
-  return c;
-}
-function gameVisual(){
-  const c = gcard('🟦','Visual Memory','3 lives — find the lit squares.');
-  const hearts = document.createElement('div'); hearts.className='gscore'; hearts.style.margin='0 0 4px';
-  const grid = document.createElement('div'); grid.className='grid';
-  const btn = document.createElement('button'); btn.className='gbtn'; btn.textContent='Start'; btn.style.marginTop='6px';
-  const info = document.createElement('div'); info.className='gscore';
-  c.appendChild(hearts); c.appendChild(grid); c.appendChild(btn); c.appendChild(info);
-  let level=1, lives=3, lit, picked, phase='idle';
-  function drawHearts(){ hearts.textContent = '❤️'.repeat(lives) + '🖤'.repeat(Math.max(0,3-lives)); }
-  function build(){
-    btn.style.display='none';
-    const n = Math.min(3+Math.floor(level/2), 6), total=n*n;
-    grid.style.gridTemplateColumns='repeat('+n+',1fr)'; grid.innerHTML='';
-    const count = Math.min(level+2, total-1);
-    lit = new Set(); while(lit.size<count) lit.add(rint(total));
-    picked = new Set();
-    for(let i=0;i<total;i++){ const t=document.createElement('div'); t.className='gtile'; t.dataset.i=i; grid.appendChild(t); }
-    info.textContent='Level '+level+' — watch'; phase='show';
-    [...grid.children].forEach((t,i)=>{ if(lit.has(i)) t.classList.add('lit'); });
-    setTimeout(()=>{ [...grid.children].forEach(t=>t.classList.remove('lit')); phase='play'; info.textContent='Find the '+count+' squares'; }, 700+level*220);
-  }
-  grid.addEventListener('pointerdown', e=>{
-    if(phase!=='play') return; const t=e.target.closest('.gtile'); if(!t) return; const i=+t.dataset.i;
-    if(picked.has(i) || t.classList.contains('bad')) return;
-    if(lit.has(i)){ t.classList.add('ok'); picked.add(i);
-      if(picked.size===lit.size){ phase='done'; level++; info.textContent='✓ Level '+level; setTimeout(build, 650); } }   // auto next level
-    else { t.classList.add('bad'); lives--; drawHearts();
-      if(lives<=0){ phase='done'; info.textContent='💀 Reached level '+level; level=1; lives=3; setTimeout(()=>{ drawHearts(); build(); }, 1400); } }
-  });
-  btn.onclick = ()=>{ level=1; lives=3; drawHearts(); build(); };
-  drawHearts();
-  return c;
-}
-function gameSequence(){
-  const c = gcard('🧩','Sequence Memory','Repeat the pattern.');
-  const grid = document.createElement('div'); grid.className='grid'; grid.style.gridTemplateColumns='repeat(3,1fr)';
-  for(let i=0;i<9;i++){ const t=document.createElement('div'); t.className='gtile'; t.dataset.i=i; grid.appendChild(t); }
-  const btn = document.createElement('button'); btn.className='gbtn'; btn.textContent='Start'; btn.style.marginTop='6px';
-  const info = document.createElement('div'); info.className='gscore';
-  c.appendChild(grid); c.appendChild(btn); c.appendChild(info);
-  let seq=[], step=0, phase='idle';
-  const flash = (i,cls)=>{ const t=grid.children[i]; t.classList.add(cls); setTimeout(()=>t.classList.remove(cls), 260); };
-  function play(){ phase='show'; info.textContent='Watch ('+seq.length+')'; btn.style.display='none'; let k=0;
-    const iv=setInterval(()=>{ if(k>=seq.length){ clearInterval(iv); phase='play'; step=0; info.textContent='Your turn'; return; } flash(seq[k],'blu'); k++; }, 560); }
-  function nextLevel(){ seq.push(rint(9)); play(); }             // auto: add a tile and play
-  grid.addEventListener('pointerdown', e=>{
-    if(phase!=='play') return; const t=e.target.closest('.gtile'); if(!t) return; const i=+t.dataset.i; flash(i,'blu');
-    if(i===seq[step]){ step++; if(step===seq.length){ phase='done'; info.textContent='✓ '+seq.length; setTimeout(nextLevel, 650); } }   // auto next level
-    else { phase='done'; info.textContent='✗ Reached '+seq.length; seq=[]; setTimeout(nextLevel, 1300); }                              // auto restart
-  });
-  btn.onclick = ()=>{ seq=[]; nextLevel(); };
-  return c;
-}
-function gameChimp(){
-  const c = gcard('🐵','Chimp Test','Click 1,2,3… in order.');
-  const grid = document.createElement('div'); grid.className='grid';
-  const btn = document.createElement('button'); btn.className='gbtn'; btn.textContent='Start'; btn.style.marginTop='6px';
-  const info = document.createElement('div'); info.className='gscore';
-  c.appendChild(grid); c.appendChild(btn); c.appendChild(info);
-  let level=4, expect=1, cols=5, phase='idle';
-  function build(){
-    btn.style.display='none'; grid.style.gridTemplateColumns='repeat('+cols+',1fr)'; grid.innerHTML=''; expect=1; phase='play';
-    const total=cols*cols, spots=[]; while(spots.length<Math.min(level,total)){ const p=rint(total); if(spots.indexOf(p)<0) spots.push(p); }
-    for(let i=0;i<total;i++){ const t=document.createElement('div'); t.className='gtile'; grid.appendChild(t);
-      const idx=spots.indexOf(i);
-      if(idx>=0){ t.textContent=idx+1; t.dataset.n=idx+1; t.classList.add('blu'); }
-      else { t.style.background='transparent'; t.style.cursor='default'; } }
-    info.textContent='Level '+level+' — click 1→'+level;
-  }
-  grid.addEventListener('pointerdown', e=>{
-    if(phase!=='play') return; const t=e.target.closest('.gtile'); if(!t||!t.dataset.n) return; const n=+t.dataset.n;
-    if(n===expect){ t.classList.remove('blu'); t.classList.add('ok');
-      if(expect===1) [...grid.children].forEach(x=>{ if(x.dataset.n) x.textContent=''; });   // hide after the first click
-      expect++; if(expect>level){ phase='done'; level++; info.textContent='✓ Level '+level; setTimeout(build, 700); } }   // auto next level
-    else { phase='done'; info.textContent='✗ Reached level '+level; level=4; setTimeout(build, 1300); }                    // auto restart
-  });
-  btn.onclick = build;
-  return c;
-}
-const GAME_FACTORY = { reaction:gameReaction, sequence:gameSequence, number:gameNumber, chimp:gameChimp, visual:gameVisual };
+const GAME_FACTORY = { reaction:gameReaction };
 function syncGameChecks(){
-  [['gamesOn','on'],['gReaction','reaction'],['gSequence','sequence'],['gNumber','number'],['gChimp','chimp'],['gVisual','visual']].forEach(([id,key])=>{
-    const el=document.getElementById(id); if(el) el.checked=!!state.settings.games[key];
-  });
+  const el=document.getElementById('gamesOn'); if(el) el.checked=!!state.settings.games.on;
 }
 function applyGames(){
   const g = state.settings.games || {};
   const L = document.getElementById('gamesLeft'), R = document.getElementById('gamesRight');
   if(!L||!R) return;
   L.innerHTML=''; R.innerHTML='';
-  const enabled = g.on ? GAMES.filter(name=>g[name]) : [];
+  const enabled = g.on ? GAMES.slice() : [];
   enabled.forEach((name,i)=>{
     const card = GAME_FACTORY[name]();
     card.style.position = 'relative';
     const x = document.createElement('button'); x.className='gclose'; x.type='button'; x.textContent='✕';
-    x.title = 'Hide this game (turn it back on in Settings)';
-    x.onclick = ()=>{ state.settings.games[name] = false; save(); syncGameChecks(); applyGames(); };
+    x.title = 'Hide the game (turn it back on in Settings)';
+    x.onclick = ()=>{ state.settings.games.on = false; save(); syncGameChecks(); applyGames(); };
     card.appendChild(x);
     (i%2===0 ? L : R).appendChild(card);
   });
