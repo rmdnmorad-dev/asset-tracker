@@ -468,6 +468,9 @@
   .hoursind.show{display:block}
   #toolbar.lightbar .hoursind{color:#111;background:rgba(0,0,0,.08);border-color:rgba(0,0,0,.2)}
   @media (max-width:1200px){ .hoursind{display:none !important} }
+  /* click a box to SELECT it (highlight); double-click to EDIT it — Excel-style */
+  td.cellsel{outline:2px solid #2563eb !important;outline-offset:-2px;position:relative;z-index:4}
+  #clipHelper{position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0}
   .greact{height:120px;border-radius:9px;display:flex;align-items:center;justify-content:center;
     text-align:center;font-weight:bold;font-size:13px;cursor:pointer;color:#fff;background:#1d4ed8;padding:6px}
   .greact.wait{background:#b45309} .greact.go{background:#16a34a} .greact.too{background:#dc2626}
@@ -491,6 +494,7 @@
 </head>
 <body>
 <div id="bgLayer"></div>
+<textarea id="clipHelper" tabindex="-1" aria-hidden="true"></textarea>
 <div id="gamesLeft" class="gpanel"></div>
 <div id="gamesRight" class="gpanel"></div>
 
@@ -1525,8 +1529,7 @@ function focusBelow(t){
   const next = document.querySelector(sel);
   if(!next) return false;
   closePopups();
-  next.focus();
-  try{ if(next.select) next.select(); }catch(e){}
+  enterEdit(next);                        // move down and keep editing (fast entry)
   next.scrollIntoView({block:'nearest'});
   return true;
 }
@@ -1545,6 +1548,73 @@ function updateHoursInd(field, value){
   ind.title = ind.textContent;   // full text on hover if the toolbar is tight
   ind.classList.add('show');
 }
+
+/* ---------- click-to-select / double-click-to-edit + copy / cut / delete / paste ---------- */
+let selInput = null, editInput = null;
+function clearSel(){ document.querySelectorAll('td.cellsel').forEach(td=>td.classList.remove('cellsel')); }
+function selectCell(inp){
+  clearSel(); selInput = inp; editInput = null;
+  const td = inp.closest('td'); if(td) td.classList.add('cellsel');
+  if(INFO_FIELDS.indexOf(inp.dataset.f)>=0) updateHoursInd(inp.dataset.f, inp.value); else updateHoursInd('','');
+  const clip = document.getElementById('clipHelper'); if(clip){ try{ clip.focus({preventScroll:true}); }catch(e){ clip.focus(); } }
+}
+function enterEdit(inp){
+  if(!inp) return;
+  clearSel(); selInput = inp; editInput = inp;
+  const td = inp.closest('td'); if(td) td.classList.add('cellsel');
+  inp.focus(); try{ inp.select(); }catch(e){}
+  if(INFO_FIELDS.indexOf(inp.dataset.f)>=0) updateHoursInd(inp.dataset.f, inp.value);
+}
+function setCellVal(inp, val){
+  if(!inp) return; const w = week();
+  if(inp.dataset.f==='h' || inp.dataset.f==='ha') w.rows[+inp.dataset.row][inp.dataset.f][+inp.dataset.di] = val;
+  else if(inp.dataset.day!==undefined) w.days[+inp.dataset.day][inp.dataset.f] = val;
+  else if(inp.dataset.row!==undefined) w.rows[+inp.dataset.row][inp.dataset.f] = val;
+  inp.value = val; autoGrow(inp);
+}
+function deleteSel(){
+  if(!selInput) return; setCellVal(selInput, '');
+  if(INFO_FIELDS.indexOf(selInput.dataset.f)>=0) updateHoursInd(selInput.dataset.f, '');
+  recalc(); save();
+}
+// paste: split into sections (tab OR newline) and lay them across the info columns from the selected one
+function pasteInto(text){
+  if(!selInput || text==null) return;
+  let parts = text.indexOf('\t')>=0 ? text.split('\t') : text.split(/\r?\n/);
+  parts = parts.map(s=>s.replace(/\r$/,'').trim());
+  while(parts.length>1 && parts[parts.length-1]==='') parts.pop();
+  const order = ['task','notes','project','contractor','job'];
+  const startIdx = order.indexOf(selInput.dataset.f), row = selInput.dataset.row;
+  if(startIdx>=0 && parts.length>1 && row!==undefined){
+    const w = week(); let n=0;
+    for(let k=0; k<parts.length && startIdx+k<order.length; k++){
+      const f = order[startIdx+k];
+      w.rows[+row][f] = parts[k];
+      const inp = document.querySelector('.cell[data-row="'+row+'"][data-f="'+f+'"]');
+      if(inp){ inp.value = parts[k]; autoGrow(inp); } n++;
+    }
+    if(INFO_FIELDS.indexOf(selInput.dataset.f)>=0) updateHoursInd(selInput.dataset.f, selInput.value);
+    recalc(); save(); toast('Pasted '+n+' box'+(n>1?'es':'')+' across the row.', 1800);
+  } else {
+    setCellVal(selInput, parts.join(' ')); recalc(); save();
+  }
+}
+function bindClipboard(){
+  const clip = document.getElementById('clipHelper'); if(!clip) return;
+  clip.addEventListener('copy',  e=>{ if(!selInput||editInput) return; e.preventDefault(); e.clipboardData.setData('text/plain', selInput.value||''); });
+  clip.addEventListener('cut',   e=>{ if(!selInput||editInput) return; e.preventDefault(); e.clipboardData.setData('text/plain', selInput.value||''); deleteSel(); });
+  clip.addEventListener('paste', e=>{ if(!selInput||editInput) return; e.preventDefault(); pasteInto((e.clipboardData||window.clipboardData).getData('text')); });
+  clip.addEventListener('keydown', e=>{
+    if(!selInput||editInput) return;
+    if(e.key==='Delete'||e.key==='Backspace'){ e.preventDefault(); deleteSel(); }
+    else if(e.key==='Enter'||e.key==='F2'){ e.preventDefault(); enterEdit(selInput); }
+    else if(e.key==='Escape'){ e.preventDefault(); clearSel(); selInput=null; updateHoursInd('',''); }
+    else if(!e.ctrlKey && !e.metaKey && !e.altKey && e.key.length===1){        // start typing = edit + replace
+      e.preventDefault(); const inp=selInput; enterEdit(inp); setCellVal(inp, e.key); recalc(); save();
+      if(INFO_FIELDS.indexOf(inp.dataset.f)>=0) updateHoursInd(inp.dataset.f, inp.value);
+    }
+  });
+}
 function bindSheetInputs(){
   const host = document.getElementById('tblhost');
   host.addEventListener('focusin', e=>{
@@ -1552,11 +1622,20 @@ function bindSheetInputs(){
     if(!t.classList || !t.classList.contains('cell')) return;
     if(TIME_FIELDS.includes(t.dataset.f)) openWheel(t);
     else if(t.classList.contains('jobpick') || t.classList.contains('taskpick') || HIST_OF[t.dataset.f]) openCombo(t);
-    if(INFO_FIELDS.indexOf(t.dataset.f)>=0) updateHoursInd(t.dataset.f, t.value);   // clicked a box -> show its weekly total
   });
-  host.addEventListener('mouseover', e=>{
+  // single click on a task-row box = SELECT it (highlight, no edit); double click = EDIT it
+  host.addEventListener('mousedown', e=>{
     const t = e.target;
-    if(t.classList && t.classList.contains('cell') && INFO_FIELDS.indexOf(t.dataset.f)>=0) updateHoursInd(t.dataset.f, t.value);
+    if(!t.classList || !t.classList.contains('cell') || t.dataset.row===undefined) return;
+    if(editInput===t) return;              // already editing this box -> let the click place the cursor
+    e.preventDefault();                    // don't focus/edit on a single click
+    if(editInput) editInput.blur();        // commit any box being edited
+    selectCell(t);
+  });
+  host.addEventListener('dblclick', e=>{
+    const t = e.target;
+    if(!t.classList || !t.classList.contains('cell') || t.dataset.row===undefined) return;
+    enterEdit(t);
   });
   host.addEventListener('input', e=>{
     const t = e.target;
@@ -1587,6 +1666,7 @@ function bindSheetInputs(){
     const inp = e.target;
     if(!inp.classList || !inp.classList.contains('cell')) return;
     commitValue(inp, true);
+    if(editInput===inp) editInput = null;   // back to select mode
   });
   // Enter = save the box right away (no Tab / mouse click needed).
   // In the growing NOTES boxes, Shift+Enter still makes a new line.
@@ -3532,6 +3612,7 @@ function applyGames(){
 
 /* ---------------- init ---------------- */
 bindSheetInputs();
+bindClipboard();
 bindHeader();
 bindWeekNav();
 bindSettings();
