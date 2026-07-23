@@ -341,6 +341,9 @@
     animation:beamtravel var(--bdur,6s) linear infinite}
   @supports (offset-path: rect(0px auto auto 0px)){.beam{display:block}}
   @keyframes beamtravel{from{offset-distance:0%}to{offset-distance:100%}}
+  /* beam glow turned off from Settings */
+  body.beam-off .beam{display:none !important}
+  body.beam-off .creditbox::before{display:none !important}
   #sheet{position:relative;border-radius:12px}
   #sheet>.beamring{--br:12px;--bsz:110px;--bdur:9s;--bw:2px;--bfrom:#2563eb;--bvia:rgba(37,99,235,.35)}
   body.dark #sheet>.beamring{--bfrom:#fff;--bvia:rgba(255,255,255,.35)}
@@ -582,6 +585,7 @@
   <div class="row" style="margin-top:2px">
     <div class="fld"><span>COLOURS — beam glow, top bar &amp; send buttons</span>
       <div style="display:flex;gap:16px;align-items:center;padding:4px 2px;flex-wrap:wrap">
+        <label style="display:flex;gap:6px;align-items:center;font-weight:normal"><input type="checkbox" id="beamOn"> Beam glow</label>
         <label style="display:flex;gap:6px;align-items:center;font-weight:normal"><input type="color" id="beamColor" style="width:46px;height:30px;padding:0;border:1px solid #94a3b8;border-radius:6px;cursor:pointer"> Beam &amp; send buttons</label>
         <label style="display:flex;gap:6px;align-items:center;font-weight:normal"><input type="color" id="barColor" style="width:46px;height:30px;padding:0;border:1px solid #94a3b8;border-radius:6px;cursor:pointer"> Top bar</label>
       </div></div>
@@ -1198,6 +1202,7 @@ while(state.settings.hiddenSections.length < SECTIONS.length) state.settings.hid
 if(!Array.isArray(state.settings.sectionNames)) state.settings.sectionNames = SECTIONS.map(s=>s.name);
 while(state.settings.sectionNames.length < SECTIONS.length) state.settings.sectionNames.push(SECTIONS[state.settings.sectionNames.length].name);
 if(!state.settings.beamColor) state.settings.beamColor = '#8ab4ff';
+if(state.settings.beamOn===undefined) state.settings.beamOn = true;
 if(!state.settings.barColor) state.settings.barColor = '#1f2937';
 if(!state.settings.games) state.settings.games = {on:false, reaction:true};
 if(!state.taskInfo || typeof state.taskInfo!=='object') state.taskInfo = {};   // 6-digit task # -> {project, contractor}
@@ -2119,6 +2124,9 @@ function bindSettings(){
   const bc = document.getElementById('beamColor');
   bc.value = state.settings.beamColor || '#8ab4ff';
   bc.addEventListener('input', ()=>{ state.settings.beamColor = bc.value; save(); applyBeam(); });
+  const bo = document.getElementById('beamOn');
+  if(bo){ bo.checked = state.settings.beamOn!==false;
+    bo.addEventListener('change', ()=>{ state.settings.beamOn = bo.checked; save(); applyBeam(); }); }
   // top-bar colour
   const barc = document.getElementById('barColor');
   barc.value = state.settings.barColor || '#1f2937';
@@ -2976,42 +2984,87 @@ function buildEml(opt){
   return new Blob([m], {type:'message/rfc822'});
 }
 
-/* ---------------- "projects I worked on" (every 6-digit task with hours in the period) ---------------- */
+/* ---------------- "projects I worked on" — goes in the EMAIL MESSAGE, above the timecard ----------------
+   Every 6-digit task with hours in the period, with its job/work type, project & contractor.
+   Daily send: work type shown next to the hours.  Weekly send: total hours per project. */
 function projectsWorked(days){
   const DYS = days || [0,1,2,3,4,5,6];
   const w = week(), map = {};
   for(const r of w.rows){
     const t = String(r.task||'').trim();
     if(!/^\d{6}$/.test(t)) continue;                       // only real 6-digit task numbers
-    let hrs = 0; for(const d of DYS) hrs += num(r.ha[d]) + num(r.h[d]);
-    if(hrs <= 0) continue;                                  // worked on it in this period?
-    if(!map[t]) map[t] = {task:t, hours:0, project:''};
-    map[t].hours += hrs;
-    if(!map[t].project){
-      const p = (r.project||'').trim() || (((state.taskInfo||{})[t]||{}).project||'').trim();
-      if(p) map[t].project = p;
+    let hrs = 0; const codes = {};                         // work-type code -> hours in this period
+    for(const d of DYS){
+      const hv = num(r.ha[d]) + num(r.h[d]);
+      if(hv <= 0) continue;
+      hrs += hv;
+      const code = String(r.ha[d]||'').trim() || '—';      // the per-day job/work code (2A, IC, …)
+      codes[code] = (codes[code]||0) + hv;
     }
+    if(hrs <= 0) continue;                                  // worked on it in this period?
+    if(!map[t]) map[t] = {task:t, hours:0, project:'', contractor:'', job:'', codes:{}};
+    const e = map[t]; e.hours += hrs;
+    const info = (state.taskInfo||{})[t] || {};
+    if(!e.project){    const p=(r.project||'').trim()    || (info.project||'').trim();    if(p) e.project=p; }
+    if(!e.contractor){ const c=(r.contractor||'').trim() || (info.contractor||'').trim(); if(c) e.contractor=c; }
+    if(!e.job){        const j=(r.job||'').trim();        if(j) e.job=j; }
+    for(const k in codes) e.codes[k] = (e.codes[k]||0) + codes[k];
   }
   return Object.keys(map).sort().map(k=>map[k]);
 }
 function projectsTitle(days){
   return (days && days.length===1) ? ('Projects worked on '+DAYS[days[0]]) : 'Projects worked on this week';
 }
-function projectsHtmlBlock(days){
-  const list = projectsWorked(days), one = days && days.length===1;
-  let b = '<table cellspacing="0" cellpadding="4" style="border-collapse:collapse;width:960px;margin:2px 0 8px;font-family:Arial">';
-  b += '<tr><td style="border:1px solid #000;background:#0070C0;color:#fff;font-weight:bold;font-size:12px;padding:5px 9px">'+
-       escHtml(projectsTitle(days))+' — '+list.length+' project'+(list.length===1?'':'s')+'</td></tr>';
-  if(list.length){
-    b += '<tr><td style="border:1px solid #000;border-top:none;background:#EAF1FB;font-size:11px;padding:7px 9px;line-height:1.7">'+
-         list.map(p=>'<b style="color:#c00">'+escHtml(p.task)+'</b>'+(p.project?' — '+escHtml(p.project):'')+
-                     ' <span style="color:#333">('+fmtNum(p.hours)+' h)</span>').join(' &nbsp;•&nbsp; ')+
-         '</td></tr>';
-  }else{
-    b += '<tr><td style="border:1px solid #000;border-top:none;background:#F2F2F2;font-size:11px;padding:7px 9px;color:#666">'+
-         'No 6-digit project hours logged '+(one?'that day':'this week')+'.</td></tr>';
+// job type(s) used, e.g. "2A, IC" — falls back to the JOB TYPE column, then a dash
+function projJobType(p){
+  const codes = Object.keys(p.codes).filter(k=>k!=='—');
+  if(codes.length) return codes.join(', ');
+  return p.job || '—';
+}
+// hours cell: Daily = work type next to the hours; Weekly = total hours
+function projHours(p, one, html){
+  if(one){
+    const parts = Object.keys(p.codes).map(k=>(k==='—'?'(no type)':k)+(html?'&nbsp;—&nbsp;':' — ')+fmtNum(p.codes[k])+' h');
+    return parts.join(html?' &nbsp;·&nbsp; ':' · ') || (fmtNum(p.hours)+' h');
   }
-  return b + '</table>';
+  return fmtNum(p.hours)+' h';
+}
+function projectsMsgHtml(days){
+  const list = projectsWorked(days), one = days && days.length===1;
+  const F = 'font-family:Segoe UI,Arial,sans-serif;';
+  let h = '<div style="'+F+'font-size:13px;margin:2px 0 14px">';
+  h += '<div style="font-weight:bold;color:#0b5cad;margin:0 0 5px">'+escHtml(projectsTitle(days))+
+       ' — '+list.length+' project'+(list.length===1?'':'s')+'</div>';
+  if(list.length){
+    const hoursHdr = one ? 'Work type — hours' : 'Total hours';
+    const th = c=>'<th style="border:1px solid #b8c4d8;background:#eaf1fb;text-align:left;padding:4px 9px;font-size:12px">'+c+'</th>';
+    const td = c=>'<td style="border:1px solid #d3ddeb;padding:3px 9px;font-size:12.5px">'+c+'</td>';
+    h += '<table cellspacing="0" cellpadding="0" style="border-collapse:collapse;'+F+'">'+
+         '<tr>'+th('Task #')+th('Job type')+th('Project')+th('Contractor')+th(hoursHdr)+'</tr>';
+    for(const p of list){
+      h += '<tr>'+
+        '<td style="border:1px solid #d3ddeb;padding:3px 9px;color:#c00;font-weight:bold">'+escHtml(p.task)+'</td>'+
+        td(escHtml(projJobType(p)))+td(escHtml(p.project||'—'))+td(escHtml(p.contractor||'—'))+td(projHours(p,one,true))+
+      '</tr>';
+    }
+    h += '</table>';
+  }else{
+    h += '<div style="color:#666">No 6-digit project hours logged '+(one?'that day':'this week')+'.</div>';
+  }
+  return h + '</div>';
+}
+function projectsMsgText(days){
+  const list = projectsWorked(days), one = days && days.length===1;
+  const L = [projectsTitle(days).toUpperCase()+' ('+list.length+')'];
+  if(list.length){
+    for(const p of list){
+      const bits = [p.task, projJobType(p)];
+      if(p.project) bits.push(p.project);
+      if(p.contractor) bits.push(p.contractor);
+      L.push('  • '+bits.join(' — ')+'  |  '+projHours(p,one,false));
+    }
+  }else L.push('  (none)');
+  return L.join('\n');
 }
 /* ---------------- sheet as an HTML table (email body) ---------------- */
 function buildHtmlEmail(prefixHtml, days){
@@ -3047,8 +3100,6 @@ function buildHtmlEmail(prefixHtml, days){
     '<td style="width:250px;vertical-align:top;font-size:10px;color:#8a8a8a;font-family:Arial">'+
     'Employee: <b style="color:#111">'+escHtml(s.employee||'')+'</b><br>Manager: <b style="color:#111">'+escHtml(s.manager||'')+'</b><br>'+
     'Phone: <b style="color:#111">'+escHtml(s.phone||'')+'</b><br>E-mail: <span style="color:#0563c1;text-decoration:underline">'+escHtml(s.email||'')+'</span></td></tr></table>';
-  // list of the 6-digit projects worked on in this period (today for Daily, the whole week for Weekly)
-  h += projectsHtmlBlock(DYS);
   // main sheet table: 5 info columns + 7 day columns + total column
   h += '<table cellspacing="0" cellpadding="2" style="border-collapse:collapse;width:960px">';
   h += '<tr><td colspan="5" style="border:none;width:440px"></td>';
@@ -3132,11 +3183,6 @@ function buildPlainText(days){
   L.push('Week Ending: SUNDAY '+usDate(fromIso(weekKey))+'  |  Week '+isoWeekNum(dates[3])+' of the year');
   L.push('Employee: '+s.employee+'  |  Manager: '+s.manager);
   L.push('Phone: '+s.phone+'  |  E-mail: '+s.email);
-  L.push('');
-  const pw = projectsWorked(DYS);
-  L.push(projectsTitle(DYS).toUpperCase()+' ('+pw.length+')');
-  if(pw.length) pw.forEach(p=>L.push('  • '+p.task+(p.project?' — '+p.project:'')+'  ('+fmtNum(p.hours)+' h)'));
-  else L.push('  (none)');
   L.push('');
   let weekMin=0;
   for(const d of DYS){
@@ -3330,28 +3376,37 @@ function bindEmailButtons(){
     const blob = await canvasBlob(canvas,'image/png');
     const bytes = new Uint8Array(await blob.arrayBuffer());
     if(isMobile()){ await mobileShareFile(bytes, fileBase()+'.png', 'image/png'); return; }
-    sendDraft('image', {bytes, name: fileBase()+'.png', msgHtml: msgParts().html, bodyText: (state.settings.message||'').trim()},
+    const mp = msgParts();
+    sendDraft('image', {bytes, name: fileBase()+'.png',
+                        msgHtml: mp.html + projectsMsgHtml(days),
+                        bodyText: mp.text + projectsMsgText(days)},
               '📷', 'your message and the timecard picture inside the body');
   });
   document.getElementById('btnTxt').onclick = ev=>withBusy(ev.currentTarget, async ()=>{
     if(!ensureRecipient()) return;
     const days = sendDays(), mp = msgParts();
     if(isMobile()){
-      const body = ((state.settings.message||'').trim() ? (state.settings.message).trim()+'\n\n' : '') + buildPlainText(days);
+      const body = ((state.settings.message||'').trim() ? (state.settings.message).trim()+'\n\n' : '') +
+                   projectsMsgText(days) + '\n\n' + buildPlainText(days);
       toast('✉ Opening your mail app with the timecard in the message…', 9000);
       location.href = mailtoUrl(subjectText(), body);
       return;
     }
-    sendDraft('text', {bodyHtml: buildHtmlEmail(mp.html, days), bodyText: mp.text + buildPlainText(days)},
+    sendDraft('text', {bodyHtml: buildHtmlEmail(mp.html + projectsMsgHtml(days), days),
+                       bodyText: mp.text + projectsMsgText(days) + '\n\n' + buildPlainText(days)},
               '📝', 'your message and the whole timecard written in the body');
   });
   document.getElementById('btnPdf').onclick = ev=>withBusy(ev.currentTarget, async ()=>{
     if(!ensureRecipient()) return;
     toast('📄 Building the PDF…');
-    const pdf = await buildSearchablePdf(sendDays());
+    const days = sendDays();
+    const pdf = await buildSearchablePdf(days);
     const bytes = new Uint8Array(await pdf.arrayBuffer());
     if(isMobile()){ await mobileShareFile(bytes, fileBase()+'.pdf', 'application/pdf'); return; }
-    sendDraft('pdf', {bytes, name: fileBase()+'.pdf', msgHtml: msgParts().html, bodyText: (state.settings.message||'').trim()},
+    const mp = msgParts();
+    sendDraft('pdf', {bytes, name: fileBase()+'.pdf',
+                      msgHtml: mp.html + projectsMsgHtml(days),
+                      bodyText: mp.text + projectsMsgText(days)},
               '📄', 'your message and the PDF (an exact copy of the sheet) attached');
   });
   document.getElementById('btnSavePdf').onclick = ev=>withBusy(ev.currentTarget, async ()=>{
@@ -3655,6 +3710,7 @@ function applyBeam(){
   // the send buttons take the beam colour (with readable text)
   document.documentElement.style.setProperty('--sendbg', c);
   document.documentElement.style.setProperty('--sendfg', luminance(c) > 0.62 ? '#111' : '#fff');
+  document.body.classList.toggle('beam-off', state.settings.beamOn===false);   // beam glow on/off
 }
 function applyBar(){
   const bar = document.getElementById('toolbar'); if(!bar) return;
