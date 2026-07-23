@@ -466,6 +466,10 @@
     border:1px solid rgba(255,255,255,.28);border-radius:14px;padding:5px 12px;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:none}
   .hoursind.show{display:block}
+  /* ISO week-of-year pill next to the week picker */
+  .weekno{align-self:center;margin-left:4px;font-size:12px;font-weight:bold;color:#fff;
+    background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.3);border-radius:12px;padding:3px 10px;white-space:nowrap}
+  #toolbar.lightbar .weekno{color:#111;background:rgba(0,0,0,.06);border-color:rgba(0,0,0,.2)}
   #toolbar.lightbar .hoursind{color:#111;background:rgba(0,0,0,.08);border-color:rgba(0,0,0,.2)}
   @media (max-width:1200px){ .hoursind{display:none !important} }
   /* click a box to SELECT it (highlight); double-click to EDIT it — Excel-style */
@@ -505,6 +509,7 @@
     <input type="date" id="weekPick">
     <button class="btn" id="nextWk" title="Next week">▶</button>
     <button class="btn" id="thisWk">This Week</button>
+    <span id="weekNo" class="weekno" title="ISO week number of the year (weeks run Mon–Sun)"></span>
   </div>
   <div class="sep"></div>
   <div class="grp">
@@ -534,9 +539,9 @@
   <div class="beamring"><div class="beam"></div></div>
   <h3>⚙ Settings <span style="font-weight:normal;font-size:11px;color:#888">(everything is saved automatically in this browser)</span></h3>
   <div class="row">
-    <div class="fld" style="flex:1;min-width:260px"><span>SEND TO — one or more, separated with commas, ; or |</span>
+    <div class="fld" style="flex:1;min-width:260px"><span>SEND TO — <b id="recipKindLbl" style="color:#2563eb">Daily</b> timecard · separate list per type (pick Daily/Weekly on the right) · commas, ; or |</span>
       <input type="text" id="setTo" placeholder="manager@company.com, lead@company.com"></div>
-    <div class="fld" style="flex:2;min-width:300px"><span>CC — as many as you need, separated with commas, ; or |</span>
+    <div class="fld" style="flex:2;min-width:300px"><span>CC — for the <b class="recipKindLbl2" style="color:#2563eb">Daily</b> timecard · as many as you need, separated with commas, ; or |</span>
       <input type="text" id="setCc" placeholder="hr@company.com, boss@company.com, team@company.com"></div>
   </div>
   <div class="row" style="align-items:flex-end">
@@ -621,6 +626,17 @@
     <b>saved automatically</b> and used for every week; it also carries into the emailed / PDF timecard.
   </div>
   <div class="row" style="margin-top:12px">
+    <div class="fld" style="flex:1 1 100%">
+      <span>WHERE YOUR DATA LIVES — everything auto-saves inside this browser (nothing leaves your computer). Optionally, link a real <b>.json</b> file that updates itself on every change:</span>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:4px 2px">
+        <button class="btn2" type="button" id="btnLinkSaveFile">🔗 Link an auto-save file…</button>
+        <button class="btn2" type="button" id="btnSaveFileReconnect" style="display:none">↻ Reconnect</button>
+        <button class="btn2" type="button" id="btnSaveFileUnlink" style="display:none">✕ Unlink</button>
+        <span id="saveFileStat" style="font-size:11px;color:#777">Not linked — your data is saved inside this browser only.</span>
+      </div>
+    </div>
+  </div>
+  <div class="row" style="margin-top:2px">
     <button class="btn2" id="btnBackup">💾 Save settings &amp; memory (backup)</button>
     <button class="btn2" id="btnImport">📥 Import a backup</button>
     <input type="file" id="importFile" accept=".json,application/json" style="display:none">
@@ -1185,6 +1201,19 @@ if(!state.settings.beamColor) state.settings.beamColor = '#8ab4ff';
 if(!state.settings.barColor) state.settings.barColor = '#1f2937';
 if(!state.settings.games) state.settings.games = {on:false, reaction:true};
 if(!state.taskInfo || typeof state.taskInfo!=='object') state.taskInfo = {};   // 6-digit task # -> {project, contractor}
+// separate SEND-TO / CC lists for the Daily vs the Weekly timecard (seeded from the old single list)
+if(!state.settings.recipients || typeof state.settings.recipients!=='object'){
+  state.settings.recipients = {
+    daily:  {to: state.settings.emailTo||'', cc: state.settings.emailCc||''},
+    weekly: {to: state.settings.emailTo||'', cc: state.settings.emailCc||''}
+  };
+}
+['daily','weekly'].forEach(k=>{
+  const r = state.settings.recipients;
+  if(!r[k] || typeof r[k]!=='object') r[k] = {to: state.settings.emailTo||'', cc: state.settings.emailCc||''};
+  if(r[k].to==null) r[k].to = '';
+  if(r[k].cc==null) r[k].cc = '';
+});
 // build flag: the reminders feature is compiled out of the "no reminders" version
 const REMINDERS = false;  /*REMINDERS_FLAG*/
 // 20 column widths: 5 info + 7×(narrow job, wide hours) + 1 total
@@ -1202,6 +1231,7 @@ function save(){
     const cur = JSON.stringify(state);
     try{ localStorage.setItem(LS_KEY, cur); }
     catch(e){ toast('⚠ Could not save — browser storage is blocked or full.'); }
+    scheduleFileWrite();                              // also mirror to the linked JSON file, if any
     if(!restoring){
       if(undoBase!==null && cur!==undoBase){          // a settled change -> one undo step
         undoStack.push(undoBase);
@@ -1212,6 +1242,97 @@ function save(){
       updateUndoButtons();
     }
   }, 250);
+}
+
+/* ---------------- optional: mirror every save into a real .json file on disk ----------------
+   A browser can't silently write next to the HTML (sandbox), but with the File System Access
+   API you pick the file ONCE, and from then on every change auto-writes to it. Chromium browsers
+   (Chrome / Edge / Opera) ask to re-grant permission once per session — hence the Reconnect step. */
+let saveFileHandle = null;     // FileSystemFileHandle of the linked JSON
+let saveFilePending = false;   // linked but needs one click to (re)grant write permission this session
+let fileWriteTimer = null, fileWriteBusy = false, fileWriteAgain = false;
+function idbStore(mode){
+  return new Promise((res,rej)=>{
+    let rq; try{ rq = indexedDB.open('tcSaveFile',1); }catch(e){ return rej(e); }
+    rq.onupgradeneeded = ()=>{ try{ rq.result.createObjectStore('h'); }catch(e){} };
+    rq.onerror = ()=>rej(rq.error);
+    rq.onsuccess = ()=>{ try{ res(rq.result.transaction('h',mode).objectStore('h')); }catch(e){ rej(e); } };
+  });
+}
+function idbPut(k,v){ return idbStore('readwrite').then(s=>new Promise(r=>{ const q=s.put(v,k); q.onsuccess=()=>r(); q.onerror=()=>r(); })).catch(()=>{}); }
+function idbGet(k){ return idbStore('readonly').then(s=>new Promise(r=>{ const q=s.get(k); q.onsuccess=()=>r(q.result); q.onerror=()=>r(null); })).catch(()=>null); }
+function idbDel(k){ return idbStore('readwrite').then(s=>new Promise(r=>{ const q=s.delete(k); q.onsuccess=()=>r(); q.onerror=()=>r(); })).catch(()=>{}); }
+async function handlePerm(h, request){
+  if(!h || !h.queryPermission) return 'granted';
+  const opts = {mode:'readwrite'};
+  let p = await h.queryPermission(opts);
+  if(p!=='granted' && request && h.requestPermission) p = await h.requestPermission(opts);
+  return p;
+}
+function scheduleFileWrite(){ if(!saveFileHandle) return; clearTimeout(fileWriteTimer); fileWriteTimer = setTimeout(doFileWrite, 400); }
+async function doFileWrite(){
+  if(!saveFileHandle) return;
+  if(fileWriteBusy){ fileWriteAgain = true; return; }
+  fileWriteBusy = true;
+  try{
+    const perm = await handlePerm(saveFileHandle, false);
+    if(perm!=='granted'){ saveFilePending = true; updateSaveFileUI(); return; }
+    const wr = await saveFileHandle.createWritable();
+    await wr.write(new Blob([JSON.stringify(state,null,1)], {type:'application/json'}));
+    await wr.close();
+    if(saveFilePending){ saveFilePending = false; updateSaveFileUI(); }
+  }catch(e){ /* keep localStorage as the source of truth; never block the app */ }
+  finally{ fileWriteBusy = false; if(fileWriteAgain){ fileWriteAgain = false; scheduleFileWrite(); } }
+}
+async function linkSaveFile(){
+  if(!window.showSaveFilePicker){ toast('⚠ This browser can’t link a live file (needs Chrome / Edge / Opera). Use “Save a backup” instead.'); return; }
+  try{
+    const h = await showSaveFilePicker({suggestedName:'Timecard_data.json',
+      types:[{description:'Timecard data', accept:{'application/json':['.json']}}]});
+    saveFileHandle = h; saveFilePending = false;
+    await idbPut('saveFile', h);
+    await doFileWrite();
+    updateSaveFileUI();
+    toast('🔗 Linked! <b>'+escHtml(h.name||'that file')+'</b> now updates itself every time you change the sheet.');
+  }catch(e){ if(!(e && e.name==='AbortError')) toast('⚠ Could not link the file.'); }
+}
+async function reconnectSaveFile(){
+  if(!saveFileHandle) return;
+  const perm = await handlePerm(saveFileHandle, true);
+  if(perm==='granted'){ saveFilePending = false; updateSaveFileUI(); await doFileWrite(); toast('🔗 Reconnected — auto-save to your file resumed.'); }
+  else toast('⚠ Permission denied — the file stays un-linked for now.');
+}
+async function unlinkSaveFile(){
+  saveFileHandle = null; saveFilePending = false; await idbDel('saveFile'); updateSaveFileUI();
+  toast('Unlinked. Your data still saves automatically in this browser.');
+}
+async function initSaveFile(){
+  try{
+    const h = await idbGet('saveFile');
+    if(!h) return;
+    saveFileHandle = h;
+    const perm = await handlePerm(h, false);
+    saveFilePending = (perm!=='granted');
+    updateSaveFileUI();
+    if(!saveFilePending) doFileWrite();
+  }catch(e){}
+}
+function updateSaveFileUI(){
+  const st = document.getElementById('saveFileStat'); if(!st) return;
+  const rec = document.getElementById('btnSaveFileReconnect'), unl = document.getElementById('btnSaveFileUnlink');
+  if(!saveFileHandle){
+    st.textContent = 'Not linked — your data is saved inside this browser only.'; st.style.color = '#777';
+    if(rec) rec.style.display='none'; if(unl) unl.style.display='none'; return;
+  }
+  const nm = saveFileHandle.name || 'the file';
+  if(saveFilePending){
+    st.innerHTML = '🔒 Linked to <b>'+escHtml(nm)+'</b> — click <b>Reconnect</b> to resume writing (browsers ask once per session).';
+    st.style.color = '#b45309'; if(rec) rec.style.display='';
+  }else{
+    st.innerHTML = '✅ Auto-saving to <b>'+escHtml(nm)+'</b> on every change.';
+    st.style.color = '#15803d'; if(rec) rec.style.display='none';
+  }
+  if(unl) unl.style.display='';
 }
 
 /* ---------------- dates ---------------- */
@@ -1462,6 +1583,7 @@ function renderWeek(){
   const dates = weekDates();
   document.getElementById('sheetDate').textContent = usDate(fromIso(weekKey));
   document.getElementById('weekPick').value = weekKey;
+  const wn = document.getElementById('weekNo'); if(wn) wn.textContent = 'Week '+isoWeekNum(dates[3]);   // Thursday owns the ISO week
   for(let d=0; d<7; d++) document.getElementById('dc'+d).textContent = usDate(dates[d]);
   updateDayIndicator();
   syncCustomDayUI();
@@ -1594,6 +1716,28 @@ function pasteInto(text){
     setCellVal(selInput, parts.join(' ')); recalc(); save();
   }
 }
+// ---- arrow-key navigation across the sheet (Excel-style: click a box, then move with arrows) ----
+const NAV_COLS = (function(){
+  const c = [{f:'task'},{f:'notes'},{f:'project'},{f:'contractor'},{f:'job'}];
+  for(let d=0; d<7; d++){ c.push({f:'ha',di:d}); c.push({f:'h',di:d}); }   // each day = job-code cell + hours cell
+  return c;
+})();
+function navFrom(inp, dr, dc){
+  if(!inp || inp.dataset.row===undefined) return null;
+  const ri = +inp.dataset.row;
+  let ci = NAV_COLS.findIndex(c=>c.f===inp.dataset.f && (c.di===undefined || String(c.di)===String(inp.dataset.di)));
+  if(ci<0) ci = 0;
+  const nr = ri + dr, nc = Math.max(0, Math.min(NAV_COLS.length-1, ci + dc));
+  if(nr < 0) return null;
+  const col = NAV_COLS[nc];
+  let sel = '.cell[data-row="'+nr+'"][data-f="'+col.f+'"]';
+  if(col.di!==undefined) sel += '[data-di="'+col.di+'"]';
+  return document.querySelector(sel);
+}
+function moveSel(dr, dc){
+  const nx = navFrom(selInput, dr, dc);
+  if(nx){ selectCell(nx); nx.scrollIntoView({block:'nearest', inline:'nearest'}); }
+}
 function bindClipboard(){
   const clip = document.getElementById('clipHelper'); if(!clip) return;
   clip.addEventListener('copy',  e=>{ if(!selInput||editInput) return; e.preventDefault(); e.clipboardData.setData('text/plain', selInput.value||''); });
@@ -1604,6 +1748,11 @@ function bindClipboard(){
     if(e.key==='Delete'||e.key==='Backspace'){ e.preventDefault(); deleteSel(); }
     else if(e.key==='Enter'||e.key==='F2'){ e.preventDefault(); enterEdit(selInput); }
     else if(e.key==='Escape'){ e.preventDefault(); clearSel(); selInput=null; updateHoursInd('',''); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); moveSel(-1,0); }           // arrows move the highlight box
+    else if(e.key==='ArrowDown'){ e.preventDefault(); moveSel(1,0); }
+    else if(e.key==='ArrowLeft'){ e.preventDefault(); moveSel(0,-1); }
+    else if(e.key==='ArrowRight'){ e.preventDefault(); moveSel(0,1); }
+    else if(e.key==='Tab'){ e.preventDefault(); moveSel(0, e.shiftKey?-1:1); }
     else if(!e.ctrlKey && !e.metaKey && !e.altKey && e.key.length===1){        // start typing = edit + replace
       e.preventDefault(); const inp=selInput; enterEdit(inp); setCellVal(inp, e.key); recalc(); save();
       if(INFO_FIELDS.indexOf(inp.dataset.f)>=0) updateHoursInd(inp.dataset.f, inp.value);
@@ -1886,21 +2035,34 @@ function pickBgFile(f){
   };
   rd.readAsDataURL(f);
 }
+// which recipient list the Settings SEND-TO / CC fields are editing right now
+function recipEditKind(){ const cw=document.getElementById('subWeekly'); return (cw && cw.checked) ? 'weekly' : 'daily'; }
+function loadRecipFields(){
+  const k=recipEditKind(), r=(state.settings.recipients||{})[k]||{to:'',cc:''};
+  const to=document.getElementById('setTo'), cc=document.getElementById('setCc');
+  if(to) to.value=r.to||''; if(cc) cc.value=r.cc||'';
+  const nm=(k==='weekly'?'Weekly':'Daily');
+  const l1=document.getElementById('recipKindLbl'); if(l1) l1.textContent=nm;
+  document.querySelectorAll('.recipKindLbl2').forEach(el=>el.textContent=nm);
+}
 function bindSettings(){
   document.getElementById('btnSettings').onclick = ()=>{
     const p = document.getElementById('settings');
     p.hidden = !p.hidden;
   };
   const updPreview = ()=>{ document.getElementById('subjPreview').textContent = '→  '+subjectText(); };
-  const map = [['setTo','emailTo'],['setCc','emailCc'],['setSubject','subject'],['setMessage','message']];
+  const map = [['setSubject','subject'],['setMessage','message']];
   for(const [id,key] of map){
     const el = document.getElementById(id);
     el.value = state.settings[key]||'';
     el.addEventListener('input', ()=>{ state.settings[key]=el.value; save(); updPreview(); });
   }
+  // SEND-TO / CC — each edits the Daily OR the Weekly list, following the type picked below
+  document.getElementById('setTo').addEventListener('input', e=>{ state.settings.recipients[recipEditKind()].to = e.target.value; save(); });
+  document.getElementById('setCc').addEventListener('input', e=>{ state.settings.recipients[recipEditKind()].cc = e.target.value; save(); });
   // Daily / Weekly checkboxes: pick one, or untick to follow the calendar again
   const cd = document.getElementById('subDaily'), cw = document.getElementById('subWeekly');
-  const reflect = ()=>{ const w = resolvedWeekly(); cd.checked = !w; cw.checked = w; updPreview(); };
+  const reflect = ()=>{ const w = resolvedWeekly(); cd.checked = !w; cw.checked = w; loadRecipFields(); updPreview(); };
   cd.addEventListener('change', ()=>{ state.settings.subjectMode = cd.checked ? 'daily' : 'auto'; save(); reflect(); });
   cw.addEventListener('change', ()=>{ state.settings.subjectMode = cw.checked ? 'weekly' : 'auto'; save(); reflect(); });
   reflect();
@@ -1926,6 +2088,11 @@ function bindSettings(){
                                       'application/json', 'Timecard backup');
     if(r!=='cancelled') toast('💾 Backup saved — it holds your settings, drop-down memory and every week.');
   };
+  // linked auto-save file (File System Access API)
+  document.getElementById('btnLinkSaveFile').onclick = linkSaveFile;
+  document.getElementById('btnSaveFileReconnect').onclick = reconnectSaveFile;
+  document.getElementById('btnSaveFileUnlink').onclick = unlinkSaveFile;
+  updateSaveFileUI();
   document.getElementById('btnImport').onclick = ()=>document.getElementById('importFile').click();
   document.getElementById('importFile').addEventListener('change', e=>{
     const f = e.target.files[0]; if(!f) return;
@@ -2743,9 +2910,22 @@ function encHeader(s){
     : '=?UTF-8?B?'+btoa(unescape(encodeURIComponent(s)))+'?=';
 }
 function splitEmails(s){ return (s||'').split(/[,;|]+/).map(x=>x.trim()).filter(Boolean); }
-function toList(){ return splitEmails(state.settings.emailTo).join(', '); }
-function ccList(){ return splitEmails(state.settings.emailCc).join(', '); }
+// a send uses the Daily OR the Weekly recipient list, decided by what the send actually is
+function recipKind(){ return resolvedWeekly() ? 'weekly' : 'daily'; }
+function recipCur(){ const r=(state.settings.recipients||{})[recipKind()]||{}; return {to:r.to||'', cc:r.cc||''}; }
+function sendToRaw(){ return recipCur().to; }
+function sendCcRaw(){ return recipCur().cc; }
+function toList(){ return splitEmails(sendToRaw()).join(', '); }
+function ccList(){ return splitEmails(sendCcRaw()).join(', '); }
 function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escBr(s){ return escHtml(s).replace(/\r\n|\r|\n/g,'<br>'); }   // keep the line breaks you typed
+// ISO-8601 week number of the year (weeks run Mon–Sun; the week owns its Thursday)
+function isoWeekNum(d){
+  const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+  const day=t.getUTCDay()||7; t.setUTCDate(t.getUTCDate()+4-day);
+  const ys=new Date(Date.UTC(t.getUTCFullYear(),0,1));
+  return Math.ceil((((t-ys)/86400000)+1)/7);
+}
 function rfc2822Date(d){
   const dn=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'], mn=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const tz=-d.getTimezoneOffset(), sg=tz>=0?'+':'-', a=Math.abs(tz);
@@ -2755,7 +2935,7 @@ function rfc2822Date(d){
 function buildEml(opt){
   const nl = '\r\n', b = '=_timecard_'+Date.now();
   // full RFC-5322 headers — new Outlook rejects/re-composes drafts that lack Date/From/Message-ID
-  const from = (state.settings.email||'').trim() || (splitEmails(state.settings.emailTo)[0]||'me@localhost');
+  const from = (state.settings.email||'').trim() || (splitEmails(sendToRaw())[0]||'me@localhost');
   let m = 'X-Unsent: 1'+nl+
           'Date: '+rfc2822Date(new Date())+nl+
           'Message-ID: <timecard.'+Date.now()+'.'+Math.random().toString(36).slice(2)+'@timecard.local>'+nl+
@@ -2796,6 +2976,43 @@ function buildEml(opt){
   return new Blob([m], {type:'message/rfc822'});
 }
 
+/* ---------------- "projects I worked on" (every 6-digit task with hours in the period) ---------------- */
+function projectsWorked(days){
+  const DYS = days || [0,1,2,3,4,5,6];
+  const w = week(), map = {};
+  for(const r of w.rows){
+    const t = String(r.task||'').trim();
+    if(!/^\d{6}$/.test(t)) continue;                       // only real 6-digit task numbers
+    let hrs = 0; for(const d of DYS) hrs += num(r.ha[d]) + num(r.h[d]);
+    if(hrs <= 0) continue;                                  // worked on it in this period?
+    if(!map[t]) map[t] = {task:t, hours:0, project:''};
+    map[t].hours += hrs;
+    if(!map[t].project){
+      const p = (r.project||'').trim() || (((state.taskInfo||{})[t]||{}).project||'').trim();
+      if(p) map[t].project = p;
+    }
+  }
+  return Object.keys(map).sort().map(k=>map[k]);
+}
+function projectsTitle(days){
+  return (days && days.length===1) ? ('Projects worked on '+DAYS[days[0]]) : 'Projects worked on this week';
+}
+function projectsHtmlBlock(days){
+  const list = projectsWorked(days), one = days && days.length===1;
+  let b = '<table cellspacing="0" cellpadding="4" style="border-collapse:collapse;width:960px;margin:2px 0 8px;font-family:Arial">';
+  b += '<tr><td style="border:1px solid #000;background:#0070C0;color:#fff;font-weight:bold;font-size:12px;padding:5px 9px">'+
+       escHtml(projectsTitle(days))+' — '+list.length+' project'+(list.length===1?'':'s')+'</td></tr>';
+  if(list.length){
+    b += '<tr><td style="border:1px solid #000;border-top:none;background:#EAF1FB;font-size:11px;padding:7px 9px;line-height:1.7">'+
+         list.map(p=>'<b style="color:#c00">'+escHtml(p.task)+'</b>'+(p.project?' — '+escHtml(p.project):'')+
+                     ' <span style="color:#333">('+fmtNum(p.hours)+' h)</span>').join(' &nbsp;•&nbsp; ')+
+         '</td></tr>';
+  }else{
+    b += '<tr><td style="border:1px solid #000;border-top:none;background:#F2F2F2;font-size:11px;padding:7px 9px;color:#666">'+
+         'No 6-digit project hours logged '+(one?'that day':'this week')+'.</td></tr>';
+  }
+  return b + '</table>';
+}
 /* ---------------- sheet as an HTML table (email body) ---------------- */
 function buildHtmlEmail(prefixHtml, days){
   const DYS = days || [0,1,2,3,4,5,6];
@@ -2826,10 +3043,12 @@ function buildHtmlEmail(prefixHtml, days){
     '<td style="width:290px;vertical-align:top;font-family:Arial"><span style="font-size:20px;font-weight:bold">'+escHtml(s.co1||'')+'</span>'+
     '<br><span style="font-size:9px;color:#8a8a8a">'+escHtml(s.co2||'')+'<br>'+escHtml(s.co3||'')+'</span></td>'+
     '<td style="text-align:center;vertical-align:top;font-family:Arial"><span style="font-size:20px;font-weight:bold;color:#BFBFBF">'+(DYS.length===1?'Daily':'Weekly')+' Time Sheet</span>'+
-    '<br><span style="font-size:11px"><span style="color:#FF0000">'+usDate(fromIso(weekKey))+'</span> <b>SUNDAY</b></span></td>'+
+    '<br><span style="font-size:11px"><span style="color:#FF0000">'+usDate(fromIso(weekKey))+'</span> <b>SUNDAY</b> · <b>Week '+isoWeekNum(dates[3])+'</b></span></td>'+
     '<td style="width:250px;vertical-align:top;font-size:10px;color:#8a8a8a;font-family:Arial">'+
     'Employee: <b style="color:#111">'+escHtml(s.employee||'')+'</b><br>Manager: <b style="color:#111">'+escHtml(s.manager||'')+'</b><br>'+
     'Phone: <b style="color:#111">'+escHtml(s.phone||'')+'</b><br>E-mail: <span style="color:#0563c1;text-decoration:underline">'+escHtml(s.email||'')+'</span></td></tr></table>';
+  // list of the 6-digit projects worked on in this period (today for Daily, the whole week for Weekly)
+  h += projectsHtmlBlock(DYS);
   // main sheet table: 5 info columns + 7 day columns + total column
   h += '<table cellspacing="0" cellpadding="2" style="border-collapse:collapse;width:960px">';
   h += '<tr><td colspan="5" style="border:none;width:440px"></td>';
@@ -2869,7 +3088,7 @@ function buildHtmlEmail(prefixHtml, days){
       const r = w.rows[ri];
       h += '<tr>';
       for(const f of ['task','notes','project','contractor','job'])
-        h += '<td style="'+B+'background:#D9D9D9;color:#FF0000;font-size:11px;text-align:center;height:22px">'+escHtml(r[f]||'')+'</td>';
+        h += '<td style="'+B+'background:#D9D9D9;color:#FF0000;font-size:11px;text-align:center;height:22px;vertical-align:middle">'+escBr(r[f]||'')+'</td>';
       for(const d of DYS){                                   // the day column(s) shown in this send
         const v = num(r.ha[d]) + num(r.h[d]);
         dayTaskTot[d] += v;
@@ -2910,9 +3129,14 @@ function buildPlainText(days){
   const w = week(), dates = weekDates(), s = state.settings;
   const L = [];
   L.push((s.co1||'JORDAN ISAT')+(DYS.length===1?' - DAILY TIME SHEET':' - WEEKLY TIME SHEET'));
-  L.push('Week Ending: SUNDAY '+usDate(fromIso(weekKey)));
+  L.push('Week Ending: SUNDAY '+usDate(fromIso(weekKey))+'  |  Week '+isoWeekNum(dates[3])+' of the year');
   L.push('Employee: '+s.employee+'  |  Manager: '+s.manager);
   L.push('Phone: '+s.phone+'  |  E-mail: '+s.email);
+  L.push('');
+  const pw = projectsWorked(DYS);
+  L.push(projectsTitle(DYS).toUpperCase()+' ('+pw.length+')');
+  if(pw.length) pw.forEach(p=>L.push('  • '+p.task+(p.project?' — '+p.project:'')+'  ('+fmtNum(p.hours)+' h)'));
+  else L.push('  (none)');
   L.push('');
   let weekMin=0;
   for(const d of DYS){
@@ -2952,7 +3176,8 @@ function buildPlainText(days){
       let rowTot=0; for(const d of [0,1,2,3,4,5,6]) rowTot+=num(r.ha[d])+num(r.h[d]);   // whole-week combined
       grand+=rowTot;
       if(!hasInfo && dayRowTot===0) continue;
-      const info=[r.task,r.notes,r.project,r.contractor,r.job].filter(x=>x&&String(x).trim()).join(' | ');
+      const info=[r.task,r.notes,r.project,r.contractor,r.job].filter(x=>x&&String(x).trim())
+                   .map(x=>String(x).replace(/\s*\r?\n\s*/g,' / ')).join(' | ');
       lines.push('  * '+(info||'(no description)')+'  —  '+(hrs.join(', ')||'no hours')+'  =  '+fmtNum(rowTot));
     }
     if(lines.length){ L.push('['+(s.sectionNames[si]||SECTIONS[si].name)+']'); L.push.apply(L,lines); }
@@ -2976,8 +3201,10 @@ function subjectText(){
     .replace(/{weekending}/gi, usDate(fromIso(weekKey)));
 }
 function ensureRecipient(){
-  if(splitEmails(state.settings.emailTo).length) return true;
+  if(splitEmails(sendToRaw()).length) return true;
   document.getElementById('settings').hidden=false;
+  const w = resolvedWeekly(); const cd=document.getElementById('subDaily'), cw=document.getElementById('subWeekly');
+  if(cd&&cw){ cd.checked=!w; cw.checked=w; if(typeof loadRecipFields==='function') loadRecipFields(); }   // show the list the send will actually use
   document.getElementById('setTo').focus();
   toast('✉ First set the <b>SEND TO</b> email (and CCs) in Settings — they are saved for next time.');
   return false;
@@ -3023,8 +3250,8 @@ function sendDraft(kind, payload, icon, what){
   let blob, ext, hasFile = (kind!=='text');
   if(fmt==='msg'){
     ext = '.msg';
-    const common = {subject: subjectText(), to: recipObjs(state.settings.emailTo),
-                    cc: recipObjs(state.settings.emailCc), bodyText: payload.bodyText||''};
+    const common = {subject: subjectText(), to: recipObjs(sendToRaw()),
+                    cc: recipObjs(sendCcRaw()), bodyText: payload.bodyText||''};
     let m;
     if(kind==='image') m = {...common,
       bodyHtml:'<html><body>'+(payload.msgHtml||'')+'<img src="cid:timecardimg" width="920" style="max-width:100%;border:1px solid #ccc"></body></html>',
@@ -3065,8 +3292,8 @@ function isMobile(){
 }
 function canShareFiles(files){ try{ return !!(navigator.canShare && navigator.canShare({files})); }catch(e){ return false; } }
 function mailtoUrl(subject, body){
-  const to = splitEmails(state.settings.emailTo).join(',');
-  const cc = splitEmails(state.settings.emailCc).join(',');
+  const to = splitEmails(sendToRaw()).join(',');
+  const cc = splitEmails(sendCcRaw()).join(',');
   const q = [];
   if(cc) q.push('cc='+encodeURIComponent(cc));
   q.push('subject='+encodeURIComponent(subject));
@@ -3075,8 +3302,8 @@ function mailtoUrl(subject, body){
 }
 // share an image/PDF to the phone's Mail app; returns true if handled
 async function mobileShareFile(bytes, name, mime){
-  const to = splitEmails(state.settings.emailTo).join(', ');
-  const cc = splitEmails(state.settings.emailCc).join(', ');
+  const to = splitEmails(sendToRaw()).join(', ');
+  const cc = splitEmails(sendCcRaw()).join(', ');
   const body = (state.settings.message||'').trim();
   const file = new File([bytes], name, {type:mime});
   if(canShareFiles([file])){
@@ -3348,10 +3575,11 @@ function syncUIFromState(){
   [['empName','employee'],['empMgr','manager'],['empPhone','phone'],['empMail','email']]
     .forEach(([id,k])=>{ const el=document.getElementById(id); if(el) el.value=state.settings[k]||''; });
   ['co1','co2','co3'].forEach(id=>{ const el=document.getElementById(id); if(el && state.settings[id]!=null) el.textContent=state.settings[id]; });
-  [['setTo','emailTo'],['setCc','emailCc'],['setSubject','subject'],['setMessage','message']]
+  [['setSubject','subject'],['setMessage','message']]
     .forEach(([id,k])=>{ const el=document.getElementById(id); if(el) el.value=state.settings[k]||''; });
   const cd=document.getElementById('subDaily'), cw=document.getElementById('subWeekly');
   if(cd&&cw){ const wk=resolvedWeekly(); cd.checked=!wk; cw.checked=wk; }
+  if(typeof loadRecipFields==='function') loadRecipFields();
   const fe=document.getElementById('fmtEml'), fm=document.getElementById('fmtMsg');
   if(fe&&fm){ const msg=state.settings.sendFormat==='msg'; fe.checked=!msg; fm.checked=msg; }
   const sp=document.getElementById('subjPreview'); if(sp) sp.textContent='→  '+subjectText();
@@ -3520,7 +3748,8 @@ applyBar();
 applyGames();
 undoBase = JSON.stringify(state);       // baseline for undo (after the current week is materialised)
 updateUndoButtons();
-if(!state.settings.emailTo){
+initSaveFile();                          // resume the linked auto-save file, if one was set up before
+if(!splitEmails(state.settings.recipients.daily.to).length && !splitEmails(state.settings.recipients.weekly.to).length){
   toast('👋 Welcome! Open <b>⚙ Settings</b> once to save the email address and CCs you send your timecard to. Everything you type in the sheet is saved automatically in this browser.', 12000);
 }
 
