@@ -2995,11 +2995,11 @@ function projectsWorked(days){
     if(!/^\d{6}$/.test(t)) continue;                       // only real 6-digit task numbers
     let hrs = 0; const codes = {};                         // work-type code -> hours in this period
     for(const d of DYS){
-      const hv = num(r.ha[d]) + num(r.h[d]);
+      const hv = num(r.ha[d]) + num(r.h[d]);               // sheet-counted value (matches the blue Total column)
       if(hv <= 0) continue;
       hrs += hv;
       const code = String(r.ha[d]||'').trim() || '—';      // the per-day job/work code (2A, IC, …)
-      codes[code] = (codes[code]||0) + hv;
+      codes[code] = (codes[code]||0) + num(r.h[d]);        // hours shown next to the code = the Hours cell you typed
     }
     if(hrs <= 0) continue;                                  // worked on it in this period?
     if(!map[t]) map[t] = {task:t, hours:0, project:'', contractor:'', job:'', codes:{}};
@@ -3103,10 +3103,10 @@ function buildHtmlEmail(prefixHtml, days){
   // main sheet table: 5 info columns + 7 day columns + total column
   h += '<table cellspacing="0" cellpadding="2" style="border-collapse:collapse;width:960px">';
   h += '<tr><td colspan="5" style="border:none;width:440px"></td>';
-  for(const d of DYS) h += '<td style="'+B+'background:#BFBFBF;font-weight:bold;font-size:10px;text-align:center;width:60px">'+DAYS[d]+'</td>';
+  for(const d of DYS) h += '<td colspan="2" style="'+B+'background:#BFBFBF;font-weight:bold;font-size:10px;text-align:center;width:64px">'+DAYS[d]+'</td>';
   h += '<td rowspan="8" style="'+B+'background:#FDFDA3;text-align:center;font-size:11px;width:60px">'+escHtml(s.totalHoursLabel||'Total Hours')+'</td></tr>';
   const lblStyle = B+'background:#D9D9D9;font-weight:bold;font-size:11px;text-align:center;';
-  const valCell = (txt,bg,col)=> '<td style="'+B+'background:'+bg+';color:'+col+';font-size:11px;text-align:center">'+escHtml(txt||'')+'</td>';
+  const valCell = (txt,bg,col)=> '<td colspan="2" style="'+B+'background:'+bg+';color:'+col+';font-size:11px;text-align:center">'+escHtml(txt||'')+'</td>';
   h += '<tr><td colspan="5" style="'+lblStyle+'">DATE</td>';
   for(const d of DYS) h += valCell(usDate(dates[d]),'#FFFFFF','#111111');
   h += '</tr>';
@@ -3122,7 +3122,7 @@ function buildHtmlEmail(prefixHtml, days){
     h += '</tr>';
   }
   h += '<tr><td colspan="5" style="'+lblStyle+'">TOTAL WORK HOURS</td>';
-  for(const d of DYS) h += '<td rowspan="2" style="'+B+'background:#FBD5B5;font-size:11px;text-align:center">'+fmtDur(dayVals[d])+'</td>';
+  for(const d of DYS) h += '<td colspan="2" rowspan="2" style="'+B+'background:#FBD5B5;font-size:11px;text-align:center">'+fmtDur(dayVals[d])+'</td>';
   h += '<td rowspan="2" style="'+B+'background:#FBD5B5;font-size:11px;text-align:center">'+fmtDur(weekMinAll)+'</td></tr>';
   h += '<tr>';
   for(const c of ['TASK #','NOTES','PROJECT','CONTRACTOR','JOB TYPE'])
@@ -3130,7 +3130,7 @@ function buildHtmlEmail(prefixHtml, days){
   h += '</tr>';
   // task sections
   let ri = 0;
-  const infoSpan = DYS.length + 6;
+  const infoSpan = 6 + 2*DYS.length;   // 5 info + 2 cells per day (code + hours) + 1 total
   for(let si=0; si<SECTIONS.length; si++){
     if((s.hiddenSections||[])[si]){ ri += w.secRows[si]; continue; }   // hidden sections are left out of the send
     h += '<tr><td colspan="'+infoSpan+'" style="'+B+'background:#FFFFFF;color:#0070C0;font-weight:bold;font-size:15px;text-align:center;padding:4px">'+
@@ -3140,10 +3140,10 @@ function buildHtmlEmail(prefixHtml, days){
       h += '<tr>';
       for(const f of ['task','notes','project','contractor','job'])
         h += '<td style="'+B+'background:#D9D9D9;color:#FF0000;font-size:11px;text-align:center;height:22px;vertical-align:middle">'+escBr(r[f]||'')+'</td>';
-      for(const d of DYS){                                   // the day column(s) shown in this send
-        const v = num(r.ha[d]) + num(r.h[d]);
-        dayTaskTot[d] += v;
-        h += '<td style="'+B+'background:#D7E3BC;color:#FF0000;font-size:11px;text-align:center">'+(v ? fmtNum(v) : '')+'</td>';
+      for(const d of DYS){                                   // each day = job-code cell (left) + hours cell (right), like the sheet
+        dayTaskTot[d] += num(r.ha[d]) + num(r.h[d]);
+        h += '<td style="'+B+'background:#D7E3BC;color:#FF0000;font-size:11px;text-align:center;width:26px">'+escHtml(r.ha[d]||'')+'</td>'+
+             '<td style="'+B+'background:#D7E3BC;color:#FF0000;font-size:11px;text-align:center;width:38px">'+escHtml(r.h[d]||'')+'</td>';
       }
       let rowTot = 0; for(const d of ALL) rowTot += num(r.ha[d]) + num(r.h[d]);   // whole-week combined for the blue column
       grand += rowTot;
@@ -3152,7 +3152,7 @@ function buildHtmlEmail(prefixHtml, days){
   }
   // bare per-day task totals under the grid (just numbers, exactly like the sheet — no label)
   h += '<tr><td colspan="5" style="border:none"></td>';
-  for(const d of DYS) h += '<td style="border:none;font-size:11px;text-align:center">'+fmtNum(dayTaskTot[d])+'</td>';
+  for(const d of DYS) h += '<td colspan="2" style="border:none;font-size:11px;text-align:center">'+fmtNum(dayTaskTot[d])+'</td>';
   h += '<td style="border:none;font-size:11px;text-align:center;font-weight:bold">'+fmtNum(grand)+'</td></tr>';
   h += '</table>';
   // legends — both given the same explicit table height (rows distribute to fill),
