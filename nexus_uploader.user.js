@@ -47,24 +47,28 @@ function triggerSearch(input, value){
   ['keydown','keyup'].forEach(type=>{ try{ input.dispatchEvent(new KeyboardEvent(type,{bubbles:true,key:last,keyCode:code,which:code})); }catch(e){} });
   try{ input.dispatchEvent(new Event('change',{bubbles:true})); }catch(e){}
 }
-// FOR NOW: just search the task and click Edit (open the window). The rest is wired but paused until this works.
+// ORDER: 1) SEARCH the task  →  2) CLICK ITS EDIT BUTTON (open the window).  Nothing else for now.
 async function openTask(t){
   const task=String(t.task);
-  banner('🔎 searching '+task+' …','#2f6fb0');
+  // ---- STEP 1: SEARCH ----
+  banner('STEP 1 — 🔎 searching task '+task+' …','#2f6fb0');
   const search = await waitFor(()=>vis(document.querySelectorAll('input.task_search')), 20000, 'the task-search box');
   triggerSearch(search, task);
-  banner('⏳ waiting for the '+task+' row to load…','#b45309');
+  banner('STEP 1 — 🔎 searching '+task+' — waiting for its row & Edit button (loading screen)…','#b45309');
   const editBtn = await waitFor(()=>{
       const s=vis(document.querySelectorAll('input.task_search')); if(s && (s.value||'').trim()==='') triggerSearch(s, task);   // re-type only if the box got cleared
       return vis(document.querySelectorAll('button.btn-edit[data-row="'+task+'"]'));
-    }, 60000, 'the '+task+' row (loading… / are you logged in?)', 500);
-  banner('🖱️ found it — clicking Edit for '+task+' …','#2f6fb0');
-  for(let a=0; a<8 && !modalOpen(); a++){
-    const b=vis(document.querySelectorAll('button.btn-edit[data-row="'+task+'"]')); if(b) realClick(b);
+    }, 60000, 'the Edit button for task '+task+' (is the row in the list / are you logged in?)', 500);
+  banner('STEP 1 done — found the EDIT button for '+task+' ✓','#15803d');
+  // ---- STEP 2: CLICK EDIT (retry until the task window opens) ----
+  for(let a=0; a<10 && !modalOpen(); a++){
+    banner('STEP 2 — 🖱️ CLICKING THE EDIT BUTTON for '+task+' (try '+(a+1)+') …','#2f6fb0');
+    const b = vis(document.querySelectorAll('button.btn-edit[data-row="'+task+'"]')) || editBtn;
+    realClick(b);
     try{ await waitFor(()=>modalOpen()?true:null, 6000, 'the task window', 200); }catch(e){}
   }
-  if(modalOpen()) banner('✅ '+task+': searched + Edit clicked — the task window is OPEN.','#15803d');
-  else throw new Error(task+': found the row but Edit would not open.');
+  if(modalOpen()) banner('✅ DONE — task '+task+': searched → EDIT clicked → the task window is OPEN.','#15803d');
+  else throw new Error('found the Edit button for '+task+' but clicking it did not open the window.');
 }
 function waitFor(getter, timeout, what, interval){
   interval = interval||120;
