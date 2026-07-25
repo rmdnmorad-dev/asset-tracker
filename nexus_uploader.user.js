@@ -140,6 +140,22 @@ function buildPanel(){
   document.getElementById('nxup-reset').addEventListener('click',e=>{ e.preventDefault(); TASKS=[];idx=0;paste.value='';renderList();log(''); });
   document.getElementById('nxup-min').addEventListener('click',()=>{ const b=document.getElementById('nxup-body'); b.style.display=b.style.display==='none'?'':'none'; });
   renderList();
+  autoLoadFromUrl();
+}
+
+/* the rocket on the Timecard opens Nexus with the data in the URL hash:
+   #tcupload=<encoded JSON>.  Read it, load the tasks, and auto-fill the first one. */
+function autoLoadFromUrl(){
+  const m=/[#&]tcupload=([^&]+)/.exec(location.hash||'');
+  if(!m) return;
+  let json=null; try{ json=decodeURIComponent(m[1]); }catch(e){ return; }
+  loadFrom(json);
+  try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){}   // clear the hash (refresh won't re-fill)
+  if(!TASKS.length) return;
+  log('📋 Loaded '+TASKS.length+' task(s) from the Timecard — filling the first one…');
+  waitFor(()=>vis(document.querySelectorAll('input.task_search')), 6000, 'search box')
+    .then(()=>onFill())
+    .catch(()=>log('📋 Loaded '+TASKS.length+' task(s). Log into Nexus if needed, then click “Fill task 1”.'));
 }
 
 // expose for automated testing

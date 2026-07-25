@@ -1209,6 +1209,7 @@ if(!Array.isArray(state.settings.sectionNames)) state.settings.sectionNames = SE
 while(state.settings.sectionNames.length < SECTIONS.length) state.settings.sectionNames.push(SECTIONS[state.settings.sectionNames.length].name);
 if(!state.settings.beamColor) state.settings.beamColor = '#8ab4ff';
 if(state.settings.beamOn===undefined) state.settings.beamOn = true;
+if(!state.settings.nexusUrl) state.settings.nexusUrl = 'http://nexus.tcs.local/protected.php';
 if(!state.settings.barColor) state.settings.barColor = '#1f2937';
 if(!state.settings.games) state.settings.games = {on:false, reaction:true};
 if(!state.taskInfo || typeof state.taskInfo!=='object') state.taskInfo = {};   // 6-digit task # -> {project, contractor}
@@ -1578,9 +1579,14 @@ function rocketCopy(ri){
   const w = week(), task = String((w.rows[ri]||{}).task||'').trim();
   const entries = taskEntries(ri);
   if(!entries.length){ toast('🚀 Task <b>'+esc(task)+'</b> has no hours entered this week to upload.'); return; }
-  if(copyText(JSON.stringify(entries)))
-    toast('🚀 Copied task <b>'+esc(task)+'</b> ('+entries.length+' day'+(entries.length>1?'s':'')+') — switch to <b>Nexus</b> and paste (Ctrl+V) into the uploader panel.', 8000);
-  else toast('⚠ Could not copy to the clipboard.');
+  const json = JSON.stringify(entries);
+  copyText(json);                                   // also copy — fallback if the popup is blocked
+  const base = (state.settings.nexusUrl || 'http://nexus.tcs.local/protected.php');
+  let win = null;
+  try{ win = window.open(base + '#tcupload=' + encodeURIComponent(json), 'nexusUpload'); }catch(e){}
+  const days = entries.length + ' day' + (entries.length>1?'s':'');
+  if(win) toast('🚀 Opening <b>Nexus</b> and filling task <b>'+esc(task)+'</b> ('+days+')… review each one and click <b>Submit</b>.', 9000);
+  else    toast('🚀 Copied task <b>'+esc(task)+'</b> ('+days+') — a pop-up was blocked, so switch to <b>Nexus</b> and paste (Ctrl+V) into the uploader panel.', 10000);
 }
 function bindRockets(){
   const host = document.getElementById('tblhost'); if(!host) return;
