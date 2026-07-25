@@ -81,7 +81,7 @@ document.getElementById('table1_body').addEventListener('click', e=>{
   document.getElementById('modal').style.display='block';
   document.getElementById('throb').style.display='block';
   document.getElementById('modalContent').style.display='none';
-  setTimeout(()=>buildModal(task), 600);   // AJAX delay
+  setTimeout(()=>buildModal(task), 1100);   // AJAX delay (slow, like the real modal)
 });
 function closeModal(){ document.getElementById('modal').style.display='none'; }
 
@@ -128,6 +128,10 @@ function buildModal(task){
   d.addEventListener('change',()=>{ const t=parseMDY(d.value); if(t && t>today()){ alert('You can only enter time up to '+fmtMDY(today())); d.value=''; } });
   document.getElementById('throb').style.display='none';
   c.style.display='block';
+  // simulate a late AJAX render that wipes the fields ONCE (the real Nexus modal does this) — tests the re-apply loop
+  setTimeout(()=>{ const f=c.querySelector('#second form#form-input_hours'); if(f && !f.__wiped){ f.__wiped=true;
+    f.querySelector('[name=ts_hours]').value=''; f.querySelector('[name=ts_date]').value=''; f.querySelector('[name=ts_emp_description]').value='';
+    const s=f.querySelector('[name=ms_select]'); s.value=s.options[0].value; f.querySelector('[name=ts_ms_id]').value=''; } }, 500);
 }
 function doSubmit(task){
   const f=document.querySelector('#modalContent #second form#form-input_hours');

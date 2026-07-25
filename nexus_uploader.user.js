@@ -51,32 +51,54 @@ function todayMid(){ const n=new Date(); return new Date(n.getFullYear(),n.getMo
 function clampDate(s){ const d=parseMDY(s), t=todayMid(); if(!d) return fmtMDY(t); return d>t? fmtMDY(t) : fmtMDY(d); }
 function cleanHours(h){ const n=parseFloat(String(h==null?'':h)); if(isNaN(n)) return ''; return String(Math.round(n*100)/100); }
 
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+// the REAL Hours form = a #form-input_hours whose milestone dropdown is populated (not the hidden stub)
+function realForm(mustBeVisible){
+  const forms=[...document.querySelectorAll('form#form-input_hours')];
+  for(const f of forms){ const s=f.querySelector('select[name="ms_select"]');
+    if(s && s.options.length>2 && (!mustBeVisible || f.offsetParent!==null)) return f; }
+  return null;
+}
+function applyForm(form, t){
+  const sel = form.querySelector('select[name="ms_select"]');
+  const opt = setSelect(sel, t.milestone || 'DRAFT PACKAGE');
+  const msHid = form.querySelector('input[name="ts_ms_id"]'); if(msHid && opt) setVal(msHid, opt.getAttribute('data-ms-id')||'');
+  setVal(form.querySelector('input[name="ts_hours"]'), cleanHours(t.hours));
+  setDate(form.querySelector('input[name="ts_date"]'), clampDate(t.date));
+  setVal(form.querySelector('textarea[name="ts_emp_description"]'), t.desc||'');
+}
+// the form counts as filled only when the ACTUAL values match this task (not just "non-empty" — avoids accepting a previous task's leftovers)
+function formValuesMatch(form, t){
+  if(!form) return false;
+  const ms=form.querySelector('select[name="ms_select"]'), h=form.querySelector('input[name="ts_hours"]'), d=form.querySelector('input[name="ts_date"]');
+  return ms && (ms.value||'').toUpperCase()===String(t.milestone||'DRAFT PACKAGE').toUpperCase()
+      && h && h.value===cleanHours(t.hours)
+      && d && d.value===clampDate(t.date);
+}
+
 /* ---------- the fill for ONE task (stops before Submit) ---------- */
 async function fillTask(t){
   log('🔎 Searching task '+t.task+' …');
   const search = vis(document.querySelectorAll('input.task_search'));
   if(!search) throw new Error('Task-search box not found on this page.');
   setVal(search, String(t.task));
-  const editBtn = await waitFor(()=>vis(document.querySelectorAll('button.btn-edit[data-row="'+t.task+'"]')), 12000, 'Edit button for '+t.task);
+  // the results load over AJAX and can be slow — wait generously
+  const editBtn = await waitFor(()=>vis(document.querySelectorAll('button.btn-edit[data-row="'+t.task+'"]')), 30000, 'the '+t.task+' row (is it in the list / are you logged in?)');
+  log('📝 Opening task '+t.task+' …');
   editBtn.click();
-  log('📝 Opening the task… waiting for the Hours form');
-  // wait for a VISIBLE Hours tab (the freshly-loaded modal), not a stale hidden one from a previous task
-  const hoursTab = await waitFor(()=>vis(document.querySelectorAll('a[data-target="#second"]')), 15000, 'Hours tab');
-  hoursTab.click();
-  const form = await waitFor(()=>vis(document.querySelectorAll('form#form-input_hours')), 15000, 'Hours form');
-  const sel      = form.querySelector('select[name="ms_select"]');
-  const hoursInp = form.querySelector('input[name="ts_hours"]');
-  const dateInp  = form.querySelector('input[name="ts_date"]');
-  const descInp  = form.querySelector('textarea[name="ts_emp_description"]');
-  const msHid    = form.querySelector('input[name="ts_ms_id"]');
-  // Milestone (default DRAFT PACKAGE) + its hidden id
-  const opt = setSelect(sel, t.milestone || 'DRAFT PACKAGE');
-  if(msHid && opt) setVal(msHid, opt.getAttribute('data-ms-id')||'');
-  // Hours / Date (clamped to today) / Description
-  setVal(hoursInp, cleanHours(t.hours));
-  setDate(dateInp, clampDate(t.date));
-  setVal(descInp, t.desc||'');
-  log('✅ Task '+t.task+' filled. Review it, then click <b>Submit</b> yourself.');
+  // wait for the freshly-loaded modal — a VISIBLE Hours tab (stale hidden tabs from a previous task are skipped)
+  await waitFor(()=>vis(document.querySelectorAll('a[data-target="#second"]')), 30000, 'the task window');
+  log('✍ Filling task '+t.task+' …');
+  // reach a visible, populated Hours form: keep clicking the Hours tab until the real form shows (modal may re-render to another tab)
+  const form = await waitFor(()=>{ let f=realForm(true); if(f) return f;
+    const tab=vis(document.querySelectorAll('a[data-target="#second"]')); if(tab) tab.click(); return null; }, 20000, 'the Hours form');
+  applyForm(form, t);
+  // settle window: the modal often finishes a late AJAX render that wipes the fields — keep re-applying until it holds
+  const t0=Date.now();
+  while(Date.now()-t0 < 2600){ await sleep(300); const f=realForm(true)||form; if(!formValuesMatch(f,t)) applyForm(f,t); }
+  const fin=realForm(true)||form; if(!formValuesMatch(fin,t)) applyForm(fin,t);
+  if(formValuesMatch(realForm(true)||form, t)) log('✅ Task '+t.task+' filled. Review it, then click <b>Submit</b> yourself.');
+  else log('⚠ Task '+t.task+' — the form didn\'t hold the values; please check it or press Fill again.');
 }
 
 /* ================= the on-page panel ================= */
