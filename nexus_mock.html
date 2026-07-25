@@ -66,17 +66,20 @@
 <script>
 window.__submissions = [];
 
-// live search filter on the task_search box (like the real List.js filter)
+// search on the task_search box — results come back SLOWLY over "AJAX" (rows hidden until then), like the real page
+let searchTimer=null;
 document.querySelector('input.task_search').addEventListener('input', function(){
   const q=this.value.trim();
-  document.querySelectorAll('#table1_body tr').forEach(tr=>{
-    tr.style.display = (!q || tr.dataset.row.includes(q)) ? '' : 'none';
-  });
+  const rows=document.querySelectorAll('#table1_body tr');
+  rows.forEach(tr=>tr.style.display='none');            // hide while "loading"
+  clearTimeout(searchTimer);
+  searchTimer=setTimeout(()=>{ rows.forEach(tr=>{ tr.style.display=(!q||tr.dataset.row.includes(q))?'':'none'; }); }, 1500);
 });
 
 // Edit -> open modal (simulate AJAX), build tabs + Hours form, open on PHS (like the video)
 document.getElementById('table1_body').addEventListener('click', e=>{
   const btn=e.target.closest('.btn-edit'); if(!btn) return;
+  if(document.getElementById('modal').style.display==='block') return;   // already open/loading — ignore extra clicks (realistic)
   const task=btn.dataset.row;
   document.getElementById('modal').style.display='block';
   document.getElementById('throb').style.display='block';

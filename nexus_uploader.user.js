@@ -12,14 +12,16 @@
 
 /* ---------- small DOM helpers ---------- */
 function vis(list){ for(const el of list){ if(el && el.offsetParent!==null) return el; } return null; }
-function waitFor(getter, timeout, what){
+function waitFor(getter, timeout, what, interval){
+  interval = interval||120;
   return new Promise((res,rej)=>{ const t0=Date.now();
     (function poll(){ let el=null; try{ el=getter(); }catch(e){}
       if(el) return res(el);
       if(Date.now()-t0>timeout) return rej(new Error('Timed out waiting for '+(what||'element')));
-      setTimeout(poll,120); })();
+      setTimeout(poll,interval); })();
   });
 }
+function modalOpen(){ return !!vis(document.querySelectorAll('a[data-target="#second"]')); }   // a visible Hours tab = the task window is open
 function nativeSet(el,val){
   const proto = el.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype
               : el.tagName==='SELECT'  ?HTMLSelectElement.prototype
@@ -76,29 +78,41 @@ function formValuesMatch(form, t){
       && d && d.value===clampDate(t.date);
 }
 
-/* ---------- the fill for ONE task (stops before Submit) ---------- */
+/* ---------- the fill for ONE task (retries every step; stops before Submit) ---------- */
 async function fillTask(t){
-  log('🔎 Searching task '+t.task+' …');
-  const search = vis(document.querySelectorAll('input.task_search'));
-  if(!search) throw new Error('Task-search box not found on this page.');
-  setVal(search, String(t.task));
-  // the results load over AJAX and can be slow — wait generously
-  const editBtn = await waitFor(()=>vis(document.querySelectorAll('button.btn-edit[data-row="'+t.task+'"]')), 30000, 'the '+t.task+' row (is it in the list / are you logged in?)');
-  log('📝 Opening task '+t.task+' …');
-  editBtn.click();
-  // wait for the freshly-loaded modal — a VISIBLE Hours tab (stale hidden tabs from a previous task are skipped)
-  await waitFor(()=>vis(document.querySelectorAll('a[data-target="#second"]')), 30000, 'the task window');
-  log('✍ Filling task '+t.task+' …');
-  // reach a visible, populated Hours form: keep clicking the Hours tab until the real form shows (modal may re-render to another tab)
-  const form = await waitFor(()=>{ let f=realForm(true); if(f) return f;
-    const tab=vis(document.querySelectorAll('a[data-target="#second"]')); if(tab) tab.click(); return null; }, 20000, 'the Hours form');
+  const task = String(t.task);
+  // STEP 1 — search: type the task # (re-type only if the box gets cleared), wait for its row through the loading screen
+  const search = await waitFor(()=>vis(document.querySelectorAll('input.task_search')), 15000, 'the task-search box');
+  log('🔎 Searching '+task+' …');
+  setVal(search, task);
+  await waitFor(()=>{
+      const s=vis(document.querySelectorAll('input.task_search')); if(s && (s.value||'').trim()==='') setVal(s, task);
+      return vis(document.querySelectorAll('button.btn-edit[data-row="'+task+'"]'));
+    }, 60000, 'the '+task+' row (loading… / are you logged in?)', 600);
+  // STEP 2 — click Edit, then give that click several seconds to open the window; only re-click if it was truly lost
+  //          (spamming clicks mid-load would restart the loading screen every time)
+  log('📝 Opening task '+task+' — waiting for the loading screen…');
+  for(let a=0; a<8 && !modalOpen(); a++){
+    const b=vis(document.querySelectorAll('button.btn-edit[data-row="'+task+'"]')); if(b) b.click();
+    try{ await waitFor(()=>modalOpen()?true:null, 6000, 'window', 200); }catch(e){}
+  }
+  if(!modalOpen()) throw new Error('the task window would not open (the Edit button didn’t respond) — press Fill again.');
+  // STEP 3 — click the Hours tab until the populated Hours form is visible (tab clicks don’t reload, so this can be tight)
+  log('📂 Opening the Hours tab…');
+  let form = null;
+  for(let a=0; a<15 && !form; a++){
+    const tab=vis(document.querySelectorAll('a[data-target="#second"]')); if(tab) tab.click();
+    try{ form=await waitFor(()=>realForm(true), 2500, 'form', 200); }catch(e){}
+  }
+  if(!form) throw new Error('the Hours form did not appear — press Fill again.');
+  // STEP 4 — fill, and keep it filled while the modal finishes its late AJAX render
+  log('✍ Filling task '+task+' …');
   applyForm(form, t);
-  // settle window: the modal often finishes a late AJAX render that wipes the fields — keep re-applying until it holds
   const t0=Date.now();
-  while(Date.now()-t0 < 2600){ await sleep(300); const f=realForm(true)||form; if(!formValuesMatch(f,t)) applyForm(f,t); }
+  while(Date.now()-t0 < 3200){ await sleep(300); const f=realForm(true)||form; if(!formValuesMatch(f,t)) applyForm(f,t); }
   const fin=realForm(true)||form; if(!formValuesMatch(fin,t)) applyForm(fin,t);
-  if(formValuesMatch(realForm(true)||form, t)) log('✅ Task '+t.task+' filled. Review it, then click <b>Submit</b> yourself.');
-  else log('⚠ Task '+t.task+' — the form didn\'t hold the values; please check it or press Fill again.');
+  if(formValuesMatch(realForm(true)||form, t)) log('✅ Task '+task+' filled — review it and click <b>Submit</b>.');
+  else log('⚠ Task '+task+' — the form didn\'t hold the values; press <b>Fill</b> again.');
 }
 
 /* ================= the on-page panel ================= */
@@ -154,7 +168,7 @@ function buildPanel(){
       '<div style="margin-top:6px;font-size:11px;color:#a00">The script never submits — you review each task and click <b>Submit</b>.</div>'+
       '<a href="#" id="nxup-reset" style="font-size:11px">reset</a>'+
     '</div>';
-  document.body.appendChild(p);
+  (document.body||document.documentElement).appendChild(p);   // documentElement survives a body re-render
   const paste=document.getElementById('nxup-paste');
   paste.addEventListener('input',()=>{ if(paste.value.trim()) loadFrom(paste.value.trim()); });
   paste.addEventListener('paste',()=>{ setTimeout(()=>loadFrom(paste.value.trim()),0); });
@@ -166,24 +180,30 @@ function buildPanel(){
 }
 
 /* the rocket on the Timecard opens Nexus with the data in the URL hash:
-   #tcupload=<encoded JSON>.  Read it, load the tasks, and auto-fill the first one. */
+   #tcupload=<encoded JSON>.  Read it once, load the tasks, and auto-fill the first one. */
+let autoLoaded=false;
 function autoLoadFromUrl(){
+  if(autoLoaded) return;
   const m=/[#&]tcupload=([^&]+)/.exec(location.hash||'');
   if(!m) return;
+  autoLoaded=true;
   let json=null; try{ json=decodeURIComponent(m[1]); }catch(e){ return; }
   loadFrom(json);
   try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){}   // clear the hash (refresh won't re-fill)
   if(!TASKS.length) return;
-  log('📋 Loaded '+TASKS.length+' task(s) from the Timecard — filling the first one…');
-  waitFor(()=>vis(document.querySelectorAll('input.task_search')), 6000, 'search box')
-    .then(()=>onFill())
-    .catch(()=>log('📋 Loaded '+TASKS.length+' task(s). Log into Nexus if needed, then click “Fill task 1”.'));
+  log('📋 Loaded '+TASKS.length+' task(s) from the Timecard — starting…');
+  onFill();   // fillTask() itself waits for the search box + results through the loading screen
 }
+
+// keep the panel alive even if Nexus re-renders the page, and (re)run the auto-load once
+function ensurePanel(){ try{ buildPanel(); autoLoadFromUrl(); }catch(e){} }
 
 // expose for automated testing
 window.__nxup = { fillTask, loadFrom, onFill, get tasks(){return TASKS;}, get idx(){return idx;} };
 
-if(document.body) buildPanel();
-else document.addEventListener('DOMContentLoaded', buildPanel);
+ensurePanel();
+document.addEventListener('DOMContentLoaded', ensurePanel);
+window.addEventListener('load', ensurePanel);
+setInterval(ensurePanel, 1500);   // Nexus can wipe injected nodes on its own render — re-add the panel if it disappears
 
 })();
