@@ -28,6 +28,44 @@ function realClick(el){
   try{ el.dispatchEvent(new MouseEvent('mouseup',o)); }catch(e){}
   try{ el.dispatchEvent(new MouseEvent('click',o)); }catch(e){}
 }
+// a big, impossible-to-miss status bar at the top of the page (works even if the side panel gets wiped)
+function banner(msg, color){
+  let el=document.getElementById('nxup-banner');
+  if(!el){ el=document.createElement('div'); el.id='nxup-banner';
+    el.style.cssText='position:fixed;top:0;left:0;right:0;z-index:2147483647;padding:9px 14px;'+
+      'font:bold 15px Arial;color:#fff;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,.4)';
+    (document.body||document.documentElement).appendChild(el); }
+  el.style.background = color||'#2f6fb0';
+  el.innerHTML = '⬆ Timecard → Nexus — '+msg;
+}
+// type into the search box the way the site expects (value + real key events, so its live search fires)
+function triggerSearch(input, value){
+  try{ input.focus(); }catch(e){}
+  nativeSet(input, String(value));
+  try{ input.dispatchEvent(new Event('input',{bubbles:true})); }catch(e){}
+  const last=String(value).slice(-1)||'0', code=last.charCodeAt(0);
+  ['keydown','keyup'].forEach(type=>{ try{ input.dispatchEvent(new KeyboardEvent(type,{bubbles:true,key:last,keyCode:code,which:code})); }catch(e){} });
+  try{ input.dispatchEvent(new Event('change',{bubbles:true})); }catch(e){}
+}
+// FOR NOW: just search the task and click Edit (open the window). The rest is wired but paused until this works.
+async function openTask(t){
+  const task=String(t.task);
+  banner('🔎 searching '+task+' …','#2f6fb0');
+  const search = await waitFor(()=>vis(document.querySelectorAll('input.task_search')), 20000, 'the task-search box');
+  triggerSearch(search, task);
+  banner('⏳ waiting for the '+task+' row to load…','#b45309');
+  const editBtn = await waitFor(()=>{
+      const s=vis(document.querySelectorAll('input.task_search')); if(s && (s.value||'').trim()==='') triggerSearch(s, task);   // re-type only if the box got cleared
+      return vis(document.querySelectorAll('button.btn-edit[data-row="'+task+'"]'));
+    }, 60000, 'the '+task+' row (loading… / are you logged in?)', 500);
+  banner('🖱️ found it — clicking Edit for '+task+' …','#2f6fb0');
+  for(let a=0; a<8 && !modalOpen(); a++){
+    const b=vis(document.querySelectorAll('button.btn-edit[data-row="'+task+'"]')); if(b) realClick(b);
+    try{ await waitFor(()=>modalOpen()?true:null, 6000, 'the task window', 200); }catch(e){}
+  }
+  if(modalOpen()) banner('✅ '+task+': searched + Edit clicked — the task window is OPEN.','#15803d');
+  else throw new Error(task+': found the row but Edit would not open.');
+}
 function waitFor(getter, timeout, what, interval){
   interval = interval||120;
   return new Promise((res,rej)=>{ const t0=Date.now();
@@ -162,8 +200,8 @@ function loadFrom(text){
 async function onFill(){
   if(running || idx>=TASKS.length) return;
   running=true; renderList();
-  try{ await fillTask(TASKS[idx]); TASKS[idx].__done=true; idx++; }
-  catch(e){ log('⚠ '+e.message+' — fix it and press the button again.'); }
+  try{ await openTask(TASKS[idx]); TASKS[idx].__done=true; idx++; }   // FOR NOW: search + Edit only
+  catch(e){ banner('⚠ '+e.message,'#b00020'); log('⚠ '+e.message+' — press the button to retry.'); }
   running=false; renderList();
 }
 
@@ -213,19 +251,25 @@ function autoLoadFromUrl(){
   onFill();   // fillTask() itself waits for the search box + results through the loading screen
 }
 
-// keep the panel alive even if Nexus re-renders the page, and pick up new data on hash change
-function ensurePanel(){ try{ buildPanel(); autoLoadFromUrl(); }catch(e){} }
+// keep the panel + banner alive even if Nexus re-renders the page, and pick up new data on hash change
+function ensurePanel(){
+  if(!document.body) return;                    // wait until there's a <body> to attach to
+  try{
+    buildPanel();
+    if(!document.getElementById('nxup-banner')) banner('🟢 script loaded — waiting for task data…','#334155');  // if you SEE this bar, the script is running
+    autoLoadFromUrl();
+  }catch(e){}
+}
 
 // expose for automated testing
-try{ window.__nxup = { fillTask, loadFrom, onFill, get tasks(){return TASKS;}, get idx(){return idx;} }; }catch(e){}
+try{ window.__nxup = { fillTask, openTask, loadFrom, onFill, get tasks(){return TASKS;}, get idx(){return idx;} }; }catch(e){}
 
-ensurePanel();
+if(document.body) ensurePanel();
 document.addEventListener('DOMContentLoaded', ensurePanel);
 W.addEventListener('load', ensurePanel);
 W.addEventListener('hashchange', ensurePanel);
-setInterval(ensurePanel, 1200);   // Nexus can wipe injected nodes on its own render — re-add the panel if it disappears
-// re-add the panel the instant Nexus removes it
-try{ new MutationObserver(()=>{ if(!document.getElementById('nxup-panel')) ensurePanel(); })
+setInterval(ensurePanel, 1200);   // Nexus can wipe injected nodes on its own render — re-add them if they disappear
+try{ new MutationObserver(()=>{ if(!document.getElementById('nxup-panel') || !document.getElementById('nxup-banner')) ensurePanel(); })
        .observe(document.documentElement, {childList:true, subtree:true}); }catch(e){}
 
 })();
