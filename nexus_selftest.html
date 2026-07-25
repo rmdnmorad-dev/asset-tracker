@@ -1,17 +1,49 @@
-// ==UserScript==
-// @name         ISAT Timecard → Nexus hours filler
-// @namespace    isat.timecard.nexus
-// @version      2.0
-// @description  Fills the Nexus "Hours" form (Milestone / Hours / Date / Description) for each task from the ISAT Timecard — one task at a time. Never submits; you review and click Submit.
-// @match        *://nexus.tcs.local/*
-// @run-at       document-start
-// @grant        GM_setValue
-// @grant        GM_getValue
-// @grant        unsafeWindow
-// ==/UserScript==
-/* NOTE: the @grant lines above are important — they make Tampermonkey run this
-   in its own sandbox, which bypasses the site's Content-Security-Policy. With
-   "@grant none" an enterprise CSP can silently block the whole script. */
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>Nexus SELF-TEST (real markup)</title>
+<style>
+ body{font-family:Arial;margin:0;background:#f4f5f7}
+ .filter-bar{padding:10px;background:#eee}
+ input.form-control{padding:5px 8px;border:1px solid #aaa;border-radius:4px}
+ table{border-collapse:collapse;background:#fff} .btn{border:0;border-radius:4px;padding:5px 10px;cursor:pointer}
+ .btn-primary{background:#2f6fb0;color:#fff}
+ #modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100}
+ #modalBox{background:#fff;max-width:1000px;margin:80px auto;border-radius:8px;padding:18px;position:relative;max-height:80vh;overflow:auto}
+ .nav-tabs{list-style:none;display:flex;gap:6px;padding:0;border-bottom:2px solid #ccc} .nav-tabs a{padding:6px 10px;cursor:pointer;color:#2f6fb0}
+ .nav-tabs li.active a{font-weight:bold;background:#eef} .tab-pane{display:none;padding:12px} .tab-pane.active{display:block}
+ .row{margin:8px 0} #throb{display:none;text-align:center;padding:30px;font-weight:bold}
+ .modclose{position:absolute;top:8px;right:12px;cursor:pointer;font-size:20px}
+</style></head><body>
+<div style="background:#123;color:#fff;padding:8px 12px;font-weight:bold">NEXUS SELF-TEST — this is your real page markup. If the green bar reaches “task window is OPEN”, the script logic works.</div>
+<div class="filter-bar"><div class="btn-group search_display" style="margin-left: 5px;">
+        <input type="text" class="search form-control task_search main-filters" placeholder="Task search" value="311883">
+        <span class="searchclear main-filters">X</span>
+    </div>
+    <div class="btn-group search_display">
+        <input type="text" class="search form-control project_name_search main-filters" placeholder="Project Name Search" value="">
+        <span class="searchclear main-filters">X</span>
+    </div></div>
+<table><thead><tr><th>bell</th><th>Edit</th><th>ProjID</th><th>Name</th></tr></thead>
+<tbody id="table1_body"><tr class="level4 lev3_show" data-outsourced="" data-project_name="Westside Purple Line Extension Section 2" data-contractor="FISK ELECTRIC -" data-queue="Billing" data-ms_id="99474" data-milestone="BILLING REQUESTED" data-outsource_amt="" data-smartsheet_link="" data-bim_360_link="" data-level="4" data-row="311883" data-projectno="47310" data-projectid="LM47310FISSYL" data-id="311883" data-po_id="4" data-projectpo="PSA Dated 11.13.25" data-new_project="1" style="background-color: rgb(248, 248, 248); display: table-row;"><td class="no-hide sticky-col" style="left: 1px; min-width: 32.5px; background-color: rgb(248, 248, 248); box-shadow: rgba(0, 0, 0, 0.4) 0.25em 0.25em 0.5em;" data-row_color="rgb(248, 248, 248)"></td><td class="text-center notify-subtask notify-off  " style="left: 33.5px; position: sticky; min-width: 90.5px; background-color: rgb(248, 248, 248); box-shadow: rgba(0, 0, 0, 0.4) 0.25em 0.25em 0.5em;" data-row_color="rgb(248, 248, 248)"><i class="fa fa-bell-o"></i></td><td class="no-hide " style="text-align: center; left: 124px; position: sticky; min-width: 59px; background-color: rgb(248, 248, 248); box-shadow: rgba(0, 0, 0, 0.4) 0.25em 0.25em 0.5em;" data-row_color="rgb(248, 248, 248)"><button data-row="311883" data-new_project="1" data-cod="0" data-status="Active" class="btn btn-primary btn-sm btn-edit">Edit</button></td><td class="hidden">La Mirada</td><td class="no-hide " data-taskidcopy="311883" style="left: 183px; position: sticky; min-width: 185px; background-color: rgb(248, 248, 248); box-shadow: rgba(0, 0, 0, 0.4) 0.25em 0.25em 0.5em;" data-row_color="rgb(248, 248, 248)"><span class="open-project-history">LM47310FISSYL.<span class="highlight">311883</span></span></td><td class="std-col-wrap no-hide text-left" style="left: 368px; position: sticky; min-width: 143px; background-color: rgb(248, 248, 248); box-shadow: rgba(0, 0, 0, 0.4) 0.25em 0.25em 0.5em;" data-row_color="rgb(248, 248, 248)"><span class="lev3_hidden">Westside Purple Line Extension Section 2</span></td><td class="std-col-wrap no-hide text-center " style="left: 511px; position: sticky; min-width: 240px; background-color: rgb(248, 248, 248); box-shadow: rgba(0, 0, 0, 0.4) 0.25em 0.25em 0.5em;" data-row_color="rgb(248, 248, 248)"><span class="lev3_hidden">FISK ELECTRIC -</span></td><td data-td="folder_link" class="do-not-drag " style="left: 751px; position: sticky; min-width: 100px; background-color: rgb(248, 248, 248); box-shadow: rgba(0, 0, 0, 0.4) 0.25em 0.25em 0.5em;" data-row_color="rgb(248, 248, 248)"><center><a href="LocalExplorer:\\Lmfs3\dfs3\LM\Westside Purple Line Extension Section 2 Parking - LM47310\3-FISK ELECTRIC -\4-CUSTOM ENG\311883-CABLE TRAY SPANNER DETAIL"><img class="folderLink" src="/img/parent_folder_img.png" alt="Open Folder" width="20" title="\\Lmfs3\dfs3\LM\Westside Purple Line Extension Section 2 Parking - LM47310\3-FISK ELECTRIC -\4-CUSTOM ENG\311883-CABLE TRAY SPANNER DETAIL"></a></center></td><td data-td="project_type" class="do-not-drag  project_type" data-row_color="rgb(248, 248, 248)" style="background-color: rgb(248, 248, 248);"></td><td data-td="city" class="do-not-drag " data-row_color="rgb(248, 248, 248)" style="background-color: rgb(248, 248, 248);"></td><td data-td="state" class="do-not-drag " data-row_color="rgb(248, 248, 248)" style="background-color: rgb(248, 248, 248);"></td><td data-td="salesman" class="do-not-drag " data-parentsalesman="" data-row_color="rgb(248, 248, 248)" style="background-color: rgb(248, 248, 248);">Cristian Aguilera</td><td data-td="po#" class="do-not-drag std-col-pad text-center " data-row_color="rgb(248, 248, 248)" style="background-color: rgb(248, 248, 248);"><span class="lev3_hidden text-ProjectPO">PSA Dated 11.13.25</span></td><td data-td="project_manager" class="do-not-drag std-col-wrap std-col-pad text-center " data-parentpm="" data-row_color="rgb(248, 248, 248)" style="background-color: rgb(248, 248, 248);"><span class="lev3_hidden">Eric Anthony</span></td><td data-td="assistant_project_manager" class="do-not-drag std-col-wrap std-col-pad text-center " data-row_color="rgb(248, 248, 248)" style="background-color: rgb(248, 248, 248);"><span class="lev3_hidden"></span></td><td data-td="scope_lead" class="do-not-drag std-col-wrap std-col-pad text-center hidden"><span class="lev3_hidden"></span></td><td data-td="deliverable" class="do-not-drag " name="task_type" data-row_color="rgb(248, 248, 248)" style="background-color: rgb(248, 248, 248);"></td><td data-td="trade" class="do-not-drag " name="trade" data-row_color="rgb(248, 248, 248)" style="background-color: rgb(248, 248, 248);"></td><td data-td="description" class="do-not-drag text-left std-col-pad  task_description_text" data-row_color="rgb(248, 248, 248)" style="background-color: rgb(248, 248, 248);">CABLE TRAY SPANNER DETAIL</td><td data-td="po_id" class="do-not-drag hidden">4</td><td data-td="date_created" class="do-not-drag lg-col-pad " data-row_color="rgb(248, 248, 248)" style="background-color: rgb(248, 248, 248);"></td><td data-td="task" class="do-not-drag text-center " data-row_color="rgb(248, 248, 248)" style="background-color: rgb(248, 248, 248);">2.2</td><td data-td="rev" class="do-not-drag data text-center rev_col " data-row_color="rgb(248, 248, 248)" style="background-color: rgb(248, 248, 248);"><span class="rev_num" id="rev_num_311883">0</span><span title="Add Revision" data-dismiss="modal" data-toggle="modal" href="#AddRevision" class="rev_add" data-new-project="1" data-task-type="CUSTOM ENGINEERING" data-trade="Electrical" data-task-level="" data-task-area="">(+)</span></td><td class="hidden"></td><td data-td="add" class="do-not-drag add-task-col " data-row_color="rgb(248, 248, 248)" style="background-color: rgb(248, 248, 248);"></td><td data-td="task_due_date" class="do-not-drag text-center due_date_col " data-draft-due-date="" data-row_color="rgb(248, 248, 248)" style="background-color: rgb(248, 248, 248);">04/23/2026</td><td data-td="task_status" class="do-not-drag text-center " data-date="" data-row_color="rgb(248, 248, 248)" style="background-color: rgb(248, 248, 248);">Billed</td><td data-td="task_%_complete" class="do-not-drag  text-center" data-row_color="rgb(248, 248, 248)" style="background-color: rgb(248, 248, 248);">100</td><td data-td="milestone" class="do-not-drag  text-center" title="Billing Queue" data-row_color="rgb(248, 248, 248)" style="background-color: rgb(248, 248, 248);"><a href="https://nexus.tcs.local/protected.php?queue_view=Billing+Queue&amp;task_id=311883" target="_blank" data-id="311883" data-queue="Billing">BILLING REQUESTED</a></td><td data-td="ms_due_date" class="do-not-drag  text-center" data-row_color="rgb(248, 248, 248)" style="background-color: rgb(248, 248, 248);"></td><td data-td="ms_status" class="do-not-drag  text-center" data-row_color="rgb(248, 248, 248)" style="background-color: rgb(248, 248, 248);">Complete</td><td data-td="assigned_to" class="do-not-drag text-center " data-row_color="rgb(248, 248, 248)" style="background-color: rgb(248, 248, 248);"></td><td data-td="date_added_to_queue" class="do-not-drag text-center hidden"></td><td data-td="date_assigned" class="do-not-drag text-center hidden"></td><td data-td="date_started" class="do-not-drag text-center hidden"></td><td data-td="date_completed" class="do-not-drag text-center hidden"></td><td data-td="priority" class="do-not-drag priority-display " data-pri="" data-row_color="rgb(248, 248, 248)" style="background-color: rgb(248, 248, 248);"><span class="priority circle pri"></span></td><td data-td="est_hours" class="do-not-drag hidden" style="display: table-cell;">0.00</td><td data-td="contract_amt" class="do-not-drag contract_amt_tally hidden ">$0.00</td><td data-td="billed" class="do-not-drag hidden billed_amount">$0.00</td><td data-td="remaining" class="do-not-drag hidden">$0.00</td><td data-td="%_complete" class="do-not-drag hidden"></td><td data-td="time_rate" class="do-not-drag hidden"></td><td data-td="units" class="do-not-drag hidden"></td><td data-td="qty" class="do-not-drag hidden"></td><td data-td="bas_completed" class="do-not-drag hidden"></td><td data-td="projected_margin" class="do-not-drag hidden">%</td><td data-td="efficiency" class="do-not-drag hidden">%</td><td data-td="wip" class="do-not-drag hidden">$51.00</td></tr></tbody></table>
+<div id="modal"><div id="modalBox"><span class="modclose" onclick="document.getElementById('modal').style.display='none'">✕</span>
+ <h2 style="text-align:center">Task Information</h2><div id="throb">Loading… <span>use-throbber</span></div><div id="mc" style="display:none"></div></div></div>
+<script>
+// ---- simulate Nexus: Edit opens the modal via "AJAX" (throbber, then inject the real tabs+form) ----
+document.getElementById('table1_body').addEventListener('click',function(e){
+  var b=e.target.closest('.btn-edit'); if(!b||!b.dataset.row) return;
+  if(document.getElementById('modal').style.display==='block') return;
+  document.getElementById('modal').style.display='block';
+  document.getElementById('throb').style.display='block'; document.getElementById('mc').style.display='none';
+  setTimeout(function(){
+    var mc=document.getElementById('mc'); mc.innerHTML='<ul class="nav nav-tabs" role="tablist">\n <li role="presentation"><a data-target="#first" role="tab" data-toggle="tab">Edit Info</a></li>\n <li role="presentation"><a data-target="#second" role="tab" data-toggle="tab">Hours</a></li>\n <li role="presentation" class="active"><a data-target="#projecthealthtab" role="tab" data-toggle="tab">PHS</a></li>\n</ul>\n<div role="tabpanel" class="tab-pane" id="second">\n <form method="post" id="form-input_hours" autocomplete="off">\n  <input type="hidden" name="ts_ms_id" value="">\n  <div class="row"><b>Milestone:</b>\n   <select class="form-control" name="ms_select" required>\n    <option data-ms-id="99466" value="TASK ASSIGNMENT AND SCHEDULE">TASK ASSIGNMENT AND SCHEDULE</option>\n    <option data-ms-id="99467" value="DRAFT PACKAGE">DRAFT PACKAGE</option>\n    <option data-ms-id="99468" value="QC-DESIGN REVIEW">QC-DESIGN REVIEW</option>\n    <option data-ms-id="99474" value="BILLING REQUESTED">BILLING REQUESTED</option>\n   </select></div>\n  <div class="row"><b>Hours:</b> <input required class="form-control" name="ts_hours"></div>\n  <div class="row"><b>Date:</b> <input required class="form-control date-picker readonly edit_task_date hasDatepicker" name="ts_date" readonly></div>\n  <div class="row"><b>Description:</b> <textarea id="ts_emp_description" class="form-control" name="ts_emp_description"></textarea></div>\n  <div class="row"><button name="btn_submit-inputHours" class="btn btn-primary" type="button">Submit</button></div>\n </form>\n</div>\n<div role="tabpanel" class="tab-pane active" id="projecthealthtab"><p style="padding:20px">PHS content…</p></div>';
+    mc.querySelectorAll('.nav-tabs a').forEach(function(a){ a.addEventListener('click',function(ev){ ev.preventDefault();
+      mc.querySelectorAll('.nav-tabs li').forEach(function(li){li.classList.remove('active');}); a.parentElement.classList.add('active');
+      mc.querySelectorAll('.tab-pane').forEach(function(p){p.classList.remove('active');}); var pane=mc.querySelector(a.getAttribute('data-target')); if(pane)pane.classList.add('active');
+    });});
+    document.getElementById('throb').style.display='none'; mc.style.display='block';
+  }, 1500);
+});
+</script>
+<script>
+// ---- the userscript, inlined, auto-running with a test task ----
 (function(){
 'use strict';
 
@@ -277,3 +309,10 @@ try{ new MutationObserver(()=>{ if(!document.getElementById('nxup-panel') || !do
        .observe(document.documentElement, {childList:true, subtree:true}); }catch(e){}
 
 })();
+
+</script>
+<script>
+// auto-load a test task (mimics the rocket's #tcupload)
+window.addEventListener('load',function(){ setTimeout(function(){ try{ window.__nxup.loadFrom(JSON.stringify([{task:'311883',hours:'1',date:'07/23/2026',desc:'self-test'}])); window.__nxup.onFill(); }catch(e){} }, 400); });
+</script>
+</body></html>
