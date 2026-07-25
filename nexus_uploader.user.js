@@ -1,17 +1,33 @@
 // ==UserScript==
 // @name         ISAT Timecard → Nexus hours filler
 // @namespace    isat.timecard.nexus
-// @version      1.0
+// @version      2.0
 // @description  Fills the Nexus "Hours" form (Milestone / Hours / Date / Description) for each task from the ISAT Timecard — one task at a time. Never submits; you review and click Submit.
 // @match        *://nexus.tcs.local/*
-// @run-at       document-idle
-// @grant        none
+// @run-at       document-start
+// @grant        GM_setValue
+// @grant        GM_getValue
+// @grant        unsafeWindow
 // ==/UserScript==
+/* NOTE: the @grant lines above are important — they make Tampermonkey run this
+   in its own sandbox, which bypasses the site's Content-Security-Policy. With
+   "@grant none" an enterprise CSP can silently block the whole script. */
 (function(){
 'use strict';
 
+// the page's real window (for jQuery, history, location, events) — works whether sandboxed or not
+const W = (typeof unsafeWindow !== 'undefined' && unsafeWindow) ? unsafeWindow : window;
+
 /* ---------- small DOM helpers ---------- */
 function vis(list){ for(const el of list){ if(el && el.offsetParent!==null) return el; } return null; }
+// dispatch a full mouse sequence — some Nexus buttons fire on mousedown, so a plain .click() alone can do nothing
+function realClick(el){
+  if(!el) return;
+  const o={bubbles:true,cancelable:true,view:W};
+  try{ el.dispatchEvent(new MouseEvent('mousedown',o)); }catch(e){}
+  try{ el.dispatchEvent(new MouseEvent('mouseup',o)); }catch(e){}
+  try{ el.dispatchEvent(new MouseEvent('click',o)); }catch(e){}
+}
 function waitFor(getter, timeout, what, interval){
   interval = interval||120;
   return new Promise((res,rej)=>{ const t0=Date.now();
@@ -41,7 +57,7 @@ function setSelect(sel,val){
 }
 function setDate(el,mdy){
   if(!el) return; const ro=el.hasAttribute('readonly'); if(ro) el.removeAttribute('readonly');
-  try{ if(window.jQuery && window.jQuery(el).hasClass('hasDatepicker')){ const p=parseMDY(mdy); if(p) window.jQuery(el).datepicker('setDate',p); } }catch(e){}
+  try{ if(W.jQuery && W.jQuery(el).hasClass('hasDatepicker')){ const p=parseMDY(mdy); if(p) W.jQuery(el).datepicker('setDate',p); } }catch(e){}
   nativeSet(el,mdy); fire(el,['input','change','blur']);
   if(ro) el.setAttribute('readonly','readonly');
 }
@@ -93,7 +109,7 @@ async function fillTask(t){
   //          (spamming clicks mid-load would restart the loading screen every time)
   log('📝 Opening task '+task+' — waiting for the loading screen…');
   for(let a=0; a<8 && !modalOpen(); a++){
-    const b=vis(document.querySelectorAll('button.btn-edit[data-row="'+task+'"]')); if(b) b.click();
+    const b=vis(document.querySelectorAll('button.btn-edit[data-row="'+task+'"]')); if(b) realClick(b);
     try{ await waitFor(()=>modalOpen()?true:null, 6000, 'window', 200); }catch(e){}
   }
   if(!modalOpen()) throw new Error('the task window would not open (the Edit button didn’t respond) — press Fill again.');
@@ -101,7 +117,7 @@ async function fillTask(t){
   log('📂 Opening the Hours tab…');
   let form = null;
   for(let a=0; a<15 && !form; a++){
-    const tab=vis(document.querySelectorAll('a[data-target="#second"]')); if(tab) tab.click();
+    const tab=vis(document.querySelectorAll('a[data-target="#second"]')); if(tab) realClick(tab);
     try{ form=await waitFor(()=>realForm(true), 2500, 'form', 200); }catch(e){}
   }
   if(!form) throw new Error('the Hours form did not appear — press Fill again.');
@@ -180,30 +196,36 @@ function buildPanel(){
 }
 
 /* the rocket on the Timecard opens Nexus with the data in the URL hash:
-   #tcupload=<encoded JSON>.  Read it once, load the tasks, and auto-fill the first one. */
-let autoLoaded=false;
+   #tcupload=<encoded JSON>.  Read it, load the tasks, and auto-fill.
+   Re-reads when the hash changes too (so re-using the Nexus tab works). */
+let lastHash='';
 function autoLoadFromUrl(){
-  if(autoLoaded) return;
-  const m=/[#&]tcupload=([^&]+)/.exec(location.hash||'');
+  const h = (W.location && W.location.hash) || location.hash || '';
+  if(h===lastHash) return;                       // nothing new
+  const m=/[#&]tcupload=([^&]+)/.exec(h);
   if(!m) return;
-  autoLoaded=true;
+  lastHash = h;
   let json=null; try{ json=decodeURIComponent(m[1]); }catch(e){ return; }
   loadFrom(json);
-  try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){}   // clear the hash (refresh won't re-fill)
+  try{ (W.history||history).replaceState(null,'',(W.location||location).pathname+(W.location||location).search); }catch(e){}
   if(!TASKS.length) return;
   log('📋 Loaded '+TASKS.length+' task(s) from the Timecard — starting…');
   onFill();   // fillTask() itself waits for the search box + results through the loading screen
 }
 
-// keep the panel alive even if Nexus re-renders the page, and (re)run the auto-load once
+// keep the panel alive even if Nexus re-renders the page, and pick up new data on hash change
 function ensurePanel(){ try{ buildPanel(); autoLoadFromUrl(); }catch(e){} }
 
 // expose for automated testing
-window.__nxup = { fillTask, loadFrom, onFill, get tasks(){return TASKS;}, get idx(){return idx;} };
+try{ window.__nxup = { fillTask, loadFrom, onFill, get tasks(){return TASKS;}, get idx(){return idx;} }; }catch(e){}
 
 ensurePanel();
 document.addEventListener('DOMContentLoaded', ensurePanel);
-window.addEventListener('load', ensurePanel);
-setInterval(ensurePanel, 1500);   // Nexus can wipe injected nodes on its own render — re-add the panel if it disappears
+W.addEventListener('load', ensurePanel);
+W.addEventListener('hashchange', ensurePanel);
+setInterval(ensurePanel, 1200);   // Nexus can wipe injected nodes on its own render — re-add the panel if it disappears
+// re-add the panel the instant Nexus removes it
+try{ new MutationObserver(()=>{ if(!document.getElementById('nxup-panel')) ensurePanel(); })
+       .observe(document.documentElement, {childList:true, subtree:true}); }catch(e){}
 
 })();
