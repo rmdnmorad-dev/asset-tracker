@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Nexus mock</title>
+<style>
+ body{font-family:Arial;margin:0;background:#f4f5f7}
+ #topbar{background:#123; color:#fff; padding:8px 12px; font-weight:bold}
+ .filter-bar{padding:10px}
+ input.form-control{padding:5px 8px;border:1px solid #aaa;border-radius:4px}
+ table{border-collapse:collapse;width:100%;background:#fff}
+ td,th{border:1px solid #ddd;padding:6px 8px;font-size:13px}
+ .btn{border:0;border-radius:4px;padding:5px 10px;cursor:pointer}
+ .btn-primary{background:#2f6fb0;color:#fff}
+ .btn-edit{background:#2f6fb0;color:#fff}
+ #modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100}
+ #modalBox{background:#fff;max-width:1000px;margin:40px auto;border-radius:8px;padding:18px;max-height:88vh;overflow:auto;position:relative}
+ .nav-tabs{list-style:none;display:flex;flex-wrap:wrap;gap:2px;padding:0;border-bottom:2px solid #ccc}
+ .nav-tabs li a{display:block;padding:6px 10px;cursor:pointer;color:#2f6fb0;text-decoration:none;border:1px solid transparent}
+ .nav-tabs li.active a{background:#eef;border:1px solid #ccc;border-bottom:0;font-weight:bold}
+ .tab-pane{display:none;padding:14px 4px}
+ .tab-pane.active{display:block}
+ .row{display:flex;gap:10px;align-items:center;margin:8px 0}
+ .row .lbl{width:150px;text-align:right;font-weight:bold}
+ .modclose{position:absolute;top:10px;right:14px;cursor:pointer;font-size:20px}
+ #throb{display:none;text-align:center;padding:30px;font-weight:bold}
+</style></head>
+<body>
+<div id="topbar">NEXUS mock — nexus.tcs.local/protected.php &nbsp; | &nbsp; Morad Ramadan</div>
+
+<div class="filter-bar row" style="padding:10px">
+  <div class="btn-group search_display" style="margin-left:5px">
+    <input type="text" class="search form-control task_search main-filters" placeholder="Task search" value="">
+    <span class="searchclear main-filters">X</span>
+  </div>
+  <div class="btn-group search_display">
+    <input type="text" class="search form-control project_name_search main-filters" placeholder="Project Name Search" value="">
+  </div>
+</div>
+
+<table><thead><tr><th>Edit</th><th>Project ID</th><th>Project Name</th><th>Contractor</th></tr></thead>
+<tbody id="table1_body">
+  <tr data-row="311883" data-id="311883" data-project_name="Westside Purple Line Extension Section 2">
+    <td><button data-row="311883" data-new_project="1" data-cod="0" data-status="Active" class="btn btn-primary btn-sm btn-edit">Edit</button></td>
+    <td>LM47310FISSYL.<span class="highlight">311883</span></td><td>Westside Purple Line Extension Section 2</td><td>FISK ELECTRIC -</td></tr>
+  <tr data-row="222652" data-id="222652" data-project_name="Metro Station Upgrade">
+    <td><button data-row="222652" data-new_project="0" data-status="Active" class="btn btn-primary btn-sm btn-edit">Edit</button></td>
+    <td>AB12345XY.<span class="highlight">222652</span></td><td>Metro Station Upgrade</td><td>ACME -</td></tr>
+  <tr data-row="333311" data-id="333311" data-project_name="Airport Terminal C">
+    <td><button data-row="333311" data-new_project="0" data-status="Active" class="btn btn-primary btn-sm btn-edit">Edit</button></td>
+    <td>ZZ99887QW.<span class="highlight">333311</span></td><td>Airport Terminal C</td><td>BUILDCO -</td></tr>
+</tbody></table>
+
+<!-- a HIDDEN duplicate hours form, to prove the script targets the VISIBLE one -->
+<form id="form-input_hours" style="display:none">
+  <input type="hidden" name="ts_ms_id" value="">
+  <select name="ms_select"><option value="TASK ASSIGNMENT AND SCHEDULE">TASK ASSIGNMENT AND SCHEDULE</option></select>
+  <input name="ts_hours"><input name="ts_date" readonly><textarea name="ts_emp_description"></textarea>
+  <button name="btn_submit-inputHours">Submit</button>
+</form>
+
+<div id="modal"><div id="modalBox">
+  <span class="modclose" onclick="closeModal()">✕</span>
+  <h2 style="text-align:center">Task Information</h2>
+  <div id="throb">Loading… <span>use-throbber</span></div>
+  <div id="modalContent" style="display:none"></div>
+</div></div>
+
+<script>
+window.__submissions = [];
+
+// live search filter on the task_search box (like the real List.js filter)
+document.querySelector('input.task_search').addEventListener('input', function(){
+  const q=this.value.trim();
+  document.querySelectorAll('#table1_body tr').forEach(tr=>{
+    tr.style.display = (!q || tr.dataset.row.includes(q)) ? '' : 'none';
+  });
+});
+
+// Edit -> open modal (simulate AJAX), build tabs + Hours form, open on PHS (like the video)
+document.getElementById('table1_body').addEventListener('click', e=>{
+  const btn=e.target.closest('.btn-edit'); if(!btn) return;
+  const task=btn.dataset.row;
+  document.getElementById('modal').style.display='block';
+  document.getElementById('throb').style.display='block';
+  document.getElementById('modalContent').style.display='none';
+  setTimeout(()=>buildModal(task), 600);   // AJAX delay
+});
+function closeModal(){ document.getElementById('modal').style.display='none'; }
+
+function buildModal(task){
+  const MS=[['99466','TASK ASSIGNMENT AND SCHEDULE'],['99467','DRAFT PACKAGE'],['99468','QC-DESIGN REVIEW'],['99469','CUSTOMER APPROVAL - DESIGN INTENT'],['99470','FINAL SUBMITTAL'],['99471','QC - FINAL SUBMITTAL REVIEW'],['99472','WET STAMP'],['99473','SUBMITTAL SENT TO CUSTOMER'],['99474','BILLING REQUESTED']];
+  const opts=MS.map(m=>`<option data-ms-id="${m[0]}" value="${m[1]}">${m[1]}</option>`).join('');
+  const c=document.getElementById('modalContent');
+  c.innerHTML=`
+   <ul class="nav nav-tabs" role="tablist">
+     <li role="presentation"><a data-target="#first" role="tab" data-toggle="tab">Edit Info</a></li>
+     <li role="presentation"><a data-target="#second" role="tab" data-toggle="tab">Hours</a></li>
+     <li role="presentation" class="active"><a data-target="#projecthealthtab" role="tab" data-toggle="tab">PHS</a></li>
+   </ul>
+   <div role="tabpanel" class="tab-pane" id="second">
+     <form method="post" id="form-input_hours" autocomplete="off">
+       <input type="hidden" name="ts_ms_id" value="">
+       <input type="hidden" name="proj_data_id" value="${task}">
+       <div class="row"><div class="lbl">Milestone:</div><select class="form-control" name="ms_select" required>${opts}</select></div>
+       <div class="row"><div class="lbl">Employee Name:</div><span>Morad Ramadan</span></div>
+       <div class="row"><div class="lbl">Hours:</div><input required class="form-control" name="ts_hours"></div>
+       <div class="row"><div class="lbl">Date:</div><input required class="form-control date-picker readonly edit_task_date" name="ts_date" id="dp_${task}" readonly></div>
+       <div class="row"><div class="lbl">Description:</div><textarea id="ts_emp_description" class="form-control" name="ts_emp_description"></textarea></div>
+       <div class="row"><div class="lbl"></div><button name="btn_submit-inputHours" class="btn btn-primary" type="button" onclick="doSubmit('${task}')">Submit</button></div>
+     </form>
+   </div>
+   <div role="tabpanel" class="tab-pane active" id="projecthealthtab"><p>PHS content…</p></div>`;
+  // Bootstrap-like tab switching
+  c.querySelectorAll('.nav-tabs a[data-toggle="tab"]').forEach(a=>{
+    a.addEventListener('click', ev=>{ ev.preventDefault();
+      c.querySelectorAll('.nav-tabs li').forEach(li=>li.classList.remove('active'));
+      a.parentElement.classList.add('active');
+      c.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
+      const pane=c.querySelector(a.getAttribute('data-target')); if(pane) pane.classList.add('active');
+    });
+  });
+  // ms_select change -> populate hidden ts_ms_id (like the real form)
+  const sel=c.querySelector('select[name=ms_select]');
+  sel.addEventListener('change',()=>{ const o=sel.selectedOptions[0]; c.querySelector('input[name=ts_ms_id]').value=o?o.getAttribute('data-ms-id'):''; });
+  // hours inputFilter (positive decimals up to 2dp) — reject bad input like the real page
+  const h=c.querySelector('input[name=ts_hours]'); let last='';
+  h.addEventListener('input',()=>{ if(/^\d*[.]?\d{0,2}$/.test(h.value)) last=h.value; else h.value=last; });
+  // date: enforce no-future on change (like the real alert); value settable via property despite readonly
+  const d=c.querySelector('input[name=ts_date]');
+  d.addEventListener('change',()=>{ const t=parseMDY(d.value); if(t && t>today()){ alert('You can only enter time up to '+fmtMDY(today())); d.value=''; } });
+  document.getElementById('throb').style.display='none';
+  c.style.display='block';
+}
+function doSubmit(task){
+  const f=document.querySelector('#modalContent #second form#form-input_hours');
+  window.__submissions.push({ task, ms:f.querySelector('[name=ms_select]').value, ms_id:f.querySelector('[name=ts_ms_id]').value,
+    hours:f.querySelector('[name=ts_hours]').value, date:f.querySelector('[name=ts_date]').value, desc:f.querySelector('[name=ts_emp_description]').value });
+  closeModal();
+}
+function today(){ const d=new Date(); return new Date(d.getFullYear(),d.getMonth(),d.getDate()); }
+function parseMDY(s){ const m=/^(\d{2})\/(\d{2})\/(\d{4})$/.exec(s||''); return m? new Date(+m[3],+m[1]-1,+m[2]) : null; }
+function fmtMDY(d){ return String(d.getMonth()+1).padStart(2,'0')+'/'+String(d.getDate()).padStart(2,'0')+'/'+d.getFullYear(); }
+</script>
+</body></html>

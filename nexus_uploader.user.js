@@ -1,253 +1,151 @@
 // ==UserScript==
-// @name         Timecard → Nexus hours uploader
-// @namespace    timecard.local
-// @version      3.7
-// @description  Fills the timecard's daily tasks into Nexus (Draft Package, hours, date, notes). YOU click Submit. Reads tasks from the clipboard (reliable) or the URL. Has a "Copy page HTML" button so selectors can be pinned to the real page.
+// @name         ISAT Timecard → Nexus hours filler
+// @namespace    isat.timecard.nexus
+// @version      1.0
+// @description  Fills the Nexus "Hours" form (Milestone / Hours / Date / Description) for each task from the ISAT Timecard — one task at a time. Never submits; you review and click Submit.
 // @match        *://nexus.tcs.local/*
-// @run-at        document-idle
+// @run-at       document-idle
 // @grant        none
 // ==/UserScript==
 (function(){
-  'use strict';
-  const LSKEY = 'tc_nexus_queue';
-  const sleep = ms => new Promise(r=>setTimeout(r,ms));
-  const visible = el => !!(el && el.offsetParent!==null);
+'use strict';
 
-  async function waitFor(fn, timeout=15000, step=250){
-    const t0 = Date.now();
-    for(;;){ let v; try{ v=fn(); }catch(e){ v=null; } if(v) return v; if(Date.now()-t0>timeout) return null; await sleep(step); }
-  }
-  function setVal(el, val){
-    if(!el) return;
-    const proto = el.tagName==='TEXTAREA' ? HTMLTextAreaElement.prototype
-                : el.tagName==='SELECT'   ? HTMLSelectElement.prototype
-                :                           HTMLInputElement.prototype;
-    const setter = Object.getOwnPropertyDescriptor(proto,'value').set;
-    setter.call(el, val==null?'':String(val));
-    ['input','change','keyup','blur'].forEach(t=>el.dispatchEvent(new Event(t,{bubbles:true})));
-  }
-  function clickableByText(root, text){
-    text = text.trim().toLowerCase();
-    return [...root.querySelectorAll('a, button, [role="tab"], .nav-link, [data-toggle="tab"]')]
-      .find(e => visible(e) && e.textContent.trim().toLowerCase()===text);
-  }
+/* ---------- small DOM helpers ---------- */
+function vis(list){ for(const el of list){ if(el && el.offsetParent!==null) return el; } return null; }
+function waitFor(getter, timeout, what){
+  return new Promise((res,rej)=>{ const t0=Date.now();
+    (function poll(){ let el=null; try{ el=getter(); }catch(e){}
+      if(el) return res(el);
+      if(Date.now()-t0>timeout) return rej(new Error('Timed out waiting for '+(what||'element')));
+      setTimeout(poll,120); })();
+  });
+}
+function nativeSet(el,val){
+  const proto = el.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype
+              : el.tagName==='SELECT'  ?HTMLSelectElement.prototype
+              :                         HTMLInputElement.prototype;
+  const d=Object.getOwnPropertyDescriptor(proto,'value');
+  (d&&d.set ? d.set : Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set).call(el,val);
+}
+function fire(el,types){ types.forEach(t=>el.dispatchEvent(new Event(t,{bubbles:true}))); }
+function setVal(el,val){ if(!el) return; nativeSet(el,String(val)); fire(el,['input','change','keyup','blur']); }
+function setSelect(sel,val){
+  if(!sel) return null; const want=String(val).trim().toUpperCase();
+  let opt=null;
+  for(const o of sel.options){ if((o.value||'').trim().toUpperCase()===want || (o.textContent||'').trim().toUpperCase()===want){ opt=o; break; } }
+  if(opt){ nativeSet(sel,opt.value); } else { nativeSet(sel,val); }
+  fire(sel,['input','change']);
+  return opt;
+}
+function setDate(el,mdy){
+  if(!el) return; const ro=el.hasAttribute('readonly'); if(ro) el.removeAttribute('readonly');
+  try{ if(window.jQuery && window.jQuery(el).hasClass('hasDatepicker')){ const p=parseMDY(mdy); if(p) window.jQuery(el).datepicker('setDate',p); } }catch(e){}
+  nativeSet(el,mdy); fire(el,['input','change','blur']);
+  if(ro) el.setAttribute('readonly','readonly');
+}
 
-  /* ---------- on-screen panel + log ---------- */
-  let logBox;
-  function panel(){
-    let p = document.getElementById('tcup-panel');
-    if(!p){
-      if(!document.getElementById('tcup-anim')){
-        const st=document.createElement('style'); st.id='tcup-anim';
-        st.textContent='@keyframes tcupPulse{0%,100%{box-shadow:0 0 0 3px #22c55e,0 0 20px 4px rgba(34,197,94,.85),0 12px 40px rgba(0,0,0,.6)}'
-          +'50%{box-shadow:0 0 0 3px #22c55e,0 0 44px 14px rgba(34,197,94,.95),0 12px 40px rgba(0,0,0,.6)}}';
-        document.documentElement.appendChild(st);
-      }
-      p = document.createElement('div'); p.id='tcup-panel';
-      p.style.cssText='position:fixed;z-index:2147483647;right:16px;bottom:16px;width:370px;background:#0b1220;color:#e2e8f0;'
-        +'border:3px solid #22c55e;border-radius:12px;font:13px/1.45 Arial;animation:tcupPulse 1.6s ease-in-out infinite';
-      p.innerHTML='<div style="padding:11px 14px;font-weight:bold;font-size:15px;color:#052e13;background:linear-gradient(90deg,#4ade80,#22c55e);border-radius:9px 9px 0 0;letter-spacing:.3px">🚀 TIMECARD HELPER — this box</div>'
-        +'<div id="tcup-log" style="max-height:240px;overflow:auto;padding:9px 14px"></div>'
-        +'<div id="tcup-btns" style="padding:9px 14px;border-top:1px solid #1e293b"></div>';
-      document.documentElement.appendChild(p);
-      logBox = p.querySelector('#tcup-log');
-    }
-    return p;
-  }
-  function log(html){ panel(); const d=document.createElement('div'); d.style.margin='3px 0'; d.innerHTML=html; logBox.appendChild(d); logBox.scrollTop=logBox.scrollHeight; }
-  function setButtons(list){
-    const b=panel().querySelector('#tcup-btns'); b.innerHTML='';
-    list.forEach(x=>{ const el=document.createElement('button'); el.textContent=x.label;
-      el.style.cssText='margin:2px 8px 2px 0;padding:5px 12px;border:0;border-radius:6px;cursor:pointer;background:'+(x.bg||'#e2e8f0')+';color:'+(x.fg||'#0f172a')+';font-weight:bold';
-      el.onclick=x.fn; b.appendChild(el); });
-  }
-  function post(task, date, ok, err){ try{ if(window.opener) window.opener.postMessage({__tcnexus:true, task, date, ok, err}, '*'); }catch(e){} }
+/* ---------- dates / hours ---------- */
+function parseMDY(s){ const m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(s||'').trim()); return m? new Date(+m[3],+m[1]-1,+m[2]) : null; }
+function fmtMDY(d){ return String(d.getMonth()+1).padStart(2,'0')+'/'+String(d.getDate()).padStart(2,'0')+'/'+d.getFullYear(); }
+function todayMid(){ const n=new Date(); return new Date(n.getFullYear(),n.getMonth(),n.getDate()); }
+function clampDate(s){ const d=parseMDY(s), t=todayMid(); if(!d) return fmtMDY(t); return d>t? fmtMDY(t) : fmtMDY(d); }
+function cleanHours(h){ const n=parseFloat(String(h==null?'':h)); if(isNaN(n)) return ''; return String(Math.round(n*100)/100); }
 
-  function getQ(){ try{ return JSON.parse(localStorage.getItem(LSKEY)||'null'); }catch(e){ return null; } }
-  function setQ(q){ localStorage.setItem(LSKEY, JSON.stringify(q)); }
-  function clearQ(){ localStorage.removeItem(LSKEY); }
-  function decode(b64){ return JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(b64))))); }
-  function readHash(){ const m=(location.hash||'').match(/tcup=([^&]+)/); if(!m) return null; try{ return decode(m[1]); }catch(e){ return null; } }
+/* ---------- the fill for ONE task (stops before Submit) ---------- */
+async function fillTask(t){
+  log('🔎 Searching task '+t.task+' …');
+  const search = vis(document.querySelectorAll('input.task_search'));
+  if(!search) throw new Error('Task-search box not found on this page.');
+  setVal(search, String(t.task));
+  const editBtn = await waitFor(()=>vis(document.querySelectorAll('button.btn-edit[data-row="'+t.task+'"]')), 12000, 'Edit button for '+t.task);
+  editBtn.click();
+  log('📝 Opening the task… waiting for the Hours form');
+  // wait for a VISIBLE Hours tab (the freshly-loaded modal), not a stale hidden one from a previous task
+  const hoursTab = await waitFor(()=>vis(document.querySelectorAll('a[data-target="#second"]')), 15000, 'Hours tab');
+  hoursTab.click();
+  const form = await waitFor(()=>vis(document.querySelectorAll('form#form-input_hours')), 15000, 'Hours form');
+  const sel      = form.querySelector('select[name="ms_select"]');
+  const hoursInp = form.querySelector('input[name="ts_hours"]');
+  const dateInp  = form.querySelector('input[name="ts_date"]');
+  const descInp  = form.querySelector('textarea[name="ts_emp_description"]');
+  const msHid    = form.querySelector('input[name="ts_ms_id"]');
+  // Milestone (default DRAFT PACKAGE) + its hidden id
+  const opt = setSelect(sel, t.milestone || 'DRAFT PACKAGE');
+  if(msHid && opt) setVal(msHid, opt.getAttribute('data-ms-id')||'');
+  // Hours / Date (clamped to today) / Description
+  setVal(hoursInp, cleanHours(t.hours));
+  setDate(dateInp, clampDate(t.date));
+  setVal(descInp, t.desc||'');
+  log('✅ Task '+t.task+' filled. Review it, then click <b>Submit</b> yourself.');
+}
 
-  /* ---------- find things on the Nexus page ---------- */
-  function findSearch(){
-    return document.querySelector('input[placeholder="Task search"]')
-        || document.querySelector('input[placeholder*="task" i]')
-        || document.querySelector('input.task_search, input[name*="task" i]')
-        || [...document.querySelectorAll('input[type="text"], input:not([type])')].find(i=>visible(i) && /task/i.test((i.placeholder||'')+(i.name||'')+(i.id||'')));
-  }
-  function findRow(task){
-    return document.querySelector('#table1_body tr[data-id="'+task+'"]')
-        || document.querySelector('tr[data-id="'+task+'"]')
-        || document.querySelector('tr[data-row="'+task+'"]')
-        || [...document.querySelectorAll('table tbody tr')].find(tr=>{
-             if(!visible(tr)) return false;
-             const id=tr.getAttribute('data-id')||tr.getAttribute('data-row');
-             if(id===task) return true;
-             return [...tr.querySelectorAll('.highlight, span, td')].some(el=>{ const tx=el.textContent.trim(); return tx===task || tx.endsWith('.'+task); });
-           });
-  }
-  function runSearch(search, task){
-    search.focus();
-    setVal(search, task);
-    ['keydown','keypress','keyup'].forEach(t=>search.dispatchEvent(new KeyboardEvent(t,{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true})));
-    const btn=[...document.querySelectorAll('button,.btn,i.fa-search,.search-btn,[type="submit"]')]
-      .find(b=>visible(b) && /search|find/i.test((b.getAttribute('title')||'')+' '+(b.getAttribute('aria-label')||'')+' '+b.className+' '+b.textContent));
-    if(btn) btn.click();
-  }
+/* ================= the on-page panel ================= */
+let TASKS=[], idx=0, running=false;
 
-  // a "real" click: some sites only react to the full pointer/mouse sequence
-  function fullClick(el){
-    if(!el) return;
-    try{ el.scrollIntoView({block:'center'}); }catch(e){}
-    ['pointerover','pointerenter','mouseover','pointerdown','mousedown','pointerup','mouseup','click']
-      .forEach(type=>{ try{ el.dispatchEvent(new MouseEvent(type,{bubbles:true,cancelable:true,view:window})); }catch(e){} });
-    try{ el.click(); }catch(e){}
-  }
+function log(html){ const el=document.getElementById('nxup-log'); if(el) el.innerHTML=html; }
+function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function renderList(){
+  const box=document.getElementById('nxup-list'); if(!box) return;
+  box.innerHTML = TASKS.map((t,i)=>{
+    const state = t.__done ? '✅' : (i===idx ? '▶️' : '·');
+    return '<div style="padding:2px 0;'+(i===idx?'font-weight:bold':'')+'">'+state+' '+
+      escapeHtml(t.task||'?')+' — '+cleanHours(t.hours)+'h · '+clampDate(t.date)+
+      (t.desc? ' · '+escapeHtml(t.desc).slice(0,26)+(t.desc.length>26?'…':'') : '')+'</div>';
+  }).join('') || '<div style="color:#888">No tasks loaded yet.</div>';
+  const btn=document.getElementById('nxup-fill'); if(!btn) return;
+  if(idx>=TASKS.length && TASKS.length){ btn.textContent='All '+TASKS.length+' tasks done'; btn.disabled=true; }
+  else { btn.textContent='▶ Fill task '+(idx+1)+' of '+TASKS.length; btn.disabled=!TASKS.length||running; }
+}
 
-  /* ---------- fill ONE task (never submits) ---------- */
-  async function fillTask(t){
-    const search = await waitFor(()=>findSearch(), 25000);   // the page can take ~10s to load
-    if(!search) throw new Error('search box not found on this page');
-    log('🔎 Searching <b>'+t.task+'</b>…');
-    runSearch(search, t.task);
+function loadFrom(text){
+  let data; try{ data=JSON.parse(text); }catch(e){ log('⚠ That is not valid task JSON.'); return; }
+  const arr = Array.isArray(data)? data : (data && Array.isArray(data.tasks)? data.tasks : null);
+  if(!arr){ log('⚠ Expected a list of tasks.'); return; }
+  TASKS = arr.filter(t=>/^\d{6}$/.test(String(t.task||'').trim()) && cleanHours(t.hours)!=='' && +cleanHours(t.hours)>0)
+             .map(t=>({task:String(t.task).trim(), hours:t.hours, date:t.date, desc:t.desc||t.notes||'', milestone:t.milestone||'DRAFT PACKAGE'}));
+  idx=0; renderList();
+  log(TASKS.length? '📋 Loaded <b>'+TASKS.length+'</b> task(s). Click “Fill task 1”.' : '⚠ No valid 6-digit tasks with hours found.');
+}
 
-    // try to open the Edit modal ourselves; if the site blocks script-clicks, we guide the user
-    const edit = await waitFor(()=>
-      document.querySelector('.btn-edit[data-row="'+t.task+'"]') || [...document.querySelectorAll('.btn-edit')].filter(visible)[0]
-    , 25000);
-    if(edit){ fullClick(edit); log('✓ Opened <b>Edit</b>'); }
-    else log('👉 <b>Click the Edit</b> button next to task '+t.task+'.');
+async function onFill(){
+  if(running || idx>=TASKS.length) return;
+  running=true; renderList();
+  try{ await fillTask(TASKS[idx]); TASKS[idx].__done=true; idx++; }
+  catch(e){ log('⚠ '+e.message+' — fix it and press the button again.'); }
+  running=false; renderList();
+}
 
-    // try to open the Hours tab
-    const hoursTab = await waitFor(()=>{ const m=[...document.querySelectorAll('.modal,.modal-dialog,[role="dialog"]')].find(visible)||document.body; return clickableByText(m,'Hours'); }, 8000);
-    if(hoursTab){ fullClick(hoursTab); log('✓ Opened the <b>Hours</b> tab'); }
+function buildPanel(){
+  if(document.getElementById('nxup-panel')) return;
+  const p=document.createElement('div'); p.id='nxup-panel';
+  p.style.cssText='position:fixed;top:70px;right:14px;z-index:2147483647;width:290px;background:#fff;border:1px solid #123;'+
+    'border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.3);font:13px Arial;color:#111;overflow:hidden';
+  p.innerHTML=
+    '<div style="background:#123;color:#fff;padding:8px 10px;font-weight:bold;display:flex;justify-content:space-between;align-items:center">'+
+      '<span>⬆ Timecard → Nexus</span><span id="nxup-min" style="cursor:pointer">–</span></div>'+
+    '<div id="nxup-body" style="padding:10px">'+
+      '<div style="font-size:11.5px;color:#555;margin-bottom:5px">Click the box and paste (Ctrl+V) the tasks copied from the Timecard:</div>'+
+      '<textarea id="nxup-paste" placeholder="paste tasks here…" style="width:100%;height:46px;box-sizing:border-box;border:1px solid #aaa;border-radius:6px;font:12px monospace"></textarea>'+
+      '<div id="nxup-list" style="margin:8px 0;max-height:150px;overflow:auto;font-size:12px"></div>'+
+      '<button id="nxup-fill" style="width:100%;padding:9px;border:0;border-radius:8px;background:#2f6fb0;color:#fff;font-weight:bold;cursor:pointer" disabled>▶ Fill task</button>'+
+      '<div id="nxup-log" style="margin-top:8px;font-size:12px;color:#123;min-height:18px"></div>'+
+      '<div style="margin-top:6px;font-size:11px;color:#a00">The script never submits — you review each task and click <b>Submit</b>.</div>'+
+      '<a href="#" id="nxup-reset" style="font-size:11px">reset</a>'+
+    '</div>';
+  document.body.appendChild(p);
+  const paste=document.getElementById('nxup-paste');
+  paste.addEventListener('input',()=>{ if(paste.value.trim()) loadFrom(paste.value.trim()); });
+  paste.addEventListener('paste',()=>{ setTimeout(()=>loadFrom(paste.value.trim()),0); });
+  document.getElementById('nxup-fill').addEventListener('click',onFill);
+  document.getElementById('nxup-reset').addEventListener('click',e=>{ e.preventDefault(); TASKS=[];idx=0;paste.value='';renderList();log(''); });
+  document.getElementById('nxup-min').addEventListener('click',()=>{ const b=document.getElementById('nxup-body'); b.style.display=b.style.display==='none'?'':'none'; });
+  renderList();
+}
 
-    // wait for the VISIBLE Hours field — the page may have hidden duplicate copies of the form,
-    // so anchor on the one you can actually see (found via the visible hours input).
-    const findVisible = sel => [...document.querySelectorAll(sel)].find(visible) || null;
-    let hoursField = await waitFor(()=>findVisible('input[name="ts_hours"]'), 6000);
-    if(!hoursField){
-      log('👉 <b>Open Edit → the Hours tab</b> for task '+t.task+'. I’ll fill it the instant it shows.');
-      hoursField = await waitFor(()=>findVisible('input[name="ts_hours"]'), 120000);
-    }
-    if(!hoursField) throw new Error('the Hours form never appeared');
-    const form = hoursField.closest('form') || document;
-    const inForm = sel => [...form.querySelectorAll(sel)].find(visible) || form.querySelector(sel);
-    const ms = inForm('select[name="ms_select"]');
-    if(ms){ setVal(ms, t.milestone||'DRAFT PACKAGE');
-      const opt=ms.querySelector('option[value="'+(t.milestone||'DRAFT PACKAGE')+'"]'); const id=opt&&opt.getAttribute('data-ms-id');
-      if(id){ const hid=form.querySelector('input[name="ts_ms_id"]'); if(hid) setVal(hid,id); } }
-    setVal(hoursField, t.hours);
-    const dateEl=inForm('input[name="ts_date"]'); if(dateEl){ dateEl.removeAttribute('readonly'); setVal(dateEl, t.date); }
-    const desc=inForm('textarea[name="ts_emp_description"]'); if(desc) setVal(desc, t.desc||'');
-    log('✅ <b>Filled!</b> Draft Package, '+t.hours+'h, '+t.date+(t.desc?', notes':'')+'. Now check it and click <b>Submit</b>.');
-    return form;
-  }
-  async function closeAnyModal(){
-    const m=[...document.querySelectorAll('.modal,[role="dialog"]')].find(visible); if(!m) return;
-    const x=m.querySelector('.close,[data-dismiss="modal"],.btn-close'); if(x) x.click();
-    else document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',keyCode:27,bubbles:true}));
-    await sleep(600);
-  }
+// expose for automated testing
+window.__nxup = { fillTask, loadFrom, onFill, get tasks(){return TASKS;}, get idx(){return idx;} };
 
-  async function processNext(){
-    let q=getQ(); if(!q) return;
-    if(Date.now()-(q.ts||0) > 30*60000){ clearQ(); return; }
-    if(q.i>=q.tasks.length){
-      const ok=q.results.filter(r=>r.ok).length;
-      log('🏁 <b>Done.</b> '+ok+' of '+q.tasks.length+' submitted.');
-      setButtons([{label:'Close', fn:()=>panel().remove()}]);
-      clearQ(); return;
-    }
-    const t=q.tasks[q.i];
-    log('— — <b>Task '+(q.i+1)+'/'+q.tasks.length+'</b> ('+t.task+') — —');
-    try{
-      const form=await fillTask(t);
-      const submit=[...document.querySelectorAll('button[name="btn_submit-inputHours"]')].find(visible)
-        || form.querySelector('button[name="btn_submit-inputHours"]') || form.querySelector('[type="submit"]');
-      log('✋ <b>Review, then click Submit</b> in Nexus to log this task.');
-      setButtons([
-        {label:'Skip this task', fn:()=>{ post(t.task,t.date,false,'skipped'); const qq=getQ(); qq.i++; qq.results.push({task:t.task,date:t.date,ok:false,err:'skipped'}); setQ(qq); closeAnyModal().then(processNext); }},
-        {label:'Stop', bg:'#7f1d1d', fg:'#fff', fn:()=>{ post(t.task,t.date,false,'stopped'); clearQ(); log('⏹ Stopped.'); setButtons([{label:'Close',fn:()=>panel().remove()}]); }}
-      ]);
-      if(submit){
-        const onSubmit=()=>{ submit.removeEventListener('click',onSubmit);
-          log('✅ Submitted <b>'+t.task+'</b>'); post(t.task,t.date,true);
-          const qq=getQ()||q; qq.i++; qq.results.push({task:t.task,date:t.date,ok:true}); qq.ts=Date.now(); setQ(qq);
-          setTimeout(()=>{ if(getQ()) closeAnyModal().then(processNext); }, 1600);
-        };
-        submit.addEventListener('click', onSubmit);
-      }
-    }catch(e){
-      log('❌ <b>'+t.task+'</b>: '+e.message);
-      post(t.task,t.date,false,e.message);
-      const qq=getQ()||q; qq.i++; qq.results.push({task:t.task,date:t.date,ok:false,err:e.message}); qq.ts=Date.now(); setQ(qq);
-      setButtons([
-        HTMLBTN,
-        {label:'Skip to next', fn:()=>closeAnyModal().then(processNext)},
-        {label:'Stop', bg:'#7f1d1d', fg:'#fff', fn:()=>{ clearQ(); setButtons([{label:'Close',fn:()=>panel().remove()}]); }}
-      ]);
-    }
-  }
+if(document.body) buildPanel();
+else document.addEventListener('DOMContentLoaded', buildPanel);
 
-  function startQueue(tasks){
-    if(!Array.isArray(tasks) || !tasks.length){ log('❌ No tasks to send.'); return; }
-    setQ({ tasks, i:0, results:[], ts:Date.now() });
-    try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){}
-    processNext();
-  }
-  async function fillFromClipboard(){
-    let txt=''; try{ txt=await navigator.clipboard.readText(); }catch(e){ log('❌ Couldn’t read the clipboard: '+e.message+'. Click a 🚀 in the timecard first.'); return; }
-    let tasks; try{ tasks=JSON.parse(txt); }catch(e){ log('❌ The clipboard isn’t timecard tasks. In the timecard, click a task’s 🚀 button (that copies them), then come back and click this.'); return; }
-    startQueue(tasks);
-  }
-
-  /* ---------- capture the page's structure so the selectors can be pinned ---------- */
-  // Copies a trimmed snapshot of the live DOM: keeps every tag, class, id, name,
-  // placeholder, role and data-* (that's what the clicks key off), drops
-  // scripts/styles/svg/images, and truncates long text so no bulk data leaks.
-  function snapshot(){
-    const clone = document.documentElement.cloneNode(true);
-    clone.querySelectorAll('#tcup-panel,script,style,svg,noscript,link,img,iframe,canvas,picture,video,audio').forEach(n=>n.remove());
-    try{
-      const walk=document.createTreeWalker(clone, NodeFilter.SHOW_TEXT, null);
-      let n; while((n=walk.nextNode())){ const t=n.nodeValue; if(t && t.length>60) n.nodeValue=t.slice(0,60)+'…'; }
-    }catch(e){}
-    return clone.outerHTML;
-  }
-  async function copyHtml(){
-    const html=snapshot();
-    try{ await navigator.clipboard.writeText(html); log('📋 Copied <b>'+Math.ceil(html.length/1024)+' KB</b> of page HTML. Paste it back to support.'); }
-    catch(e){ log('❌ Clipboard blocked: '+e.message+'. Open DevTools console and run: <code>copy(document.documentElement.outerHTML)</code>'); }
-  }
-  const HTMLBTN = {label:'📋 Copy page HTML', bg:'#334155', fg:'#fff', fn:copyHtml};
-
-  function diagnostics(){
-    const s=findSearch();
-    log('✅ <b>Helper is running.</b> This green glowing box is mine.');
-    log('Search box: '+(s?'✓ found (placeholder="'+(s.getAttribute('placeholder')||'')+'")':'<b style="color:#fca5a5">NOT found</b>'));
-    const rows=document.querySelectorAll('tr[data-id],tr[data-row]');
-    log('Task rows detected: '+rows.length);
-    if(!s){
-      const inps=[...document.querySelectorAll('input')].filter(visible).map(i=>'"'+(i.getAttribute('placeholder')||i.name||i.id||'?')+'"').slice(0,12);
-      log('Text inputs I can see: '+(inps.join(', ')||'none'));
-    }
-    setButtons([
-      {label:'▶ FILL THE TASK', bg:'#2563eb', fg:'#fff', fn:fillFromClipboard},
-      {label:'Close', fn:()=>panel().remove()}
-    ]);
-  }
-
-  function boot(){
-    const hash = readHash();
-    const q = getQ();
-    if(hash){ panel(); startQueue(hash); return; }                 // came in via the URL (if it survived)
-    if(q && (Date.now()-(q.ts||0) < 30*60000) && q.i < q.tasks.length){ panel(); processNext(); return; }   // resume after a Submit reload
-    if(q) clearQ();
-    panel(); diagnostics();                                        // idle: show status + the clipboard button
-  }
-  function start(){ setTimeout(boot, 1500); }   // let the ~10s page finish loading before we act
-  if(document.readyState==='complete') start();
-  else window.addEventListener('load', start);
 })();
