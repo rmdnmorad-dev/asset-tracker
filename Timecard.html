@@ -477,6 +477,12 @@
   @media (max-width:1200px){ .hoursind{display:none !important} }
   /* click a box to SELECT it (highlight); double-click to EDIT it — Excel-style */
   td.cellsel{outline:2px solid #2563eb !important;outline-offset:-2px;position:relative;z-index:4}
+  /* 🚀 rocket: appears in a task cell only when it holds a 6-digit task # — copies that task's hours for the Nexus uploader */
+  td.taskcell{position:relative}
+  .rocketbtn{position:absolute;right:0;top:50%;transform:translateY(-50%);border:0;background:transparent;
+    font-size:14px;line-height:1;cursor:pointer;padding:1px 2px;display:none;z-index:6}
+  .rocketbtn.show{display:inline-block}
+  .rocketbtn:hover{transform:translateY(-50%) scale(1.28)}
   #clipHelper{position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0}
   .greact{height:120px;border-radius:9px;display:flex;align-items:center;justify-content:center;
     text-align:center;font-weight:bold;font-size:13px;cursor:pointer;color:#fff;background:#1d4ed8;padding:6px}
@@ -1495,7 +1501,7 @@ function buildTable(){
       h += '<tr class="taskrow'+(SECTIONS[si].tall?' tall':'')+'">';
       for(const f of ['task','notes','project','contractor','job']){
         if(f==='task'){          // Task #: type anything (remembered) or pick from the TASKS legend
-          h += '<td class="b tinfo"><input class="cell task redtx taskpick" title="Type a task # or pick one" data-row="'+ri+'" data-f="task" spellcheck="false" autocomplete="off"></td>';
+          h += '<td class="b tinfo taskcell"><input class="cell task redtx taskpick" title="Type a task # or pick one" data-row="'+ri+'" data-f="task" spellcheck="false" autocomplete="off"><button type="button" class="rocketbtn" data-row="'+ri+'" tabindex="-1" title="Copy this task\'s hours to paste into the Nexus uploader">🚀</button></td>';
         }else{                   // NOTES / PROJECT / CONTRACTOR / JOB TYPE grow taller as you type
           h += '<td class="b tinfo"><textarea class="cell task redtx grow" rows="1" data-row="'+ri+'" data-f="'+f+'" spellcheck="false" autocomplete="off"></textarea></td>';
         }
@@ -1535,6 +1541,54 @@ function buildTable(){
   h += '</table>';
   document.getElementById('tblhost').innerHTML = h;
   applyColWidths();
+}
+
+/* ---------------- 🚀 rocket: copy a task's hours for the Nexus uploader ---------------- */
+function mdyPad(d){ return pad2(d.getMonth()+1)+'/'+pad2(d.getDate())+'/'+d.getFullYear(); }
+// one entry per day the task has hours: {task, hours, date (MM/DD/YYYY), desc(notes)}
+function taskEntries(ri){
+  const w = week(), r = w.rows[ri]; if(!r) return [];
+  const task = String(r.task||'').trim();
+  if(!/^\d{6}$/.test(task)) return [];
+  const notes = String(r.notes||'').replace(/\s*\r?\n\s*/g,' ').trim();
+  const dates = weekDates(), out = [];
+  for(let d=0; d<7; d++){
+    const hrs = num(r.h[d]);                    // the hours you typed (real hours)
+    if(hrs <= 0) continue;
+    out.push({ task, hours: hrs, date: mdyPad(dates[d]), desc: notes });
+  }
+  return out;
+}
+function copyText(text){
+  try{ const ta=document.createElement('textarea'); ta.value=text; ta.style.cssText='position:fixed;left:-9999px;top:0';
+    document.body.appendChild(ta); ta.focus(); ta.select(); const ok=document.execCommand('copy'); ta.remove(); if(ok) return true; }catch(e){}
+  try{ if(navigator.clipboard){ navigator.clipboard.writeText(text); return true; } }catch(e){}
+  return false;
+}
+function refreshRockets(){
+  document.querySelectorAll('#tblhost td.taskcell').forEach(td=>{
+    const inp = td.querySelector('input[data-f="task"]'), btn = td.querySelector('.rocketbtn');
+    if(!inp || !btn) return;
+    const on = /^\d{6}$/.test(String(inp.value||'').trim());
+    btn.classList.toggle('show', on);
+    inp.style.paddingRight = on ? '18px' : '';
+  });
+}
+function rocketCopy(ri){
+  const w = week(), task = String((w.rows[ri]||{}).task||'').trim();
+  const entries = taskEntries(ri);
+  if(!entries.length){ toast('🚀 Task <b>'+esc(task)+'</b> has no hours entered this week to upload.'); return; }
+  if(copyText(JSON.stringify(entries)))
+    toast('🚀 Copied task <b>'+esc(task)+'</b> ('+entries.length+' day'+(entries.length>1?'s':'')+') — switch to <b>Nexus</b> and paste (Ctrl+V) into the uploader panel.', 8000);
+  else toast('⚠ Could not copy to the clipboard.');
+}
+function bindRockets(){
+  const host = document.getElementById('tblhost'); if(!host) return;
+  // don't let a rocket click select/edit the underlying cell
+  host.addEventListener('mousedown', e=>{ if(e.target.closest && e.target.closest('.rocketbtn')) e.stopPropagation(); }, true);
+  host.addEventListener('click', e=>{ const btn = e.target.closest && e.target.closest('.rocketbtn'); if(!btn) return;
+    e.preventDefault(); e.stopPropagation(); rocketCopy(+btn.dataset.row); });
+  host.addEventListener('input', e=>{ if(e.target && e.target.dataset && e.target.dataset.f==='task') refreshRockets(); });
 }
 
 /* ---------------- adjustable column widths ---------------- */
@@ -1601,6 +1655,7 @@ function renderWeek(){
   });
   growAll();
   recalc();
+  refreshRockets();
 }
 function autoGrow(el){ if(el && el.tagName==='TEXTAREA'){ el.style.height='auto'; el.style.height=el.scrollHeight+'px'; } }
 function growAll(){ document.querySelectorAll('#tblhost textarea.cell').forEach(autoGrow); }
@@ -3787,6 +3842,7 @@ function applyGames(){
 /* ---------------- init ---------------- */
 bindSheetInputs();
 bindClipboard();
+bindRockets();
 bindHeader();
 bindWeekNav();
 bindSettings();
