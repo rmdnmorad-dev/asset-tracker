@@ -546,6 +546,7 @@
   <div class="grp">
     <button class="btn" id="btnSearch" title="Search every timecard (Ctrl+F)">🔍 Search</button>
     <button class="btn" id="btnSettings">⚙ Settings</button>
+    <span style="font-size:10px;color:#9aa4b2;align-self:center;margin-left:1px" title="Version 3.1">v3.1</span>
   </div>
   <div id="hoursInd" class="hoursind" title="Total hours this week on whatever box you click / hover"></div>
   <div class="grp right">
@@ -649,7 +650,6 @@
     <div class="fld" style="flex:1 1 100%"><span>SAVE / EXPORT</span>
       <div style="display:flex;gap:8px;flex-wrap:wrap;padding:4px 2px">
         <button class="btn2" type="button" id="btnSavePdfS">📄 Save PDF</button>
-        <button class="btn2" type="button" id="btnSaveXls">📊 Save as Excel (.xlsx)</button>
         <button class="btn2" type="button" id="btnResetCols">↔ Reset column widths</button>
       </div>
     </div>
@@ -3841,9 +3841,8 @@ function bindEmailButtons(){
     document.addEventListener('click',e=>{ if(!menu.hidden && !menu.contains(e.target) && e.target!==sendBtn) menu.hidden=true; });
     ['btnImg','btnTxt','btnPdf'].forEach(id=>{ const b=document.getElementById(id); if(b) b.addEventListener('click',()=>{ menu.hidden=true; }); });
   }
-  // Save-as buttons now live in Settings
+  // Save PDF lives in Settings
   const sp=document.getElementById('btnSavePdfS'); if(sp) sp.onclick=ev=>withBusy(ev.currentTarget, savePdfNow);
-  const sx=document.getElementById('btnSaveXls'); if(sx) sx.onclick=()=>saveExcelNow();
 }
 async function savePdfNow(){ toast('⬇ Building the PDF…'); download(fileBase()+'.pdf', await buildSearchablePdf(sendDays())); toast('⬇ <b>'+fileBase()+'.pdf</b> saved.', 7000); }
 /* ---------------- Save as Excel: a real, styled .xlsx that mirrors the ISAT template ----------------
