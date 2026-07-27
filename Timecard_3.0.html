@@ -477,6 +477,7 @@
   /* Send Email dropdown */
   .sendmenu{position:absolute;top:calc(100% + 6px);left:0;z-index:50;background:#fff;border:1px solid #ccc;border-radius:8px;
     box-shadow:0 8px 24px rgba(0,0,0,.25);padding:6px;display:flex;flex-direction:column;gap:4px;min-width:150px}
+  .sendmenu[hidden]{display:none}          /* the hidden attribute must win over display:flex */
   .sendmenu .btn2{width:100%;text-align:left;background:#fff;color:#111;border:1px solid #dfe3ea}
   .sendmenu .btn2:hover{background:#eef3fb}
   .totcell.mismatch{background:#ff3b30 !important;color:#fff !important;box-shadow:0 0 8px 2px rgba(255,59,48,.8);animation:tcmis 1s ease-in-out infinite alternate}
@@ -648,19 +649,29 @@
     <div class="fld" style="flex:1 1 100%"><span>SAVE / EXPORT</span>
       <div style="display:flex;gap:8px;flex-wrap:wrap;padding:4px 2px">
         <button class="btn2" type="button" id="btnSavePdfS">📄 Save PDF</button>
-        <button class="btn2" type="button" id="btnSaveXls">📊 Save as Excel (.csv)</button>
+        <button class="btn2" type="button" id="btnSaveXls">📊 Save as Excel (.xlsx)</button>
         <button class="btn2" type="button" id="btnResetCols">↔ Reset column widths</button>
       </div>
     </div>
   </div>
   <div class="row" style="margin-top:6px">
     <div class="fld" style="flex:1 1 100%">
-      <span>YOUR DATA FILE — everything auto-saves inside this browser. Use the one button below to <b>open an existing <code>.json</code> file</b> (its contents load straight into the tool) or, if you don’t have one yet, <b>create a new file</b> in a folder you pick. From then on that same file updates itself on every change — settings, drop-down memory and every saved week:</span>
+      <span>YOUR DATA FILE — everything already auto-saves inside this browser. You can also keep it in a real <code>.json</code> file:</span>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:4px 2px">
-        <button class="btn2" type="button" id="btnDataFile">📂 Open / create data file (.json)…</button>
+        <button class="btn2" type="button" id="btnDataFile">🔗 Link a data file (.json)…</button>
+        <button class="btn2" type="button" id="btnBackup">💾 Save backup</button>
         <span id="saveFileStat" style="font-size:11px;color:#777">Not linked — your data is saved inside this browser only.</span>
       </div>
+      <div style="font-size:11px;color:#8a5a00;background:#fff8e6;border:1px solid #f0d98a;border-radius:6px;padding:6px 8px;margin:2px 0;line-height:1.45">
+        ⚠ <b>Link</b> opens an existing <code>.json</code> and <b>loads it INTO this browser</b> — this <u>replaces</u> everything currently here (all weeks, settings and memory) with that file’s contents. On a brand-new browser with no file yet, pick a folder to create one. Once linked, every change is written straight back to that file automatically.<br>
+        ⚠ <b>Save backup</b> writes a one-time <code>.json</code> snapshot to your Downloads. It does <u>not</u> stay linked — anything you change afterwards is <b>not</b> saved into it. Use it to move the tool to another computer (link it there), or as a safety copy.
+      </div>
       <input type="file" id="importFile" accept=".json,application/json" style="display:none">
+    </div>
+  </div>
+  <div class="row" style="margin-top:6px">
+    <div class="fld" style="flex:1 1 100%"><span>KEYBOARD SHORTCUTS</span>
+      <div id="shortcutHelp" style="font-size:11px;color:#555;background:#f6f7f9;border:1px solid #e2e6ec;border-radius:6px;padding:8px 10px;line-height:1.7;column-count:2;column-gap:26px"></div>
     </div>
   </div>
 </div>
@@ -2099,16 +2110,17 @@ function commitValue(inp, finalize){
   }else{
     w.rows[+inp.dataset.row][inp.dataset.f] = v;
   }
-  // remember Project + Contractor per 6-digit task #, and auto-fill them for a repeated task #
+  // remember notes/project/contractor/job type per task #, and auto-fill the rest of the line for a repeated task #
+  const TASK_MEM = ['notes','project','contractor','job'];
   if(finalize && inp.dataset.row!==undefined){
     const r = w.rows[+inp.dataset.row];
     const task = String(r.task||'').trim();
-    if(/^\d{6}$/.test(task)){
+    if(/^\d{4,}$/.test(task)){                 // any task number of 4+ digits (6- and 7-digit numbers included)
       state.taskInfo = state.taskInfo || {};
       if(inp.dataset.f==='task'){
         const mem = state.taskInfo[task];
         if(mem){
-          ['notes','project','contractor'].forEach(f=>{
+          TASK_MEM.forEach(f=>{                 // fill notes, project, contractor AND job type
             if(!String(r[f]||'').trim() && mem[f]){
               r[f] = mem[f];
               const cell = document.querySelector('.cell[data-row="'+inp.dataset.row+'"][data-f="'+f+'"]');
@@ -2116,7 +2128,7 @@ function commitValue(inp, finalize){
             }
           });
         }
-      }else if(inp.dataset.f==='notes' || inp.dataset.f==='project' || inp.dataset.f==='contractor'){
+      }else if(TASK_MEM.indexOf(inp.dataset.f)>=0){
         const m = state.taskInfo[task] = state.taskInfo[task] || {};
         m[inp.dataset.f] = String(r[inp.dataset.f]||'').trim();
       }
@@ -2154,6 +2166,33 @@ function setWeek(key){
   weekKey = key;
   renderWeek();
   save();
+}
+function buildShortcutHelp(){
+  const host = document.getElementById('shortcutHelp'); if(!host) return;
+  const rows = [
+    ['Double-click a time cell','open the time picker'],
+    ['Double-click / Enter / F2','edit a cell'],
+    ['Single click','select a cell'],
+    ['Type on a selected cell','edit &amp; replace it'],
+    ['Arrows','move the selection'],
+    ['Shift + Arrows','extend the selection'],
+    ['Ctrl/⌘ + click','add / remove a cell'],
+    ['Shift + click','select a range'],
+    ['Drag the mouse','box-select a block'],
+    ['Ctrl/⌘ + A','select every cell'],
+    ['Home / End','jump to start / end of row'],
+    ['Tab / Shift + Tab','next / previous cell — also picks the highlighted drop-down suggestion'],
+    ['Enter (in a suggestion)','pick the highlighted suggestion'],
+    ['Enter (editing)','save &amp; move down one row'],
+    ['Esc','clear selection / close pop-ups'],
+    ['Ctrl/⌘ + C / X / V','copy / cut / paste (shaped: block→block, column→column)'],
+    ['Delete / Backspace','clear the selected cells'],
+    ['Ctrl/⌘ + Z','undo'],
+    ['Ctrl/⌘ + Y  or  Ctrl/⌘ + Shift + Z','redo'],
+    ['Ctrl/⌘ + D','duplicate the current row'],
+    ['Ctrl/⌘ + F','find / search the sheet']
+  ];
+  host.innerHTML = rows.map(r=>'<div style="break-inside:avoid"><kbd style="background:#fff;border:1px solid #cfd4dc;border-bottom-width:2px;border-radius:4px;padding:1px 5px;font-family:monospace;font-size:10.5px;color:#111">'+r[0]+'</kbd> — '+r[1]+'</div>').join('');
 }
 function bindWeekNav(){
   const wp = document.getElementById('weekPick');
@@ -2300,10 +2339,16 @@ function bindSettings(){
   // reset column widths to defaults
   const rc=document.getElementById('btnResetCols');
   if(rc) rc.onclick=()=>{ state.settings.colWidths = DEFAULT_COLW.slice(); applyColWidths(); save(); toast('↔ Column widths reset to default.'); };
-  // ONE data-file button: open an existing .json (loads it INTO this browser) or create a new one
+  // Link button: open an existing .json (loads it INTO this browser) + auto-save to it from then on
   const bdf=document.getElementById('btnDataFile');
   if(bdf) bdf.onclick = openOrCreateDataFile;
+  // Save backup: a one-time .json snapshot to Downloads (does NOT stay linked)
+  const bbk=document.getElementById('btnBackup');
+  if(bbk) bbk.onclick = ()=>{ download('Timecard_backup_'+isoDate(new Date())+'.json',
+      new Blob([JSON.stringify(state,null,1)], {type:'application/json'}));
+    toast('💾 Backup saved to your Downloads — it holds every week, your settings and drop-down memory. It is a snapshot; it won’t keep updating.', 9000); };
   updateSaveFileUI();
+  buildShortcutHelp();
   // Firefox / Safari fallback: a normal file input that loads a .json into memory
   const imp=document.getElementById('importFile');
   if(imp) imp.addEventListener('change', e=>{
@@ -3801,24 +3846,191 @@ function bindEmailButtons(){
   const sx=document.getElementById('btnSaveXls'); if(sx) sx.onclick=()=>saveExcelNow();
 }
 async function savePdfNow(){ toast('⬇ Building the PDF…'); download(fileBase()+'.pdf', await buildSearchablePdf(sendDays())); toast('⬇ <b>'+fileBase()+'.pdf</b> saved.', 7000); }
-function csvCell(s){ s=String(s==null?'':s); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; }
+/* ---------------- Save as Excel: a real, styled .xlsx that mirrors the ISAT template ----------------
+   Built by hand (store-only ZIP + OOXML) so it needs no library and looks like the uploaded sheet:
+   merged day columns, bold labels, red data text, blue section headers, yellow Total-Hours, borders. */
+function crc32(buf){
+  let crc=0xFFFFFFFF;
+  for(let i=0;i<buf.length;i++){ crc^=buf[i]; for(let k=0;k<8;k++) crc=(crc>>>1)^(0xEDB88320 & -(crc&1)); }
+  return (crc^0xFFFFFFFF)>>>0;
+}
+function zipStore(files){
+  const enc=new TextEncoder();
+  const u16=n=>[n&255,(n>>8)&255], u32=n=>[n&255,(n>>8)&255,(n>>16)&255,(n>>>24)&255];
+  const parts=[], central=[]; let offset=0;
+  files.forEach(f=>{
+    const data = typeof f.data==='string' ? enc.encode(f.data) : f.data;
+    const name = enc.encode(f.name), crc = crc32(data);
+    const local = new Uint8Array([].concat([0x50,0x4b,0x03,0x04], u16(20),u16(0),u16(0), u16(0),u16(0),
+      u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0)));
+    parts.push(local, name, data);
+    central.push(new Uint8Array([].concat([0x50,0x4b,0x01,0x02], u16(20),u16(20),u16(0),u16(0), u16(0),u16(0),
+      u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0),u16(0),u16(0),u16(0), u32(0), u32(offset))), name);
+    offset += local.length + name.length + data.length;
+  });
+  let cenSize=0; central.forEach(c=>cenSize+=c.length);
+  const end=new Uint8Array([].concat([0x50,0x4b,0x05,0x06], u16(0),u16(0), u16(files.length),u16(files.length),
+    u32(cenSize), u32(offset), u16(0)));
+  return new Blob(parts.concat(central,[end]), {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+}
+function xesc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function colL(n){ let s=''; while(n>0){ const m=(n-1)%26; s=String.fromCharCode(65+m)+s; n=(n-m-1)/26; } return s; }
+function xlsxStyles(){
+  const fonts=['<font><sz val="11"/><name val="Calibri"/></font>',
+    '<font><b/><sz val="22"/><name val="Calibri"/></font>',
+    '<font><sz val="9"/><name val="Calibri"/></font>',
+    '<font><b/><sz val="9"/><name val="Calibri"/></font>',
+    '<font><sz val="10"/><name val="Calibri"/></font>',
+    '<font><b/><sz val="10"/><name val="Calibri"/></font>',
+    '<font><sz val="10"/><color rgb="FFFF0000"/><name val="Calibri"/></font>',
+    '<font><sz val="10"/><color rgb="FF00B0F0"/><name val="Calibri"/></font>',
+    '<font><b/><sz val="16"/><color rgb="FF0070C0"/><name val="Calibri"/></font>',
+    '<font><sz val="9"/><color rgb="FFFF0000"/><name val="Calibri"/></font>',
+    '<font><b/><sz val="10"/><color rgb="FFFF0000"/><name val="Calibri"/></font>'];
+  const fills=['<fill><patternFill patternType="none"/></fill>','<fill><patternFill patternType="gray125"/></fill>',
+    '<fill><patternFill patternType="solid"><fgColor rgb="FFFDFDA3"/><bgColor indexed="64"/></patternFill></fill>'];
+  const B='<border><left style="thin"><color indexed="64"/></left><right style="thin"><color indexed="64"/></right><top style="thin"><color indexed="64"/></top><bottom style="thin"><color indexed="64"/></bottom><diagonal/></border>';
+  const borders=['<border><left/><right/><top/><bottom/><diagonal/></border>', B];
+  const C='<alignment horizontal="center" vertical="center"/>', CW='<alignment horizontal="center" vertical="center" wrapText="1"/>', L='<alignment horizontal="left" vertical="center"/>', LN='<alignment horizontal="left"/>';
+  const xf=(fo,fi,bo,al)=>'<xf numFmtId="0" fontId="'+fo+'" fillId="'+fi+'" borderId="'+bo+'" xfId="0" applyFont="1"'+(fi?' applyFill="1"':'')+(bo?' applyBorder="1"':'')+(al?' applyAlignment="1"':'')+'>'+(al||'')+'</xf>';
+  const cellXfs=[
+    '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>',  // 0 base
+    xf(1,0,0,C),   // 1 title
+    xf(2,0,0,LN),  // 2 sz9 left
+    xf(2,0,0,C),   // 3 sz9 center
+    xf(5,0,1,C),   // 4 label bold sz10 center border
+    xf(4,0,1,C),   // 5 value sz10 center border
+    xf(7,0,1,C),   // 6 cyan value border
+    xf(6,0,1,CW),  // 7 red data text border wrap
+    xf(8,0,1,C),   // 8 section header blue border
+    xf(4,2,1,C),   // 9 yellow Total-Hours border
+    xf(2,0,1,C),   // 10 date sz9 center border
+    xf(9,0,0,C),   // 11 red date sz9 center
+    xf(3,0,1,C),   // 12 day-name bold sz9 border
+    xf(3,0,0,C),   // 13 SUNDAY bold sz9
+    xf(4,0,1,L),   // 14 legend desc left border
+    xf(10,0,1,C)   // 15 LEAVES label bold red border
+  ];
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+    '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
+    '<fonts count="'+fonts.length+'">'+fonts.join('')+'</fonts>'+
+    '<fills count="'+fills.length+'">'+fills.join('')+'</fills>'+
+    '<borders count="'+borders.length+'">'+borders.join('')+'</borders>'+
+    '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'+
+    '<cellXfs count="'+cellXfs.length+'">'+cellXfs.join('')+'</cellXfs>'+
+    '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+}
 function saveExcelNow(){
-  const w=week(), dates=weekDates(), s=state.settings, rows=[];
-  rows.push(['JORDAN ISAT — Weekly Time Sheet']);
-  rows.push(['Week ending', usDate(fromIso(weekKey)), 'Week', isoWeekNum(dates[3])]);
-  rows.push([]);
-  rows.push(['Task #','Notes','Project','Contractor','Job Type'].concat(DAYS.slice()).concat(['Total']));
-  let ri=0;
+  const w=week(), dates=weekDates(), s=state.settings;
+  const DP=[[6,7],[8,9],[10,11],[12,13],[14,15],[16,17],[18,19]];   // per-day [codeCol, hoursCol]
+  const merges=[];
+  const cS=(ref,st,t)=>'<c r="'+ref+'" s="'+st+'" t="inlineStr"><is><t xml:space="preserve">'+xesc(t)+'</t></is></c>';
+  const cN=(ref,st,n)=>'<c r="'+ref+'" s="'+st+'"><v>'+n+'</v></c>';
+  const cE=(ref,st)=>'<c r="'+ref+'" s="'+st+'"/>';
+  const rowXml={};                                  // rowNumber -> array of cell xml
+  const put=(row,xml)=>{ (rowXml[row]=rowXml[row]||[]).push(xml); };
+  const pairMerged=(row,st,val)=>{ DP.forEach(p=>{ const Lc=colL(p[0])+row, Rc=colL(p[1])+row;
+    merges.push(Lc+':'+Rc); put(row, cS(Lc,st,val(p))); put(row, cE(Rc,st)); }); };
+  const dayWork=d=>{ const dd=w.days[d]; const ti=parseClock(dd.tin), to=parseClock(dd.tout); let t=0; if(ti!=null&&to!=null) t=to-ti;
+    return t-(parseDur(dd.lunch)||0)+(parseDur(dd.meet)||0)+(parseDur(dd.wfh)||0)+(parseDur(dd.leave)||0); };
+
+  // ---- header band (rows 2-6) ----
+  put(2, cS('A2',1,'JORDAN ISAT')); put(2, cS('E2',1,'Weekly Time Sheet'));
+  put(2, cS('Q2',2,'Employee:')); put(2, cS('T2',2,s.employee||''));
+  put(3, cS('Q3',2,'Manager:')); put(3, cS('T3',2,s.manager||''));
+  put(4, cS('A4',3,'SHMEISANI-AMMAN JORDAN')); put(4, cS('Q4',2,'Employee phone:')); put(4, cS('T4',2,s.phone||''));
+  put(5, cS('A5',3,'OFFICE# 714.927.0635 (MAJIC)')); put(5, cS('Q5',2,'Employee e-mail:')); put(5, cS('T5',2,s.email||''));
+  put(6, cS('K6',11, usDate(fromIso(weekKey)))); put(6, cS('M6',13,'SUNDAY  ·  Week '+isoWeekNum(dates[3])));
+  merges.push('A2:C3','E2:P3','A4:C4','A5:C5');
+
+  // ---- day headers (row 8) + Total Hours ----
+  DP.forEach((p,i)=>{ const Lc=colL(p[0])+'8', Rc=colL(p[1])+'8'; merges.push(Lc+':'+Rc);
+    put(8, cS(Lc,12,DAYS[i])); put(8, cE(Rc,12)); });
+  put(8, cS('T8',9,s.totalHoursLabel||'Total Hours')); merges.push('T8:T15');
+
+  // ---- DATE + time rows (9-15) ----
+  const label=(row,st,txt)=>{ merges.push('A'+row+':E'+row); put(row, cS('A'+row,st,txt)); [2,3,4,5].forEach(c=>put(row, cE(colL(c)+row, st))); };
+  label(9,4,'DATE');            pairMerged(9,10,p=>usDate(dates[DP.indexOf(p)]));
+  label(10,4,'TIME IN');        pairMerged(10,5,p=>w.days[DP.indexOf(p)].tin||'');
+  label(11,4,'LUNCH BREAK');    pairMerged(11,5,p=>w.days[DP.indexOf(p)].lunch||'');
+  label(12,4,'TIME OUT');       pairMerged(12,5,p=>w.days[DP.indexOf(p)].tout||'');
+  label(13,4,'MEETING FROM HOME'); pairMerged(13,6,p=>w.days[DP.indexOf(p)].meet||'');
+  label(14,4,'WORKING FROM HOME'); pairMerged(14,6,p=>w.days[DP.indexOf(p)].wfh||'');
+  label(15,15,'LEAVES, VACATIONS, SICK LEAVES, HOLIDAYS'); pairMerged(15,7,p=>w.days[DP.indexOf(p)].leave||'');
+
+  // ---- TOTAL WORK HOURS (16) + column titles (17) ----
+  label(16,4,'TOTAL WORK HOURS');
+  let weekMin=0; DP.forEach((p,i)=>{ const m=dayWork(i); weekMin+=m; const Lc=colL(p[0])+'16', Rc=colL(p[1])+'16';
+    merges.push(Lc+':'+Rc); put(16, cS(Lc,5,fmtDur(m))); put(16, cE(Rc,5)); });
+  put(16, cS('T16',5,fmtDur(weekMin)));
+  ['TASK #','NOTES','PROJECT','CONTRACTOR','JOB TYPE'].forEach((t,i)=>put(17, cS(colL(i+1)+'17',4,t)));
+  DP.forEach(p=>{ put(17, cE(colL(p[0])+'17',5)); put(17, cE(colL(p[1])+'17',5)); }); put(17, cE('T17',5));
+
+  // ---- sections + task rows (dynamic, from row 18) ----
+  let R=18, ri=0; const dayTot=[0,0,0,0,0,0,0]; let grand=0;
   for(let si=0; si<SECTIONS.length; si++){
     if((s.hiddenSections||[])[si]){ ri+=w.secRows[si]; continue; }
-    rows.push(['['+(s.sectionNames[si]||SECTIONS[si].name)+']']);
-    for(let k=0;k<w.secRows[si];k++,ri++){ const r=w.rows[ri]; const dv=[]; let tot=0;
-      for(let d=0;d<7;d++){ const v=num(r.ha[d])+num(r.h[d]); dv.push(v||''); tot+=v; }
-      rows.push([r.task,(r.notes||'').replace(/\n/g,' '),r.project,r.contractor,r.job].concat(dv).concat([tot||''])); }
+    merges.push('A'+R+':T'+R);
+    put(R, cS('A'+R,8, s.sectionNames[si]||SECTIONS[si].name));
+    for(let c=2;c<=20;c++) put(R, cE(colL(c)+R,8));
+    R++;
+    for(let k=0;k<w.secRows[si];k++,ri++){
+      const r=w.rows[ri];
+      put(R, /^\d+$/.test(String(r.task||'').trim()) ? cN('A'+R,5,String(r.task).trim()) : cS('A'+R,5,r.task||''));
+      put(R, cS('B'+R,7,(r.notes||''))); put(R, cS('C'+R,7,r.project||''));
+      put(R, cS('D'+R,7,r.contractor||'')); put(R, cS('E'+R,7,r.job||''));
+      let rt=0;
+      DP.forEach((p,d)=>{
+        const code=String(r.ha[d]==null?'':r.ha[d]).trim(), hrs=String(r.h[d]==null?'':r.h[d]).trim();
+        put(R, code==='' ? cE(colL(p[0])+R,7) : cS(colL(p[0])+R,7,code));
+        put(R, hrs==='' ? cE(colL(p[1])+R,7) : (/^-?\d*\.?\d+$/.test(hrs)? cN(colL(p[1])+R,7,hrs) : cS(colL(p[1])+R,7,hrs)));
+        const v=num(r.ha[d])+num(r.h[d]); rt+=v; dayTot[d]+=v;
+      });
+      grand+=rt;
+      put(R, rt? cN('T'+R,5,+rt.toFixed(2)) : cE('T'+R,5));
+      R++;
+    }
   }
-  const csv=rows.map(r=>r.map(csvCell).join(',')).join('\r\n');
-  download(fileBase()+'.csv', new Blob(['﻿'+csv],{type:'text/csv'}));
-  toast('⬇ <b>'+fileBase()+'.csv</b> saved — opens in Excel.', 7000);
+  // ---- per-day task totals row ----
+  R++;
+  DP.forEach((p,d)=>{ put(R, cE(colL(p[0])+R,5)); put(R, dayTot[d]? cN(colL(p[1])+R,5,+dayTot[d].toFixed(2)) : cE(colL(p[1])+R,5)); });
+  put(R, grand? cN('T'+R,5,+grand.toFixed(2)) : cE('T'+R,5));
+  R+=2;
+
+  // ---- legends ----
+  put(R, cS('A'+R,5,'TASKS :')); put(R, cS('E'+R,5,'JOB TYPES :')); const legTop=R; R++;
+  const tLeg=s.taskLegend||[], jLeg=s.jobLegend||[], legN=Math.max(tLeg.length,jLeg.length);
+  for(let i=0;i<legN;i++){
+    const rr=R+i;
+    if(tLeg[i]){ put(rr, cS('A'+rr,7,tLeg[i][0]||'')); put(rr, cS('B'+rr,14,tLeg[i][1]||'')); merges.push('B'+rr+':C'+rr); put(rr, cE('C'+rr,14)); }
+    if(jLeg[i]){ put(rr, cS('E'+rr,7,jLeg[i][0]||'')); put(rr, cS('F'+rr,14,jLeg[i][1]||'')); merges.push('F'+rr+':H'+rr); put(rr, cE('G'+rr,14)); put(rr, cE('H'+rr,14)); }
+  }
+  const lastRow=R+legN;
+
+  // ---- assemble sheet XML ----
+  const rowNums=Object.keys(rowXml).map(Number).sort((a,b)=>a-b);
+  const sd = rowNums.map(rn=>'<row r="'+rn+'">'+rowXml[rn].join('')+'</row>').join('');
+  const cols='<cols><col min="1" max="1" width="15.7" customWidth="1"/><col min="2" max="2" width="17" customWidth="1"/>'+
+    '<col min="3" max="3" width="20.7" customWidth="1"/><col min="4" max="4" width="14" customWidth="1"/>'+
+    '<col min="5" max="5" width="12" customWidth="1"/><col min="6" max="19" width="6.3" customWidth="1"/>'+
+    '<col min="20" max="20" width="11" customWidth="1"/></cols>';
+  const mc = merges.length? '<mergeCells count="'+merges.length+'">'+merges.map(m=>'<mergeCell ref="'+m+'"/>').join('')+'</mergeCells>' : '';
+  const sheet='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
+    '<dimension ref="A1:T'+lastRow+'"/><sheetViews><sheetView workbookViewId="0"/></sheetViews>'+
+    '<sheetFormatPr defaultRowHeight="15"/>'+cols+'<sheetData>'+sd+'</sheetData>'+mc+
+    '<pageMargins left="0.3" right="0.3" top="0.3" bottom="0.3" header="0.3" footer="0.3"/></worksheet>';
+
+  const files=[
+    {name:'[Content_Types].xml', data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'},
+    {name:'_rels/.rels', data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'},
+    {name:'xl/workbook.xml', data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="IT Timecard" sheetId="1" r:id="rId1"/></sheets></workbook>'},
+    {name:'xl/_rels/workbook.xml.rels', data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'},
+    {name:'xl/styles.xml', data:xlsxStyles()},
+    {name:'xl/worksheets/sheet1.xml', data:sheet}
+  ];
+  download(fileBase()+'.xlsx', zipStore(files));
+  toast('⬇ <b>'+fileBase()+'.xlsx</b> saved — opens in Excel in the ISAT template format.', 7000);
 }
 
 /* ---------------- tamper-resistant credit ---------------- */
