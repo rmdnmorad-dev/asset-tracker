@@ -2879,26 +2879,61 @@ async function buildSearchablePdf(days){
   const DYS = days && days.length ? days : [0,1,2,3,4,5,6];
   const w = week(), dates = weekDates(), s = state.settings;
   const daily = DYS.length === 1;
-  const doc = new jsPDF({orientation: daily ? 'portrait' : 'landscape', unit:'pt', format:'a4', compress:true});
-  const pageW = doc.internal.pageSize.getWidth(), pageH = doc.internal.pageSize.getHeight();
-  const M = 24, BOTTOM = pageH - M;
+  const M = 24;
   const hx = h=>{ h=String(h||'#000').replace('#',''); if(h.length===3) h=h.split('').map(c=>c+c).join(''); const n=parseInt(h,16)||0; return [(n>>16)&255,(n>>8)&255,n&255]; };
+  const infoFields = ['task','notes','project','contractor','job'];
+  const LINE = 8.4;
 
-  // ---- column geometry ----
-  const totalW = daily ? 52 : 46;
-  const codeW  = daily ? 24 : 16, hrsW = daily ? 42 : 26;
-  const dayW   = codeW + hrsW;
-  const W = pageW - 2*M;
-  let infoW = W - totalW - dayW*DYS.length;
-  if(infoW < 210) infoW = 210;                                  // keep the 5 info columns legible
-  const wts = [0.13,0.31,0.27,0.18,0.11]; const iw = wts.map(x=>Math.round(infoW*x));
-  iw[1] += infoW - iw.reduce((a,b)=>a+b,0);                      // fix rounding into NOTES
-  const infoX = []; let cx = M; for(const cw of iw){ infoX.push(cx); cx += cw; }
-  const infoRight = cx;
-  const dayX = []; for(let i=0;i<DYS.length;i++){ dayX.push(cx); cx += dayW; }
-  const totalX = cx;
+  // ---- measure with a scratch doc so the page can be sized to fit everything (no squeezing / ellipsis) ----
+  const md = new jsPDF({unit:'pt', format:'a4'});
+  // info column widths (fixed, roomy — like the on-screen sheet)
+  const iw = [64, 132, 132, 96, 88];
+  const infoW = iw.reduce((a,b)=>a+b,0);
+  // auto-fit the day CODE column to the longest job code so it is shown in full
+  let maxCode='';
+  for(const r of w.rows) for(const d of DYS){ const c=String(r.ha[d]==null?'':r.ha[d]); if(c.length>maxCode.length) maxCode=c; }
+  md.setFont('helvetica','normal'); md.setFontSize(7.5);
+  const codeW = Math.max(22, Math.min(84, (maxCode ? md.getTextWidth(maxCode) : 0) + 9));
+  let hrsW = 34;
+  // make sure the (merged) day header can show the full day name, e.g. WEDNESDAY
+  md.setFont('helvetica','bold'); md.setFontSize(8);
+  const dayHdrNeed = Math.max.apply(null, DYS.map(d=>md.getTextWidth(DAYS[d]))) + 8;
+  let dayW = codeW + hrsW;
+  if(dayW < dayHdrNeed){ hrsW += (dayHdrNeed - dayW); dayW = dayHdrNeed; }
+  const totalW = 54;
+  const contentW = infoW + dayW*DYS.length + totalW;
+  const pageW = contentW + 2*M;
 
-  // ---- primitive helpers ----
+  // column x positions
+  const infoX = []; let cx0 = M; for(const cw of iw){ infoX.push(cx0); cx0 += cw; }
+  const dayX = []; for(let i=0;i<DYS.length;i++){ dayX.push(cx0); cx0 += dayW; }
+  const totalX = cx0;
+
+  // pre-compute task-row heights (wrapped notes decide the height), grouped by visible section
+  md.setFont('helvetica','normal'); md.setFontSize(7.5);
+  const sects = []; let ri0 = 0;
+  for(let si=0; si<SECTIONS.length; si++){
+    if((s.hiddenSections||[])[si]){ ri0 += w.secRows[si]; continue; }
+    const rows = [];
+    for(let k=0; k<w.secRows[si]; k++, ri0++){
+      const r = w.rows[ri0];
+      const wrapped = infoFields.map((f,i)=>md.splitTextToSize(String(r[f]||''), iw[i]-4));
+      const nLines = Math.max(1, ...wrapped.map(a=>a.length));
+      rows.push({r, wrapped, rH: Math.max(16, nLines*LINE + 5)});
+    }
+    sects.push({name: s.sectionNames[si]||SECTIONS[si].name, rows});
+  }
+  const tLeg = s.taskLegend||[], jLeg = s.jobLegend||[];
+  const topH = 14, rowH = 13;
+  const gridHeadH = topH + topH + 6*rowH + topH + rowH;     // daynames + DATE + 6 time rows + TOTAL WORK + titles
+  let bodyH = 0; sects.forEach(sec=>{ bodyH += 15; sec.rows.forEach(rw=>bodyH += rw.rH); });
+  const legN = Math.max(tLeg.length, jLeg.length);
+  const legH = legN ? (13 + legN*12 + 6) : 0;
+  const pageH = M + 50 + gridHeadH + bodyH + 20 + legH + M;
+
+  // ---- the real, exactly-sized page (orientation must match, or jsPDF swaps W/H) ----
+  const doc = new jsPDF({orientation: pageW>=pageH?'landscape':'portrait', unit:'pt', format:[pageW, pageH], compress:true});
+
   function box(x,y,wd,ht,bg){
     if(bg){ const c=hx(bg); doc.setFillColor(c[0],c[1],c[2]); }
     doc.setDrawColor(0,0,0); doc.setLineWidth(0.4);
@@ -2910,17 +2945,21 @@ async function buildSearchablePdf(days){
     const size=o.size||8; doc.setFontSize(size);
     const col=o.color||[0,0,0]; doc.setTextColor(col[0],col[1],col[2]);
     let disp=str;
-    while(disp.length>1 && doc.getTextWidth(disp) > wd-4){ disp=disp.slice(0,-1); }   // clip to the cell
+    while(disp.length>1 && doc.getTextWidth(disp) > wd-4){ disp=disp.slice(0,-1); }   // last-resort clip
     if(disp!==str && disp.length>1) disp=disp.slice(0,-1)+'…';
     const align=o.align||'center';
-    const tx = align==='left'? x+2 : align==='right'? x+wd-2 : x+wd/2;
+    const tx = align==='left'? x+3 : align==='right'? x+wd-3 : x+wd/2;
     doc.text(disp, tx, y+ht/2+size*0.35, {align});
   }
-  // a label cell spanning all five info columns
-  function infoLabel(y,ht,text,bg,color,extraBold){ box(M,y,infoW,ht,bg); T(text,M,y,infoW,ht,{size:8,bold:extraBold!==false,color:color||[0,0,0]}); }
-  function dayCells(y,ht,getText,bg,color){ DYS.forEach((d,i)=>{ box(dayX[i],y,dayW,ht,bg); T(getText(d),dayX[i],y,dayW,ht,{size:8,color:color||[0,0,0]}); }); }
+  function Tlines(lines,x,y,wd,ht,o){
+    o=o||{}; const size=o.size||8; doc.setFont('helvetica',o.bold?'bold':'normal'); doc.setFontSize(size);
+    const col=o.color||[0,0,0]; doc.setTextColor(col[0],col[1],col[2]);
+    const lh=size*1.18, blockH=lines.length*lh; let ly=y+(ht-blockH)/2+size*0.86;
+    lines.forEach(ln=>{ doc.text(ln, x+wd/2, ly, {align:'center'}); ly+=lh; });
+  }
+  const infoLabel = (y,ht,text,bg,color)=>{ box(M,y,infoW,ht,bg); T(text,M,y,infoW,ht,{size:8,bold:true,color:color||[0,0,0]}); };
+  const dayCells = (y,ht,getText,bg,color)=>{ DYS.forEach((d,i)=>{ box(dayX[i],y,dayW,ht,bg); T(getText(d),dayX[i],y,dayW,ht,{size:8,color:color||[0,0,0],bold:false}); }); };
 
-  // ---- day totals (work hours) + task totals, for the header + mismatch colouring ----
   const dayWork = d=>{ const dd=w.days[d]; const ti=parseClock(dd.tin), to=parseClock(dd.tout); let t=0; if(ti!=null&&to!=null) t=to-ti;
     return t-(parseDur(dd.lunch)||0)+(parseDur(dd.meet)||0)+(parseDur(dd.wfh)||0)+(parseDur(dd.leave)||0); };
   const taskTot = {}; DYS.forEach(d=>{ let t=0; for(const r of w.rows) t+=num(r.ha[d])+num(r.h[d]); taskTot[d]=t; });
@@ -2945,72 +2984,46 @@ async function buildSearchablePdf(days){
   doc.text('E-mail: '+(s.email||''), rx, y+38, {align:'right'});
   y += 50;
 
-  // ---- header grid (day names → DATE → time rows → TOTAL WORK HOURS → column titles) ----
-  const dayLabel = d => daily ? DAYS[d] : DAYS[d].slice(0,3);
-  const topH = 14, rowH = 13;
+  // ---- header grid ----
   const headTop = y;
-  // day names
-  dayCells(y, topH, d=>dayLabel(d), '#BFBFBF');
+  dayCells(y, topH, d=>DAYS[d], '#BFBFBF', [0,0,0]);      // FULL day names
+  // day-name cells bold
+  DYS.forEach((d,i)=>{ box(dayX[i],y,dayW,topH,'#BFBFBF'); T(DAYS[d],dayX[i],y,dayW,topH,{size:8,bold:true}); });
   y += topH;
-  // DATE
   infoLabel(y, topH, 'DATE', '#D9D9D9');
-  dayCells(y, topH, d=>usDate(dates[d]), '#FFFFFF');
+  dayCells(y, topH, d=>usDate(dates[d]), '#FFFFFF', [17,17,17]);
   y += topH;
-  // time rows
   const timeRows = [
     ['TIME IN','tin','#FBD5B5',[255,0,0]], ['LUNCH BREAK','lunch','#DCE5F1',[17,17,17]],
     ['TIME OUT','tout','#FBD5B5',[255,0,0]], ['MEETING FROM HOME','meet','#DBEEF3',[0,176,240]],
-    ['WORKING FROM HOME','wfh','#DBEEF3',[0,176,240]], ['LEAVES / VACATION / SICK / HOLIDAYS','leave','#F2F2F2',[255,0,0]]
+    ['WORKING FROM HOME','wfh','#DBEEF3',[0,176,240]], ['LEAVES, VACATIONS, SICK LEAVES, HOLIDAYS','leave','#F2F2F2',[255,0,0]]
   ];
   for(const [lbl,f,bg,col] of timeRows){
     infoLabel(y, rowH, lbl, '#D9D9D9', f==='leave'?[255,0,0]:[0,0,0]);
     dayCells(y, rowH, d=>w.days[d][f], bg, col);
     y += rowH;
   }
-  // TOTAL WORK HOURS (day value red when it doesn't match that day's logged task hours)
   infoLabel(y, topH, 'TOTAL WORK HOURS', '#D9D9D9');
   DYS.forEach((d,i)=>{ box(dayX[i],y,dayW,topH,'#FBD5B5');
     const mism = Math.abs(dayWork(d)/60 - taskTot[d]) > 0.001;
     T(fmtDur(dayWork(d)), dayX[i], y, dayW, topH, {size:8, bold:true, color: mism?[255,0,0]:[17,17,17]}); });
-  // total column header cell (spans the header band) + week total
+  // total-hours header spans the whole band, wrapped so it always shows in full
   box(totalX, headTop, totalW, (y-headTop), '#FDFDA3');
-  T(s.totalHoursLabel||'Total Hours', totalX, headTop, totalW, (y-headTop)-topH, {size:8, bold:true});
+  Tlines((s.totalHoursLabel||'Total Hours').split(/\s+/), totalX, headTop, totalW, (y-headTop)-topH, {size:8, bold:true});
   box(totalX, y, totalW, topH, '#FBD5B5'); T(fmtDur(weekWorkAll), totalX, y, totalW, topH, {size:8, bold:true});
   y += topH;
   // column titles
-  const titleY = y;
   ['TASK #','NOTES','PROJECT','CONTRACTOR','JOB TYPE'].forEach((c,i)=>{ box(infoX[i],y,iw[i],rowH,'#D9D9D9'); T(c,infoX[i],y,iw[i],rowH,{size:7.5,bold:true}); });
-  DYS.forEach((d,i)=>{ box(dayX[i],y,dayW,rowH,'#D9D9D9'); });
+  DYS.forEach((d,i)=>box(dayX[i],y,dayW,rowH,'#D9D9D9'));
   box(totalX,y,totalW,rowH,'#D9D9D9');
   y += rowH;
 
-  // redraw the compact column-title header after a page break
-  function newPage(){
-    doc.addPage(); y = M;
-    ['TASK #','NOTES','PROJECT','CONTRACTOR','JOB TYPE'].forEach((c,i)=>{ box(infoX[i],y,iw[i],rowH,'#D9D9D9'); T(c,infoX[i],y,iw[i],rowH,{size:7.5,bold:true}); });
-    DYS.forEach((d,i)=>{ box(dayX[i],y,dayW,rowH,'#BFBFBF'); T(dayLabel(d),dayX[i],y,dayW,rowH,{size:7.5,bold:true}); });
-    box(totalX,y,totalW,rowH,'#D9D9D9'); T(s.totalHoursLabel||'Total',totalX,y,totalW,rowH,{size:7,bold:true});
-    y += rowH;
-  }
-
-  // ---- task sections ----
-  const LINE = 8.4;                       // wrapped-line height at 7.5pt
-  let ri = 0, grand = 0; const dayTaskTot = {}; DYS.forEach(d=>dayTaskTot[d]=0);
-  const infoFields = ['task','notes','project','contractor','job'];
-  for(let si=0; si<SECTIONS.length; si++){
-    if((s.hiddenSections||[])[si]){ ri += w.secRows[si]; continue; }
-    if(y + 18 > BOTTOM) newPage();
-    box(M, y, W, 15, '#FFFFFF'); T(s.sectionNames[si]||SECTIONS[si].name, M, y, W, 15, {size:11, bold:true, color:[0,112,192]});
+  // ---- task sections (single sized page, no pagination) ----
+  let grand = 0; const dayTaskTot = {}; DYS.forEach(d=>dayTaskTot[d]=0);
+  sects.forEach(sec=>{
+    box(M, y, contentW, 15, '#FFFFFF'); T(sec.name, M, y, contentW, 15, {size:11, bold:true, color:[0,112,192]});
     y += 15;
-    for(let k=0; k<w.secRows[si]; k++, ri++){
-      const r = w.rows[ri];
-      // wrap the info cells to work out this row's height
-      doc.setFont('helvetica','normal'); doc.setFontSize(7.5);
-      const wrapped = infoFields.map((f,i)=>doc.splitTextToSize(String(r[f]||''), iw[i]-4));
-      const nLines = Math.max(1, ...wrapped.map(a=>a.length));
-      const rH = Math.max(16, nLines*LINE + 5);
-      if(y + rH > BOTTOM){ newPage(); }
-      // info cells
+    sec.rows.forEach(({r, wrapped, rH})=>{
       infoFields.forEach((f,i)=>{
         box(infoX[i], y, iw[i], rH, '#D9D9D9');
         const lines = wrapped[i]; const blockH = lines.length*LINE;
@@ -3018,30 +3031,25 @@ async function buildSearchablePdf(days){
         doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(255,0,0);
         lines.forEach(ln=>{ doc.text(ln, infoX[i]+iw[i]/2, ly, {align:'center'}); ly += LINE; });
       });
-      // day cells: code + hours
       DYS.forEach((d,i)=>{
         dayTaskTot[d] += num(r.ha[d]) + num(r.h[d]);
         box(dayX[i], y, codeW, rH, '#D7E3BC'); T(r.ha[d], dayX[i], y, codeW, rH, {size:7.5, color:[255,0,0]});
         box(dayX[i]+codeW, y, hrsW, rH, '#D7E3BC'); T(r.h[d], dayX[i]+codeW, y, hrsW, rH, {size:7.5, color:[255,0,0]});
       });
-      // whole-week row total
       let rowTot=0; for(let d=0;d<7;d++) rowTot += num(r.ha[d]) + num(r.h[d]); grand += rowTot;
       box(totalX, y, totalW, rH, '#D7E3BC'); T(fmtNum(rowTot), totalX, y, totalW, rH, {size:7.5});
       y += rH;
-    }
-  }
-  // bare per-day task totals (no borders, just numbers) under the grid
-  if(y + 14 > BOTTOM) newPage();
+    });
+  });
+  // bare per-day task totals under the grid
   DYS.forEach((d,i)=>{ T(fmtNum(dayTaskTot[d]), dayX[i], y, dayW, 14, {size:8}); });
   T(fmtNum(grand), totalX, y, totalW, 14, {size:8, bold:true});
   y += 20;
 
-  // ---- legends (TASKS / JOB TYPES) ----
-  const tLeg = s.taskLegend||[], jLeg = s.jobLegend||[];
-  if(tLeg.length || jLeg.length){
-    if(y + 30 > BOTTOM) newPage();
-    const legLineH = 12;
-    const drawLegend = (title, rows, x, codeCW, descCW)=>{
+  // ---- legends (TASKS / JOB TYPES) — cyan codes, lilac descriptions, like the sheet ----
+  if(legN){
+    const legLineH = 12, codeCW = 56;
+    const drawLegend = (title, rows, x, descCW)=>{
       let ly = y;
       box(x, ly, codeCW+descCW, 13, '#D9D9D9'); T(title, x, ly, codeCW+descCW, 13, {size:8, bold:true, align:'left'}); ly += 13;
       rows.forEach(pair=>{
@@ -3049,13 +3057,10 @@ async function buildSearchablePdf(days){
         box(x+codeCW, ly, descCW, legLineH, '#E5E0EC'); T(pair[1], x+codeCW, ly, descCW, legLineH, {size:7.5, align:'left'});
         ly += legLineH;
       });
-      return ly;
     };
-    const codeCW = 54;
-    const leftDesc = daily ? 200 : 230, rightDesc = daily ? 180 : 200;
-    const y1 = drawLegend('TASKS :', tLeg, M, codeCW, leftDesc);
-    const y2 = drawLegend('JOB TYPES :', jLeg, M + codeCW + leftDesc + 24, codeCW, rightDesc);
-    y = Math.max(y1, y2);
+    const leftDesc = 250, rightDesc = 230;
+    drawLegend('TASKS :', tLeg, M, leftDesc);
+    drawLegend('JOB TYPES :', jLeg, M + codeCW + leftDesc + 30, rightDesc);
   }
 
   return doc.output('blob');
