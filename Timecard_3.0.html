@@ -3037,22 +3037,24 @@ async function buildSearchablePdf(days){
     });
   });
 
-  // ---- legends (TASKS / JOB TYPES) — cyan codes, lilac descriptions ----
+  // ---- legends — exactly like the sheet: a small "TASKS :" label box only (no full-width grey header;
+  //      the job legend has no header at all), cyan codes + lilac descriptions ----
   const legTop = y + LEGGAP;
   if(legN){
-    const codeCW = 68;
+    const codeCW = 104, hdrW = 110;                          // sheet: code col 104, small header box 110
     const drawLegend = (title, rows, x, descCW)=>{
       let ly = legTop;
-      box(x, ly, codeCW+descCW, legHeadH, '#D9D9D9'); T(title, x, ly, codeCW+descCW, legHeadH, {size:11, align:'left'}); ly += legHeadH;
+      if(title){ box(x, ly, hdrW, legHeadH, '#D9D9D9'); T(title, x, ly, hdrW, legHeadH, {size:12, align:'left'}); }
+      ly += legHeadH;                                        // keep the header-height gap so both legends' rows line up
       rows.forEach(pair=>{
         box(x, ly, codeCW, legLineH, '#B7DDE8'); T(pair[0], x, ly, codeCW, legLineH, {size:11, color:[255,0,0]});
         box(x+codeCW, ly, descCW, legLineH, '#E5E0EC'); T(pair[1], x+codeCW, ly, descCW, legLineH, {size:11, align:'left'});
         ly += legLineH;
       });
     };
-    const leftDesc = 300, rightDesc = 280;
+    const leftDesc = 376, rightDesc = 300;                   // sheet desc widths
     drawLegend('TASKS :', tLeg, M, leftDesc);
-    drawLegend('JOB TYPES :', jLeg, M + codeCW + leftDesc + 36, rightDesc);
+    drawLegend('', jLeg, M + codeCW + leftDesc + 36, rightDesc);   // job legend: no header label (matches the sheet)
   }
 
   // ---- per-day task totals at the very bottom, each under its day's HOURS column ----
