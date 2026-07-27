@@ -2919,7 +2919,8 @@ async function buildSearchablePdf(days){
   let bodyH = 0; sects.forEach(sec=>{ bodyH += secH; sec.rows.forEach(rw=>bodyH += rw.rH); });
   const legN = Math.max(tLeg.length, jLeg.length);
   const legLineH = 22, legHeadH = 22, legH = legN ? (legHeadH + legN*legLineH) : 0;
-  const natPageH = M + HB + gridHeadH + bodyH + 6 + legH + 8 + 16 + M;
+  const LEGGAP = 30;                                          // clear gap between the task grid and the legends
+  const natPageH = M + HB + gridHeadH + bodyH + LEGGAP + legH + 8 + 16 + M;
 
   // ---- the page is exactly the sheet's size (no A4 shrink); identity transform ----
   const doc = new jsPDF({orientation: natPageW>=natPageH?'landscape':'portrait', unit:'pt', format:[natPageW, natPageH], compress:true});
@@ -3037,7 +3038,7 @@ async function buildSearchablePdf(days){
   });
 
   // ---- legends (TASKS / JOB TYPES) — cyan codes, lilac descriptions ----
-  const legTop = y + 6;
+  const legTop = y + LEGGAP;
   if(legN){
     const codeCW = 68;
     const drawLegend = (title, rows, x, descCW)=>{
