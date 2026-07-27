@@ -2925,8 +2925,8 @@ async function buildSearchablePdf(days){
   const gridHeadH = topH + topH + 6*rowH + topH + rowH;
   let bodyH = 0; sects.forEach(sec=>{ bodyH += 15; sec.rows.forEach(rw=>bodyH += rw.rH); });
   const legN = Math.max(tLeg.length, jLeg.length);
-  const legH = legN ? (13 + legN*12 + 6) : 0;
-  const natPageH = M + 50 + gridHeadH + bodyH + 20 + legH + M;
+  const legH = legN ? (13 + legN*12) : 0;
+  const natPageH = M + 50 + gridHeadH + bodyH + 4 + legH + 6 + 12 + M;   // grid, then legends, then the bottom totals row
 
   // ---- standard A4 page + a fit-to-page transform ----
   const doc = new jsPDF({orientation: natPageW>=natPageH?'landscape':'portrait', unit:'pt', format:'a4', compress:true});
@@ -3036,16 +3036,12 @@ async function buildSearchablePdf(days){
       y += rH;
     });
   });
-  // bare per-day task totals under the grid
-  DYS.forEach((d,i)=>{ T(fmtNum(dayTaskTot[d]), dayX[i], y, dayW, 14, {size:8}); });
-  T(fmtNum(grand), totalX, y, totalW, 14, {size:8});
-  y += 20;
-
   // ---- legends (TASKS / JOB TYPES) — cyan codes, lilac descriptions ----
+  const legTop = y + 4;
   if(legN){
     const legLineH = 12, codeCW = 56;
     const drawLegend = (title, rows, x, descCW)=>{
-      let ly = y;
+      let ly = legTop;
       box(x, ly, codeCW+descCW, 13, '#D9D9D9'); T(title, x, ly, codeCW+descCW, 13, {size:8, align:'left'}); ly += 13;
       rows.forEach(pair=>{
         box(x, ly, codeCW, legLineH, '#B7DDE8'); T(pair[0], x, ly, codeCW, legLineH, {size:7.5, color:[255,0,0]});
@@ -3057,6 +3053,11 @@ async function buildSearchablePdf(days){
     drawLegend('TASKS :', tLeg, M, leftDesc);
     drawLegend('JOB TYPES :', jLeg, M + codeCW + leftDesc + 30, rightDesc);
   }
+
+  // ---- per-day task totals at the very bottom, each under its day's HOURS column (aligned with the hours above) ----
+  const totY = legTop + legH + 6;
+  DYS.forEach((d,i)=>{ T(fmtNum(dayTaskTot[d]), dayX[i]+codeW, totY, hrsW, 12, {size:8}); });
+  T(fmtNum(grand), totalX, totY, totalW, 12, {size:8});
 
   return doc.output('blob');
 }
