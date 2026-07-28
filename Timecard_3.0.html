@@ -3451,8 +3451,9 @@ function projectsWorked(days){
       codes[code] = (codes[code]||0) + num(r.h[d]);        // hours shown next to the code = the Hours cell you typed
     }
     if(hrs <= 0) continue;                                  // worked on it in this period?
-    if(!map[t]) map[t] = {task:t, hours:0, project:'', contractor:'', job:'', codes:{}};
+    if(!map[t]) map[t] = {task:t, hours:0, project:'', contractor:'', job:'', codes:{}, notes:[]};
     const e = map[t]; e.hours += hrs;
+    const nt = (r.notes||'').trim(); if(nt && e.notes.indexOf(nt)<0) e.notes.push(nt);   // description = the notes worked on
     const info = (state.taskInfo||{})[t] || {};
     if(!e.project){    const p=(r.project||'').trim()    || (info.project||'').trim();    if(p) e.project=p; }
     if(!e.contractor){ const c=(r.contractor||'').trim() || (info.contractor||'').trim(); if(c) e.contractor=c; }
@@ -3470,6 +3471,8 @@ function projJobType(p){
   if(codes.length) return codes.join(', ');
   return p.job || '—';
 }
+// description = every distinct note logged for this task in the period
+function projDesc(p){ return (p.notes && p.notes.length) ? p.notes.join('; ') : '—'; }
 // hours cell: Daily = work type next to the hours; Weekly = total hours
 function projHours(p, one, html){
   if(one){
@@ -3489,11 +3492,11 @@ function projectsMsgHtml(days){
     const th = c=>'<th style="border:1px solid #b8c4d8;background:#eaf1fb;text-align:left;padding:4px 9px;font-size:12px">'+c+'</th>';
     const td = c=>'<td style="border:1px solid #d3ddeb;padding:3px 9px;font-size:12.5px">'+c+'</td>';
     h += '<table cellspacing="0" cellpadding="0" style="border-collapse:collapse;'+F+'">'+
-         '<tr>'+th('Task #')+th('Job type')+th('Project')+th('Contractor')+th(hoursHdr)+'</tr>';
+         '<tr>'+th('Task #')+th('Job type')+th('Project')+th('Contractor')+th('Description')+th(hoursHdr)+'</tr>';
     for(const p of list){
       h += '<tr>'+
         '<td style="border:1px solid #d3ddeb;padding:3px 9px;color:#c00;font-weight:bold">'+escHtml(p.task)+'</td>'+
-        td(escHtml(projJobType(p)))+td(escHtml(p.project||'—'))+td(escHtml(p.contractor||'—'))+td(projHours(p,one,true))+
+        td(escHtml(projJobType(p)))+td(escHtml(p.project||'—'))+td(escHtml(p.contractor||'—'))+td(escHtml(projDesc(p)))+td(projHours(p,one,true))+
       '</tr>';
     }
     h += '</table>';
@@ -3510,6 +3513,7 @@ function projectsMsgText(days){
       const bits = [p.task, projJobType(p)];
       if(p.project) bits.push(p.project);
       if(p.contractor) bits.push(p.contractor);
+      if(p.notes && p.notes.length) bits.push(projDesc(p));
       L.push('  • '+bits.join(' — ')+'  |  '+projHours(p,one,false));
     }
   }else L.push('  (none)');
