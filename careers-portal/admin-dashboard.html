@@ -1,0 +1,914 @@
+<!--
+  ISAT Careers Jordan — Recruiter / Admin Dashboard
+  ------------------------------------------------------------------
+  Paste this whole block into the "Copy" / source (</> code) editor of a
+  Power Pages web page (e.g. page URL: /admin), then RESTRICT that page to
+  your recruiter web role via Page Permissions (see README.md).
+
+  Charts are drawn with inline SVG (no external libraries) so they pass the
+  Power Pages content-security policy. Everything is mobile responsive.
+
+  DATA MODE (mirror of the form page)
+  -----------------------------------
+  DEMO_MODE = true  -> reads applications from this browser (localStorage).
+                       Submissions from application-form.html (also in demo
+                       mode) appear here. Seeds sample data on first load.
+  DEMO_MODE = false -> reads live from Dataverse via the Power Pages Web API.
+-->
+
+<style>
+  .isat-admin {
+    --brand: #0a1f3c;
+    --brand-2: #1976d2;
+    --accent: #f57c00;
+
+    /* chart ink + surface (light) */
+    --surface: #ffffff;
+    --plane: #f4f7fb;
+    --ink: #12233d;
+    --ink-soft: #5a6b82;
+    --muted: #8a97a8;
+    --line: #e4e8ef;
+    --grid: #eef2f7;
+
+    /* data colours (from a validated single-hue / ordinal blue ramp) */
+    --c-blue: #2a78d6;
+    --c-line: #1c5cab;
+    --seq-1: #86b6ef;   /* ordinal pipeline: light -> dark */
+    --seq-2: #5598e7;
+    --seq-3: #2a78d6;
+    --seq-4: #1c5cab;
+    --seq-5: #104281;
+    --seq-rej: #97a4b6;
+
+    /* status pill palette (UI chrome + icon/label, not chart series) */
+    --st-new-bg:#e8f1fd; --st-new-fg:#1558b0;
+    --st-rev-bg:#fff4e0; --st-rev-fg:#a15a00;
+    --st-int-bg:#efe9fb; --st-int-fg:#5b3ea8;
+    --st-off-bg:#e3f6ef; --st-off-fg:#0a7a55;
+    --st-hir-bg:#e5f5e5; --st-hir-fg:#0a7a0a;
+    --st-rej-bg:#f2f4f7; --st-rej-fg:#5a6b82;
+
+    font-family: 'Inter', system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--ink);
+    background: var(--plane);
+    -webkit-font-smoothing: antialiased;
+  }
+  .isat-admin * { box-sizing: border-box; }
+
+  .isat-admin .adm-wrap { max-width: 1240px; margin: 0 auto; padding: clamp(14px, 2.5vw, 28px); }
+
+  /* header */
+  .isat-admin .adm-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 20px; }
+  .isat-admin .adm-top h1 { margin: 0; font-size: clamp(1.3rem, 3vw, 1.75rem); font-weight: 800; color: var(--brand); letter-spacing: -0.01em; }
+  .isat-admin .adm-top .adm-sub { color: var(--ink-soft); font-size: 0.9rem; margin-top: 2px; }
+  .isat-admin .adm-actions { display: flex; gap: 10px; }
+  .isat-admin .adm-btn {
+    font: inherit; font-weight: 700; font-size: 0.85rem; border-radius: 10px; padding: 10px 16px;
+    border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer;
+    transition: all 0.15s ease; display: inline-flex; align-items: center; gap: 7px;
+  }
+  .isat-admin .adm-btn:hover { border-color: var(--brand-2); color: var(--brand-2); }
+  .isat-admin .adm-btn-primary { background: linear-gradient(135deg,var(--brand),var(--brand-2)); color:#fff; border-color: transparent; }
+  .isat-admin .adm-btn-primary:hover { color:#fff; transform: translateY(-1px); }
+
+  /* KPI row */
+  .isat-admin .adm-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 18px; }
+  .isat-admin .adm-kpi {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px;
+    box-shadow: 0 4px 18px rgba(10,31,60,0.05);
+  }
+  .isat-admin .adm-kpi .k-label { font-size: 0.78rem; font-weight: 700; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.06em; }
+  .isat-admin .adm-kpi .k-val { font-size: clamp(1.7rem, 4vw, 2.3rem); font-weight: 800; line-height: 1.1; margin-top: 6px; }
+  .isat-admin .adm-kpi .k-foot { font-size: 0.8rem; color: var(--ink-soft); margin-top: 4px; }
+  .isat-admin .adm-kpi .k-accent { color: var(--brand-2); }
+
+  /* charts grid */
+  .isat-admin .adm-charts { display: grid; grid-template-columns: 1.3fr 1fr; gap: 14px; margin-bottom: 18px; }
+  .isat-admin .adm-charts .span-2 { grid-column: 1 / -1; }
+  .isat-admin .card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px;
+    box-shadow: 0 4px 18px rgba(10,31,60,0.05);
+  }
+  .isat-admin .card h3 { margin: 0 0 2px; font-size: 1rem; font-weight: 700; color: var(--brand); }
+  .isat-admin .card .c-sub { margin: 0 0 14px; font-size: 0.8rem; color: var(--ink-soft); }
+  .isat-admin .chart-holder { width: 100%; }
+  .isat-admin svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .isat-admin .grid-line { stroke: var(--grid); stroke-width: 1; }
+  .isat-admin .axis-txt { fill: var(--muted); font-size: 11px; font-family: inherit; }
+  .isat-admin .val-txt { fill: var(--ink); font-size: 11px; font-weight: 700; font-family: inherit; font-variant-numeric: tabular-nums; }
+  .isat-admin .bar-rect { transition: opacity 0.15s ease; cursor: pointer; }
+  .isat-admin .bar-rect:hover { opacity: 0.82; }
+  .isat-admin .empty-note { color: var(--muted); font-size: 0.85rem; text-align: center; padding: 28px 0; }
+
+  /* filters */
+  .isat-admin .adm-filters {
+    display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap: 10px; align-items: end; margin-bottom: 14px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px;
+  }
+  .isat-admin .adm-filters .f-cell { display: flex; flex-direction: column; gap: 5px; }
+  .isat-admin .adm-filters label { font-size: 0.72rem; font-weight: 700; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.05em; }
+  .isat-admin .adm-in, .isat-admin .adm-sel {
+    font: inherit; font-size: 0.9rem; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 10px;
+    background: var(--surface); color: var(--ink); -webkit-appearance: none; appearance: none; width: 100%;
+  }
+  .isat-admin .adm-in:focus, .isat-admin .adm-sel:focus { outline: none; border-color: var(--brand-2); box-shadow: 0 0 0 3px rgba(25,118,210,0.15); }
+  .isat-admin .adm-sel {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235a6b82' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 10px center; padding-right: 34px;
+  }
+  .isat-admin .f-search { position: relative; }
+  .isat-admin .f-search svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; pointer-events: none; }
+  .isat-admin .f-search input { padding-left: 36px; }
+  .isat-admin .f-clear { justify-self: start; }
+
+  /* table */
+  .isat-admin .adm-table-card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; box-shadow: 0 4px 18px rgba(10,31,60,0.05); }
+  .isat-admin .adm-table-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+  .isat-admin .adm-table-head .cnt { font-size: 0.85rem; color: var(--ink-soft); font-weight: 600; }
+  .isat-admin .adm-scroll { overflow-x: auto; }
+  .isat-admin table { width: 100%; border-collapse: collapse; min-width: 760px; }
+  .isat-admin thead th {
+    text-align: left; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-soft);
+    font-weight: 700; padding: 12px 16px; border-bottom: 1px solid var(--line); white-space: nowrap; cursor: pointer; user-select: none;
+    background: var(--plane);
+  }
+  .isat-admin thead th .sort-ic { opacity: 0.35; margin-left: 4px; }
+  .isat-admin thead th.sorted .sort-ic { opacity: 1; color: var(--brand-2); }
+  .isat-admin tbody td { padding: 13px 16px; border-bottom: 1px solid var(--line); font-size: 0.88rem; vertical-align: middle; }
+  .isat-admin tbody tr:last-child td { border-bottom: none; }
+  .isat-admin tbody tr { transition: background 0.12s ease; }
+  .isat-admin tbody tr:hover { background: var(--plane); }
+  .isat-admin .cell-name { font-weight: 700; color: var(--ink); }
+  .isat-admin .cell-email { font-size: 0.8rem; color: var(--ink-soft); }
+  .isat-admin .tabnum { font-variant-numeric: tabular-nums; }
+
+  .isat-admin .pill { display: inline-flex; align-items: center; gap: 5px; font-size: 0.76rem; font-weight: 700; padding: 4px 10px; border-radius: 999px; white-space: nowrap; }
+  .isat-admin .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .isat-admin .st-New { background: var(--st-new-bg); color: var(--st-new-fg); }
+  .isat-admin .st-Reviewing { background: var(--st-rev-bg); color: var(--st-rev-fg); }
+  .isat-admin .st-Interview { background: var(--st-int-bg); color: var(--st-int-fg); }
+  .isat-admin .st-Offer { background: var(--st-off-bg); color: var(--st-off-fg); }
+  .isat-admin .st-Hired { background: var(--st-hir-bg); color: var(--st-hir-fg); }
+  .isat-admin .st-Rejected { background: var(--st-rej-bg); color: var(--st-rej-fg); }
+
+  .isat-admin .row-status-sel {
+    font: inherit; font-size: 0.8rem; font-weight: 700; border: 1.5px solid var(--line); border-radius: 8px;
+    padding: 6px 8px; background: var(--surface); color: var(--ink); cursor: pointer;
+  }
+  .isat-admin .cv-link { display: inline-flex; align-items: center; gap: 5px; color: var(--brand-2); font-weight: 700; font-size: 0.82rem; text-decoration: none; }
+  .isat-admin .cv-link:hover { text-decoration: underline; }
+  .isat-admin .cv-none { color: var(--muted); font-size: 0.82rem; }
+  .isat-admin .link-btn { border: none; background: none; color: var(--brand-2); font-weight: 700; cursor: pointer; font: inherit; font-size: 0.82rem; padding: 0; }
+
+  /* tooltip */
+  .isat-admin .adm-tip {
+    position: fixed; z-index: 9999; pointer-events: none; background: #0d1b30; color: #fff; font-size: 0.78rem;
+    padding: 7px 11px; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.28); opacity: 0; transition: opacity 0.1s ease;
+    white-space: nowrap; font-weight: 600;
+  }
+  .isat-admin .adm-tip.show { opacity: 1; }
+  .isat-admin .adm-tip .t-val { color: #9fc6ff; }
+
+  /* drawer */
+  .isat-admin .adm-drawer-bg {
+    position: fixed; inset: 0; background: rgba(10,20,40,0.45); backdrop-filter: blur(2px); z-index: 9998;
+    display: none; opacity: 0; transition: opacity 0.2s ease;
+  }
+  .isat-admin .adm-drawer-bg.show { display: block; opacity: 1; }
+  .isat-admin .adm-drawer {
+    position: fixed; top: 0; right: 0; height: 100%; width: min(460px, 100%); background: var(--surface);
+    z-index: 9999; box-shadow: -12px 0 40px rgba(0,0,0,0.2); transform: translateX(100%); transition: transform 0.25s ease;
+    display: flex; flex-direction: column;
+  }
+  .isat-admin .adm-drawer.show { transform: translateX(0); }
+  .isat-admin .dr-head { background: linear-gradient(135deg,var(--brand),var(--brand-2)); color:#fff; padding: 22px 24px; }
+  .isat-admin .dr-head h2 { margin: 0; font-size: 1.25rem; font-weight: 800; }
+  .isat-admin .dr-head .dr-role { color: rgba(255,255,255,0.85); font-size: 0.9rem; margin-top: 2px; }
+  .isat-admin .dr-close { position: absolute; top: 18px; right: 18px; background: rgba(255,255,255,0.2); border: none; color:#fff; width: 34px; height: 34px; border-radius: 9px; font-size: 1.3rem; cursor: pointer; line-height: 1; }
+  .isat-admin .dr-body { padding: 20px 24px; overflow-y: auto; flex: 1; }
+  .isat-admin .dr-row { display: flex; justify-content: space-between; gap: 14px; padding: 11px 0; border-bottom: 1px solid var(--line); }
+  .isat-admin .dr-row:last-child { border-bottom: none; }
+  .isat-admin .dr-k { color: var(--ink-soft); font-size: 0.82rem; font-weight: 600; }
+  .isat-admin .dr-v { text-align: right; font-weight: 600; font-size: 0.88rem; word-break: break-word; }
+  .isat-admin .dr-cover { background: var(--plane); border-radius: 12px; padding: 14px; margin-top: 14px; font-size: 0.88rem; line-height: 1.6; color: var(--ink); }
+  .isat-admin .dr-foot { padding: 16px 24px; border-top: 1px solid var(--line); display: flex; gap: 10px; }
+
+  .isat-admin .demo-badge { display:inline-flex; align-items:center; gap:6px; font-size:0.72rem; font-weight:700; color: var(--accent); background: #fff5ea; border:1px solid #ffe0bf; padding: 4px 10px; border-radius: 999px; }
+
+  /* ---- responsive ---- */
+  @media (max-width: 960px) {
+    .isat-admin .adm-kpis { grid-template-columns: repeat(2, 1fr); }
+    .isat-admin .adm-charts { grid-template-columns: 1fr; }
+    .isat-admin .adm-filters { grid-template-columns: 1fr 1fr; }
+    .isat-admin .adm-filters .f-search { grid-column: 1 / -1; }
+    .isat-admin .f-clear { grid-column: 1 / -1; }
+  }
+  @media (max-width: 520px) {
+    .isat-admin .adm-kpis { grid-template-columns: 1fr 1fr; }
+    .isat-admin .adm-top { flex-direction: column; align-items: flex-start; }
+  }
+
+  /* ---- optional dark mode (kept subtle for embedded portals) ---- */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .isat-admin {
+      --surface: #16202e; --plane: #0e1621; --ink: #eaf1f9; --ink-soft: #9fb0c4; --muted: #7d8da0;
+      --line: #263140; --grid: #1e2836;
+      --c-blue: #3987e5; --c-line: #6da7ec;
+      --seq-1:#256abf; --seq-2:#3987e5; --seq-3:#5598e7; --seq-4:#86b6ef; --seq-5:#b7d3f6; --seq-rej:#5a6b82;
+    }
+  }
+</style>
+
+<div class="isat-admin">
+  <div class="adm-wrap">
+
+    <div class="adm-top">
+      <div>
+        <h1>Recruitment Dashboard <span class="demo-badge" id="admDemoBadge" style="display:none;">DEMO DATA</span></h1>
+        <div class="adm-sub">ISAT Careers Jordan · applicant pipeline &amp; insights</div>
+      </div>
+      <div class="adm-actions">
+        <button class="adm-btn" id="admRefresh" title="Reload">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          Refresh
+        </button>
+        <button class="adm-btn adm-btn-primary" id="admExport">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export CSV
+        </button>
+      </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="adm-kpis" id="admKpis"></div>
+
+    <!-- CHARTS -->
+    <div class="adm-charts">
+      <div class="card span-2">
+        <h3>Applications over time</h3>
+        <p class="c-sub">Received per week (last 8 weeks)</p>
+        <div class="chart-holder" id="chartTrend"></div>
+      </div>
+      <div class="card">
+        <h3>By position</h3>
+        <p class="c-sub">Total applications per role</p>
+        <div class="chart-holder" id="chartPosition"></div>
+      </div>
+      <div class="card">
+        <h3>Pipeline status</h3>
+        <p class="c-sub">Where applicants are in the process</p>
+        <div class="chart-holder" id="chartStatus"></div>
+      </div>
+      <div class="card span-2">
+        <h3>By department</h3>
+        <p class="c-sub">Applications grouped by department</p>
+        <div class="chart-holder" id="chartDept"></div>
+      </div>
+    </div>
+
+    <!-- FILTERS -->
+    <div class="adm-filters">
+      <div class="f-cell f-search">
+        <label for="fltSearch">Search</label>
+        <div style="position:relative;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#5a6b82" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input class="adm-in" id="fltSearch" type="search" placeholder="Name, email, or position…">
+        </div>
+      </div>
+      <div class="f-cell">
+        <label for="fltPosition">Position</label>
+        <select class="adm-sel" id="fltPosition"><option value="">All positions</option></select>
+      </div>
+      <div class="f-cell">
+        <label for="fltDept">Department</label>
+        <select class="adm-sel" id="fltDept"><option value="">All departments</option></select>
+      </div>
+      <div class="f-cell">
+        <label for="fltStatus">Status</label>
+        <select class="adm-sel" id="fltStatus">
+          <option value="">All statuses</option>
+          <option>New</option><option>Reviewing</option><option>Interview</option>
+          <option>Offer</option><option>Hired</option><option>Rejected</option>
+        </select>
+      </div>
+      <div class="f-cell f-clear">
+        <label>&nbsp;</label>
+        <button class="adm-btn" id="fltClear">Clear</button>
+      </div>
+    </div>
+
+    <!-- TABLE -->
+    <div class="adm-table-card">
+      <div class="adm-table-head">
+        <strong>Applicants</strong>
+        <span class="cnt" id="admCount">—</span>
+      </div>
+      <div class="adm-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th data-sort="fullName">Applicant <span class="sort-ic">↕</span></th>
+              <th data-sort="position">Position <span class="sort-ic">↕</span></th>
+              <th data-sort="department">Department <span class="sort-ic">↕</span></th>
+              <th data-sort="experience">Experience <span class="sort-ic">↕</span></th>
+              <th data-sort="appliedOn">Applied <span class="sort-ic">↕</span></th>
+              <th data-sort="status">Status <span class="sort-ic">↕</span></th>
+              <th>CV</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="admRows"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- tooltip + drawer -->
+  <div class="adm-tip" id="admTip"></div>
+  <div class="adm-drawer-bg" id="admDrawerBg"></div>
+  <aside class="adm-drawer" id="admDrawer" aria-hidden="true">
+    <div class="dr-head">
+      <button class="dr-close" id="drClose" aria-label="Close">&times;</button>
+      <h2 id="drName">—</h2>
+      <div class="dr-role" id="drRole">—</div>
+    </div>
+    <div class="dr-body" id="drBody"></div>
+    <div class="dr-foot" id="drFoot"></div>
+  </aside>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ============================================================
+   *  CONFIG — must match application-form.html / README.md
+   * ============================================================ */
+  var CONFIG = {
+    DEMO_MODE: true,
+    apiPath: "/_api",
+    entitySet: "isat_jobapplicants",
+    demoStoreKey: "isat_applications",
+    // Dataverse column logical names -> dashboard fields (live mode read)
+    columns: {
+      id: "isat_jobapplicantid",
+      fullName: "isat_fullname", email: "isat_email", phone: "isat_phone", city: "isat_city",
+      linkedin: "isat_linkedin", position: "isat_position", department: "isat_department",
+      employmentType: "isat_employmenttype", workLocation: "isat_worklocation",
+      experience: "isat_experience", education: "isat_education", currentTitle: "isat_currenttitle",
+      availability: "isat_availability", coverLetter: "isat_coverletter", status: "isat_status",
+      appliedOn: "createdon"
+    },
+    cvColumn: "isat_cv"
+  };
+
+  var STATUSES = ["New", "Reviewing", "Interview", "Offer", "Hired", "Rejected"];
+  var PIPELINE = ["New", "Reviewing", "Interview", "Offer", "Hired"]; // ordinal; Rejected shown apart
+
+  var $  = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+  var tip = $("#admTip");
+
+  var state = { all: [], view: [], sortKey: "appliedOn", sortDir: -1 };
+
+  /* ============================================================
+   *  DATA LAYER
+   * ============================================================ */
+  function load() {
+    if (CONFIG.DEMO_MODE) return loadDemo();
+    return loadLive();
+  }
+
+  function loadDemo() {
+    var list;
+    try { list = JSON.parse(localStorage.getItem(CONFIG.demoStoreKey) || "null"); }
+    catch (e) { list = null; }
+    if (!list || !list.length) { list = seedData(); localStorage.setItem(CONFIG.demoStoreKey, JSON.stringify(list)); }
+    return Promise.resolve(list.map(normalizeDemo));
+  }
+
+  function normalizeDemo(r) {
+    return {
+      id: r.id, reference: r.reference || "",
+      fullName: r.fullName, email: r.email, phone: r.phone, city: r.city, linkedin: r.linkedin,
+      position: r.position, department: r.department, employmentType: r.employmentType,
+      workLocation: r.workLocation, experience: r.experience, education: r.education,
+      currentTitle: r.currentTitle, availability: r.availability, coverLetter: r.coverLetter,
+      status: r.status || "New", appliedOn: r.appliedOn,
+      cvName: r.cvName || "", cvUrl: r.cvData || ""
+    };
+  }
+
+  function loadLive() {
+    var c = CONFIG.columns;
+    var sel = Object.keys(c).map(function (k) { return c[k]; }).join(",");
+    var url = CONFIG.apiPath + "/" + CONFIG.entitySet + "?$select=" + sel + "&$orderby=" + c.appliedOn + " desc";
+    return fetch(url, { headers: { "Accept": "application/json", "OData-Version": "4.0" } })
+      .then(function (r) { if (!r.ok) throw new Error("API " + r.status); return r.json(); })
+      .then(function (j) {
+        return (j.value || []).map(function (r) {
+          var cvName = r[CONFIG.cvColumn + "_name"] || r[CONFIG.cvColumn] || "";
+          return {
+            id: r[c.id], reference: "",
+            fullName: r[c.fullName], email: r[c.email], phone: r[c.phone], city: r[c.city], linkedin: r[c.linkedin],
+            position: r[c.position], department: r[c.department], employmentType: r[c.employmentType],
+            workLocation: r[c.workLocation], experience: r[c.experience], education: r[c.education],
+            currentTitle: r[c.currentTitle], availability: r[c.availability], coverLetter: r[c.coverLetter],
+            status: r[c.status] || "New", appliedOn: r[c.appliedOn],
+            cvName: cvName,
+            cvUrl: cvName ? (CONFIG.apiPath + "/" + CONFIG.entitySet + "(" + r[c.id] + ")/" + CONFIG.cvColumn + "/$value") : ""
+          };
+        });
+      });
+  }
+
+  // Persist a status change (demo -> localStorage, live -> Web API PATCH)
+  function updateStatus(id, status) {
+    var rec = state.all.filter(function (r) { return r.id === id; })[0];
+    if (rec) rec.status = status;
+    renderCharts(); renderKpis();
+    if (CONFIG.DEMO_MODE) {
+      var list;
+      try { list = JSON.parse(localStorage.getItem(CONFIG.demoStoreKey) || "[]"); } catch (e) { list = []; }
+      list.forEach(function (r) { if (r.id === id) r.status = status; });
+      localStorage.setItem(CONFIG.demoStoreKey, JSON.stringify(list));
+      return Promise.resolve();
+    }
+    var payload = {}; payload[CONFIG.columns.status] = status;
+    return getToken().then(function (token) {
+      return fetch(CONFIG.apiPath + "/" + CONFIG.entitySet + "(" + id + ")", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "OData-Version": "4.0", "__RequestVerificationToken": token },
+        body: JSON.stringify(payload)
+      });
+    });
+  }
+
+  function getToken() {
+    var el = document.querySelector('[name="__RequestVerificationToken"]');
+    return Promise.resolve(el ? el.value : "");
+  }
+
+  /* ============================================================
+   *  KPIs
+   * ============================================================ */
+  function renderKpis() {
+    var all = state.all;
+    var now = Date.now();
+    var weekAgo = now - 7 * 864e5;
+    var newThisWeek = all.filter(function (r) { return +new Date(r.appliedOn) >= weekAgo; }).length;
+    var active = all.filter(function (r) { return ["Reviewing", "Interview", "Offer"].indexOf(r.status) >= 0; }).length;
+    var hired = all.filter(function (r) { return r.status === "Hired"; }).length;
+
+    var kpis = [
+      { label: "Total applicants", val: all.length, foot: "all time" },
+      { label: "New this week", val: newThisWeek, foot: "last 7 days", accent: true },
+      { label: "In progress", val: active, foot: "reviewing · interview · offer" },
+      { label: "Hired", val: hired, foot: all.length ? Math.round(hired / all.length * 100) + "% of applicants" : "—" }
+    ];
+    $("#admKpis").innerHTML = kpis.map(function (k) {
+      return '<div class="adm-kpi"><div class="k-label">' + k.label + '</div>' +
+        '<div class="k-val ' + (k.accent ? "k-accent" : "") + '">' + k.val + '</div>' +
+        '<div class="k-foot">' + k.foot + '</div></div>';
+    }).join("");
+  }
+
+  /* ============================================================
+   *  CHARTS  (inline SVG, no libraries)
+   * ============================================================ */
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function el(name, attrs, txt) {
+    var n = document.createElementNS(SVGNS, name);
+    for (var k in attrs) if (attrs.hasOwnProperty(k)) n.setAttribute(k, attrs[k]);
+    if (txt != null) n.textContent = txt;
+    return n;
+  }
+  function showTip(html, x, y) {
+    tip.innerHTML = html; tip.classList.add("show");
+    tip.style.left = (x + 12) + "px"; tip.style.top = (y - 14) + "px";
+  }
+  function hideTip() { tip.classList.remove("show"); }
+
+  function renderCharts() {
+    trendChart($("#chartTrend"), state.all);
+    countBarV($("#chartPosition"), groupCount(state.all, "position"), "applications");
+    statusChart($("#chartStatus"), state.all);
+    countBarH($("#chartDept"), groupCount(state.all, "department"), "applications");
+  }
+
+  function groupCount(rows, key) {
+    var m = {};
+    rows.forEach(function (r) { var v = r[key] || "—"; m[v] = (m[v] || 0) + 1; });
+    return Object.keys(m).map(function (k) { return { label: k, value: m[k] }; })
+      .sort(function (a, b) { return b.value - a.value; });
+  }
+
+  // Vertical bars — single hue (nominal categories)
+  function countBarV(holder, data, unit) {
+    holder.innerHTML = "";
+    if (!data.length) { holder.innerHTML = '<div class="empty-note">No data yet</div>'; return; }
+    var W = 480, H = 240, pad = { t: 16, r: 8, b: 54, l: 30 };
+    var iw = W - pad.l - pad.r, ih = H - pad.t - pad.b;
+    var max = Math.max.apply(null, data.map(function (d) { return d.value; })) || 1;
+    var svg = el("svg", { viewBox: "0 0 " + W + " " + H, role: "img" });
+
+    for (var g = 0; g <= 4; g++) {
+      var gy = pad.t + ih - (ih * g / 4);
+      svg.appendChild(el("line", { class: "grid-line", x1: pad.l, y1: gy, x2: W - pad.r, y2: gy }));
+      svg.appendChild(el("text", { class: "axis-txt", x: pad.l - 6, y: gy + 3, "text-anchor": "end" }, Math.round(max * g / 4)));
+    }
+    var bw = iw / data.length, barW = Math.min(46, bw * 0.6);
+    data.forEach(function (d, i) {
+      var x = pad.l + bw * i + (bw - barW) / 2;
+      var h = ih * d.value / max, y = pad.t + ih - h;
+      var rect = el("rect", { class: "bar-rect", x: x, y: y, width: barW, height: Math.max(2, h), rx: 4, fill: "var(--c-blue)" });
+      rect.addEventListener("mousemove", function (e) { showTip('<strong>' + esc(d.label) + '</strong> · <span class="t-val">' + d.value + " " + unit + "</span>", e.clientX, e.clientY); });
+      rect.addEventListener("mouseleave", hideTip);
+      svg.appendChild(rect);
+      svg.appendChild(el("text", { class: "val-txt", x: x + barW / 2, y: y - 6, "text-anchor": "middle" }, d.value));
+      var label = d.label.length > 12 ? d.label.slice(0, 11) + "…" : d.label;
+      var t = el("text", { class: "axis-txt", x: x + barW / 2, y: H - pad.b + 16, "text-anchor": "end", transform: "rotate(-32 " + (x + barW / 2) + " " + (H - pad.b + 16) + ")" }, label);
+      svg.appendChild(t);
+    });
+    holder.appendChild(svg);
+  }
+
+  // Horizontal bars — single hue (long category names, e.g. departments)
+  function countBarH(holder, data, unit) {
+    holder.innerHTML = "";
+    if (!data.length) { holder.innerHTML = '<div class="empty-note">No data yet</div>'; return; }
+    var rowH = 40, W = 640, pad = { t: 8, r: 40, b: 8, l: 130 };
+    var H = pad.t + pad.b + data.length * rowH;
+    var iw = W - pad.l - pad.r;
+    var max = Math.max.apply(null, data.map(function (d) { return d.value; })) || 1;
+    var svg = el("svg", { viewBox: "0 0 " + W + " " + H, role: "img" });
+    data.forEach(function (d, i) {
+      var y = pad.t + i * rowH + 8, bh = rowH - 18;
+      var w = iw * d.value / max;
+      svg.appendChild(el("text", { class: "axis-txt", x: pad.l - 10, y: y + bh / 2 + 4, "text-anchor": "end" }, d.label.length > 16 ? d.label.slice(0, 15) + "…" : d.label));
+      svg.appendChild(el("rect", { x: pad.l, y: y, width: iw, height: bh, rx: 5, fill: "var(--grid)" }));
+      var rect = el("rect", { class: "bar-rect", x: pad.l, y: y, width: Math.max(3, w), height: bh, rx: 5, fill: "var(--c-blue)" });
+      rect.addEventListener("mousemove", function (e) { showTip('<strong>' + esc(d.label) + '</strong> · <span class="t-val">' + d.value + " " + unit + "</span>", e.clientX, e.clientY); });
+      rect.addEventListener("mouseleave", hideTip);
+      svg.appendChild(rect);
+      svg.appendChild(el("text", { class: "val-txt", x: pad.l + Math.max(3, w) + 8, y: y + bh / 2 + 4 }, d.value));
+    });
+    holder.appendChild(svg);
+  }
+
+  // Status pipeline — ordinal blue ramp for stages, muted for Rejected
+  function statusChart(holder, rows) {
+    holder.innerHTML = "";
+    var counts = {}; STATUSES.forEach(function (s) { counts[s] = 0; });
+    rows.forEach(function (r) { if (counts[r.status] != null) counts[r.status]++; });
+    var order = PIPELINE.concat(["Rejected"]);
+    var ramp = ["var(--seq-1)", "var(--seq-2)", "var(--seq-3)", "var(--seq-4)", "var(--seq-5)"];
+    var data = order.map(function (s, i) {
+      return { label: s, value: counts[s], fill: s === "Rejected" ? "var(--seq-rej)" : ramp[i] };
+    });
+    var max = Math.max.apply(null, data.map(function (d) { return d.value; })) || 1;
+    var rowH = 34, W = 460, pad = { t: 6, r: 36, b: 6, l: 92 };
+    var H = pad.t + pad.b + data.length * rowH, iw = W - pad.l - pad.r;
+    var svg = el("svg", { viewBox: "0 0 " + W + " " + H, role: "img" });
+    data.forEach(function (d, i) {
+      var y = pad.t + i * rowH + 7, bh = rowH - 15, w = iw * d.value / max;
+      svg.appendChild(el("text", { class: "axis-txt", x: pad.l - 10, y: y + bh / 2 + 4, "text-anchor": "end" }, d.label));
+      svg.appendChild(el("rect", { x: pad.l, y: y, width: iw, height: bh, rx: 5, fill: "var(--grid)" }));
+      var rect = el("rect", { class: "bar-rect", x: pad.l, y: y, width: Math.max(3, w), height: bh, rx: 5, fill: d.fill });
+      rect.addEventListener("mousemove", function (e) { showTip('<strong>' + d.label + '</strong> · <span class="t-val">' + d.value + "</span>", e.clientX, e.clientY); });
+      rect.addEventListener("mouseleave", hideTip);
+      svg.appendChild(rect);
+      svg.appendChild(el("text", { class: "val-txt", x: pad.l + Math.max(3, w) + 8, y: y + bh / 2 + 4 }, d.value));
+    });
+    holder.appendChild(svg);
+  }
+
+  // Trend — single-series area + line with crosshair tooltip
+  function trendChart(holder, rows) {
+    holder.innerHTML = "";
+    var weeks = 8;
+    var buckets = [];
+    var now = new Date(); now.setHours(0, 0, 0, 0);
+    var day = now.getDay(); var monday = new Date(now); monday.setDate(now.getDate() - ((day + 6) % 7));
+    for (var i = weeks - 1; i >= 0; i--) {
+      var start = new Date(monday); start.setDate(monday.getDate() - i * 7);
+      var end = new Date(start); end.setDate(start.getDate() + 7);
+      buckets.push({ start: start, end: end, value: 0, label: start.toLocaleDateString(undefined, { month: "short", day: "numeric" }) });
+    }
+    rows.forEach(function (r) {
+      var t = +new Date(r.appliedOn);
+      for (var j = 0; j < buckets.length; j++) { if (t >= +buckets[j].start && t < +buckets[j].end) { buckets[j].value++; break; } }
+    });
+
+    var W = 900, H = 220, pad = { t: 16, r: 16, b: 30, l: 30 };
+    var iw = W - pad.l - pad.r, ih = H - pad.t - pad.b;
+    var max = Math.max(4, Math.max.apply(null, buckets.map(function (b) { return b.value; })));
+    var svg = el("svg", { viewBox: "0 0 " + W + " " + H, role: "img", preserveAspectRatio: "none" });
+
+    for (var g = 0; g <= 4; g++) {
+      var gy = pad.t + ih - (ih * g / 4);
+      svg.appendChild(el("line", { class: "grid-line", x1: pad.l, y1: gy, x2: W - pad.r, y2: gy }));
+      svg.appendChild(el("text", { class: "axis-txt", x: pad.l - 6, y: gy + 3, "text-anchor": "end" }, Math.round(max * g / 4)));
+    }
+    var X = function (i) { return pad.l + (iw * i / (buckets.length - 1)); };
+    var Y = function (v) { return pad.t + ih - (ih * v / max); };
+
+    var linePts = buckets.map(function (b, i) { return X(i) + "," + Y(b.value); });
+    var areaD = "M" + X(0) + "," + Y(0) + " L" + linePts.join(" L") + " L" + X(buckets.length - 1) + "," + Y(0) + " Z";
+
+    var grad = el("linearGradient", { id: "admTrendGrad", x1: 0, y1: 0, x2: 0, y2: 1 });
+    grad.appendChild(el("stop", { offset: "0%", "stop-color": "var(--c-blue)", "stop-opacity": "0.30" }));
+    grad.appendChild(el("stop", { offset: "100%", "stop-color": "var(--c-blue)", "stop-opacity": "0.02" }));
+    var defs = el("defs", {}); defs.appendChild(grad); svg.appendChild(defs);
+
+    svg.appendChild(el("path", { d: areaD, fill: "url(#admTrendGrad)" }));
+    svg.appendChild(el("polyline", { points: linePts.join(" "), fill: "none", stroke: "var(--c-line)", "stroke-width": 2.5, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+
+    // x labels
+    buckets.forEach(function (b, i) { svg.appendChild(el("text", { class: "axis-txt", x: X(i), y: H - 8, "text-anchor": "middle" }, b.label)); });
+
+    // markers
+    buckets.forEach(function (b, i) { svg.appendChild(el("circle", { cx: X(i), cy: Y(b.value), r: 3.5, fill: "var(--c-line)" })); });
+
+    // crosshair overlay
+    var cross = el("line", { x1: 0, y1: pad.t, x2: 0, y2: pad.t + ih, stroke: "var(--c-line)", "stroke-width": 1, "stroke-dasharray": "3 3", opacity: 0 });
+    var focus = el("circle", { r: 5.5, fill: "var(--surface)", stroke: "var(--c-line)", "stroke-width": 2.5, opacity: 0 });
+    svg.appendChild(cross); svg.appendChild(focus);
+    var hit = el("rect", { x: pad.l, y: pad.t, width: iw, height: ih, fill: "transparent" });
+    hit.style.cursor = "crosshair";
+    hit.addEventListener("mousemove", function (e) {
+      var box = svg.getBoundingClientRect();
+      var rel = (e.clientX - box.left) / box.width * W;
+      var idx = Math.round((rel - pad.l) / (iw / (buckets.length - 1)));
+      idx = Math.max(0, Math.min(buckets.length - 1, idx));
+      var bx = X(idx), by = Y(buckets[idx].value);
+      cross.setAttribute("x1", bx); cross.setAttribute("x2", bx); cross.setAttribute("opacity", 1);
+      focus.setAttribute("cx", bx); focus.setAttribute("cy", by); focus.setAttribute("opacity", 1);
+      showTip('<strong>' + buckets[idx].value + ' applications</strong><br>week of ' + buckets[idx].label, e.clientX, e.clientY);
+    });
+    hit.addEventListener("mouseleave", function () { cross.setAttribute("opacity", 0); focus.setAttribute("opacity", 0); hideTip(); });
+    svg.appendChild(hit);
+
+    holder.appendChild(svg);
+  }
+
+  /* ============================================================
+   *  TABLE + FILTERS + SORT
+   * ============================================================ */
+  function applyFilters() {
+    var q = ($("#fltSearch").value || "").toLowerCase().trim();
+    var pos = $("#fltPosition").value, dept = $("#fltDept").value, st = $("#fltStatus").value;
+    state.view = state.all.filter(function (r) {
+      if (pos && r.position !== pos) return false;
+      if (dept && r.department !== dept) return false;
+      if (st && r.status !== st) return false;
+      if (q) {
+        var hay = (r.fullName + " " + r.email + " " + r.position + " " + (r.currentTitle || "")).toLowerCase();
+        if (hay.indexOf(q) < 0) return false;
+      }
+      return true;
+    });
+    sortView();
+    renderRows();
+  }
+
+  function sortView() {
+    var k = state.sortKey, dir = state.sortDir;
+    state.view.sort(function (a, b) {
+      var va = a[k], vb = b[k];
+      if (k === "appliedOn") { va = +new Date(va); vb = +new Date(vb); }
+      else { va = (va || "").toString().toLowerCase(); vb = (vb || "").toString().toLowerCase(); }
+      if (va < vb) return -1 * dir;
+      if (va > vb) return 1 * dir;
+      return 0;
+    });
+  }
+
+  function fmtDate(d) {
+    var dt = new Date(d);
+    if (isNaN(dt)) return "—";
+    return dt.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  }
+  function statusPill(s) {
+    return '<span class="pill st-' + s + '"><span class="dot"></span>' + s + '</span>';
+  }
+
+  function renderRows() {
+    var tb = $("#admRows");
+    $("#admCount").textContent = state.view.length + " of " + state.all.length + " shown";
+    if (!state.view.length) {
+      tb.innerHTML = '<tr><td colspan="8"><div class="empty-note">No applicants match your filters.</div></td></tr>';
+      return;
+    }
+    tb.innerHTML = state.view.map(function (r) {
+      var opts = STATUSES.map(function (s) { return '<option ' + (s === r.status ? "selected" : "") + '>' + s + "</option>"; }).join("");
+      var cv = r.cvUrl
+        ? '<a class="cv-link" href="' + esc(r.cvUrl) + '" target="_blank" rel="noopener"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>View</a>'
+        : (r.cvName ? '<span class="cv-none">' + esc(r.cvName) + '</span>' : '<span class="cv-none">—</span>');
+      return '<tr data-id="' + esc(r.id) + '">' +
+        '<td><div class="cell-name">' + esc(r.fullName) + '</div><div class="cell-email">' + esc(r.email) + '</div></td>' +
+        '<td>' + esc(r.position) + '</td>' +
+        '<td>' + esc(r.department || "—") + '</td>' +
+        '<td>' + esc(r.experience || "—") + '</td>' +
+        '<td class="tabnum">' + fmtDate(r.appliedOn) + '</td>' +
+        '<td><select class="row-status-sel" data-id="' + esc(r.id) + '">' + opts + '</select></td>' +
+        '<td>' + cv + '</td>' +
+        '<td><button class="link-btn" data-view="' + esc(r.id) + '">Details</button></td>' +
+        '</tr>';
+    }).join("");
+
+    $$(".row-status-sel", tb).forEach(function (sel) {
+      sel.addEventListener("change", function (e) {
+        e.stopPropagation();
+        updateStatus(this.getAttribute("data-id"), this.value);
+        // recolour the pill mapping is via drawer; keep table select as source of truth
+      });
+      sel.addEventListener("click", function (e) { e.stopPropagation(); });
+    });
+    $$("[data-view]", tb).forEach(function (b) {
+      b.addEventListener("click", function (e) { e.stopPropagation(); openDrawer(this.getAttribute("data-view")); });
+    });
+    $$("tr[data-id]", tb).forEach(function (tr) {
+      tr.addEventListener("click", function () { openDrawer(this.getAttribute("data-id")); });
+    });
+  }
+
+  function bindSort() {
+    $$("thead th[data-sort]").forEach(function (th) {
+      th.addEventListener("click", function () {
+        var k = th.getAttribute("data-sort");
+        if (state.sortKey === k) state.sortDir *= -1;
+        else { state.sortKey = k; state.sortDir = (k === "appliedOn") ? -1 : 1; }
+        $$("thead th").forEach(function (t) { t.classList.remove("sorted"); });
+        th.classList.add("sorted");
+        var ic = $(".sort-ic", th); if (ic) ic.textContent = state.sortDir > 0 ? "↑" : "↓";
+        sortView(); renderRows();
+      });
+    });
+  }
+
+  /* ============================================================
+   *  DRAWER (applicant detail)
+   * ============================================================ */
+  function openDrawer(id) {
+    var r = state.all.filter(function (x) { return x.id === id; })[0];
+    if (!r) return;
+    $("#drName").textContent = r.fullName;
+    $("#drRole").textContent = r.position + " · " + (r.department || "—");
+    var rows = [
+      ["Status", statusPill(r.status)],
+      ["Email", '<a href="mailto:' + esc(r.email) + '">' + esc(r.email) + "</a>"],
+      ["Phone", '<a href="tel:' + esc(r.phone) + '">' + esc(r.phone) + "</a>"],
+      ["City", esc(r.city || "—")],
+      ["Employment", esc(r.employmentType || "—")],
+      ["Preferred location", esc(r.workLocation || "—")],
+      ["Experience", esc(r.experience || "—")],
+      ["Education", esc(r.education || "—")],
+      ["Current title", esc(r.currentTitle || "—")],
+      ["Availability", esc(r.availability || "—")],
+      ["Applied", fmtDate(r.appliedOn)]
+    ];
+    if (r.reference) rows.unshift(["Reference", esc(r.reference)]);
+    if (r.linkedin) rows.push(["LinkedIn / Portfolio", '<a href="' + esc(r.linkedin) + '" target="_blank" rel="noopener">Open link</a>']);
+    var html = rows.map(function (x) { return '<div class="dr-row"><span class="dr-k">' + x[0] + '</span><span class="dr-v">' + x[1] + "</span></div>"; }).join("");
+    if (r.coverLetter) html += '<div class="dr-cover"><strong>Why ISAT:</strong><br>' + esc(r.coverLetter) + "</div>";
+    $("#drBody").innerHTML = html;
+
+    var foot = "";
+    if (r.cvUrl) foot += '<a class="adm-btn adm-btn-primary" style="flex:1;justify-content:center;text-decoration:none;" href="' + esc(r.cvUrl) + '" target="_blank" rel="noopener">Download CV</a>';
+    foot += '<a class="adm-btn" style="flex:1;justify-content:center;text-decoration:none;" href="mailto:' + esc(r.email) + '">Email applicant</a>';
+    $("#drFoot").innerHTML = foot;
+
+    $("#admDrawer").classList.add("show");
+    $("#admDrawer").setAttribute("aria-hidden", "false");
+    $("#admDrawerBg").classList.add("show");
+  }
+  function closeDrawer() {
+    $("#admDrawer").classList.remove("show");
+    $("#admDrawer").setAttribute("aria-hidden", "true");
+    $("#admDrawerBg").classList.remove("show");
+  }
+  $("#drClose").addEventListener("click", closeDrawer);
+  $("#admDrawerBg").addEventListener("click", closeDrawer);
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeDrawer(); });
+
+  /* ============================================================
+   *  FILTER OPTIONS + EVENTS
+   * ============================================================ */
+  function fillFilterOptions() {
+    var positions = uniq(state.all.map(function (r) { return r.position; }));
+    var depts = uniq(state.all.map(function (r) { return r.department; }));
+    fillSelect($("#fltPosition"), positions, "All positions");
+    fillSelect($("#fltDept"), depts, "All departments");
+  }
+  function uniq(a) { return a.filter(function (v, i) { return v && a.indexOf(v) === i; }).sort(); }
+  function fillSelect(sel, items, allLabel) {
+    var cur = sel.value;
+    sel.innerHTML = '<option value="">' + allLabel + "</option>" + items.map(function (i) { return "<option>" + esc(i) + "</option>"; }).join("");
+    sel.value = cur;
+  }
+
+  ["fltSearch", "fltPosition", "fltDept", "fltStatus"].forEach(function (id) {
+    document.getElementById(id).addEventListener("input", applyFilters);
+    document.getElementById(id).addEventListener("change", applyFilters);
+  });
+  $("#fltClear").addEventListener("click", function () {
+    $("#fltSearch").value = ""; $("#fltPosition").value = ""; $("#fltDept").value = ""; $("#fltStatus").value = "";
+    applyFilters();
+  });
+  $("#admRefresh").addEventListener("click", boot);
+  $("#admExport").addEventListener("click", exportCsv);
+
+  function exportCsv() {
+    var cols = ["fullName", "email", "phone", "city", "position", "department", "employmentType", "workLocation", "experience", "education", "currentTitle", "availability", "status", "appliedOn"];
+    var head = cols.join(",");
+    var lines = state.view.map(function (r) {
+      return cols.map(function (c) {
+        var v = c === "appliedOn" ? fmtDate(r[c]) : (r[c] == null ? "" : r[c]);
+        return '"' + String(v).replace(/"/g, '""') + '"';
+      }).join(",");
+    });
+    var blob = new Blob([head + "\n" + lines.join("\n")], { type: "text/csv" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "isat-applicants-" + new Date().toISOString().slice(0, 10) + ".csv";
+    a.click();
+  }
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  /* ============================================================
+   *  BOOT
+   * ============================================================ */
+  function boot() {
+    $("#admRows").innerHTML = '<tr><td colspan="8"><div class="empty-note">Loading…</div></td></tr>';
+    load().then(function (data) {
+      state.all = data;
+      $("#admDemoBadge").style.display = CONFIG.DEMO_MODE ? "inline-flex" : "none";
+      renderKpis();
+      renderCharts();
+      fillFilterOptions();
+      applyFilters();
+    }).catch(function (err) {
+      $("#admRows").innerHTML = '<tr><td colspan="8"><div class="empty-note">Could not load data: ' + esc(err.message) + '</div></td></tr>';
+    });
+  }
+
+  bindSort();
+  boot();
+
+  // Re-render charts on resize is automatic (SVG viewBox); nothing to do.
+
+  /* ============================================================
+   *  DEMO SAMPLE DATA (only used in DEMO_MODE on first load)
+   * ============================================================ */
+  function seedData() {
+    var first = ["Sara", "Omar", "Lina", "Yousef", "Rana", "Khaled", "Dana", "Tariq", "Maya", "Hadi", "Noor", "Sami", "Aya", "Faris", "Leen", "Zaid", "Farah", "Nabil", "Reem", "Bashar"];
+    var last = ["Ahmed", "Khaled", "Mansour", "Haddad", "Odeh", "Nasser", "Saleh", "Barakat", "Qasem", "Hijazi", "Zahran", "Sabbagh", "Amous", "Rashid"];
+    var roles = [
+      { p: "Software Engineer", d: "Engineering", t: ["Front-End Developer", "Backend Engineer", "Full-Stack Developer", "QA Engineer"] },
+      { p: "Marketing Specialist", d: "Marketing", t: ["Content Marketer", "SEO Specialist", "Brand Manager"] },
+      { p: "Customer Support Representative", d: "Support", t: ["Support Agent", "Success Specialist"] },
+      { p: "Data Analyst", d: "Engineering", t: ["BI Analyst", "Data Analyst"] }
+    ];
+    var exp = ["Student / Fresh graduate", "0–1 years", "1–3 years", "3–5 years", "5–8 years", "8+ years"];
+    var edu = ["Bachelor's degree", "Master's degree", "Diploma", "PhD"];
+    var emp = ["Full-Time", "Part-Time", "Contract", "Internship"];
+    var loc = ["Amman, Jordan", "Remote", "Hybrid"];
+    var avail = ["Immediately", "Within 2 weeks", "1 month notice", "2 months notice"];
+    var statusPool = ["New", "New", "New", "Reviewing", "Reviewing", "Interview", "Offer", "Hired", "Rejected"];
+    function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
+    var out = [];
+    for (var i = 0; i < 46; i++) {
+      var role = pick(roles);
+      var fn = pick(first), ln = pick(last);
+      var daysAgo = Math.floor(Math.random() * 56);
+      out.push({
+        id: "seed-" + i,
+        reference: "ISAT-26-" + (1000 + i),
+        fullName: fn + " " + ln,
+        email: (fn + "." + ln).toLowerCase() + "@example.com",
+        phone: "+9627" + (90000000 + Math.floor(Math.random() * 9999999)),
+        city: pick(["Amman", "Irbid", "Zarqa", "Aqaba", "Madaba"]),
+        linkedin: Math.random() > 0.5 ? "https://linkedin.com/in/" + fn.toLowerCase() + ln.toLowerCase() : "",
+        position: role.p, department: role.d,
+        employmentType: pick(emp), workLocation: pick(loc),
+        experience: pick(exp), education: pick(edu),
+        currentTitle: pick(role.t), availability: pick(avail),
+        coverLetter: "I am excited to bring my experience as a " + pick(role.t).toLowerCase() + " to ISAT and contribute to your innovative projects.",
+        status: pick(statusPool),
+        appliedOn: new Date(Date.now() - daysAgo * 864e5).toISOString(),
+        cvName: fn + "_" + ln + "_CV.pdf",
+        cvData: ""
+      });
+    }
+    return out;
+  }
+})();
+</script>

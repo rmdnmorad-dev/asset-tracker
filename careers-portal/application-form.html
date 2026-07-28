@@ -1,0 +1,1035 @@
+<!--
+  ISAT Careers Jordan — Job Application Form
+  ------------------------------------------------------------------
+  Paste this whole block into the "Copy" / source (</> code) editor of a
+  Power Pages web page (e.g. page URL: /apply).
+
+  It is a self-contained, mobile-first, Microsoft-Forms-style multi-step
+  form with drag & drop CV upload and inline validation.
+
+  DATA MODE
+  ---------
+  DEMO_MODE = true  -> saves applications to the browser (localStorage) so you
+                       can test the full flow immediately. The admin dashboard
+                       page reads the same store, so submissions show up there.
+  DEMO_MODE = false -> submits to Dataverse through the Power Pages Web API.
+                       Fill in the CONFIG block and follow README.md first.
+
+  See README.md in this folder for the Dataverse table + Web API setup.
+-->
+
+<style>
+  /* ===== ISAT brand tokens ===== */
+  .isat-apply {
+    --brand: #0a1f3c;          /* ISAT navy            */
+    --brand-2: #1976d2;        /* ISAT blue            */
+    --accent: #f57c00;         /* ISAT orange          */
+    --ok: #0ca30c;
+    --danger: #d03b3b;
+    --ink: #12233d;
+    --ink-soft: #5a6b82;
+    --line: #e4e8ef;
+    --line-strong: #cbd4e1;
+    --surface: #ffffff;
+    --surface-2: #f4f7fb;
+    --focus: rgba(25,118,210,0.18);
+    --radius: 16px;
+    --shadow: 0 10px 40px rgba(10,31,60,0.10), 0 2px 8px rgba(10,31,60,0.06);
+    font-family: 'Inter', system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Neutralise Power Pages section padding so the card can breathe */
+  .isat-apply * { box-sizing: border-box; }
+
+  .isat-apply {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: clamp(12px, 3vw, 28px);
+  }
+
+  .isat-apply .ia-card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+
+  /* ===== Header / hero ===== */
+  .isat-apply .ia-head {
+    background: linear-gradient(135deg, var(--brand), var(--brand-2));
+    color: #fff;
+    padding: clamp(20px, 4vw, 32px) clamp(20px, 4vw, 36px);
+  }
+  .isat-apply .ia-head h1 {
+    margin: 0 0 6px;
+    font-size: clamp(1.35rem, 3.4vw, 1.9rem);
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+  .isat-apply .ia-head p {
+    margin: 0;
+    color: rgba(255,255,255,0.85);
+    font-size: clamp(0.9rem, 2.4vw, 1rem);
+    line-height: 1.55;
+  }
+
+  /* ===== Progress ===== */
+  .isat-apply .ia-progress {
+    padding: 18px clamp(20px, 4vw, 36px) 0;
+  }
+  .isat-apply .ia-steps {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .isat-apply .ia-steps .bar {
+    height: 6px;
+    flex: 1;
+    border-radius: 999px;
+    background: var(--line);
+    transition: background 0.35s ease;
+  }
+  .isat-apply .ia-steps .bar.done { background: var(--brand-2); }
+  .isat-apply .ia-steps .bar.active { background: var(--accent); }
+  .isat-apply .ia-step-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+    font-weight: 600;
+  }
+  .isat-apply .ia-step-label .cur { color: var(--brand); }
+
+  /* ===== Body / panels ===== */
+  .isat-apply form { margin: 0; }
+  .isat-apply .ia-body { padding: clamp(18px, 4vw, 32px) clamp(20px, 4vw, 36px); }
+
+  .isat-apply .ia-panel { display: none; animation: iaFade 0.4s ease both; }
+  .isat-apply .ia-panel.active { display: block; }
+  @keyframes iaFade { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+  .isat-apply .ia-panel h2 {
+    margin: 0 0 4px;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--brand);
+  }
+  .isat-apply .ia-panel .ia-sub {
+    margin: 0 0 20px;
+    color: var(--ink-soft);
+    font-size: 0.9rem;
+  }
+
+  /* ===== Fields ===== */
+  .isat-apply .ia-field { margin-bottom: 18px; }
+  .isat-apply .ia-field.half { }
+  .isat-apply .ia-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .isat-apply label.ia-label {
+    display: block;
+    font-weight: 600;
+    font-size: 0.92rem;
+    margin-bottom: 7px;
+    color: var(--ink);
+  }
+  .isat-apply label.ia-label .req { color: var(--danger); margin-left: 2px; }
+  .isat-apply label.ia-label .opt { color: var(--ink-soft); font-weight: 500; font-size: 0.8rem; }
+
+  .isat-apply .ia-input,
+  .isat-apply .ia-select,
+  .isat-apply .ia-textarea {
+    width: 100%;
+    font: inherit;
+    font-size: 16px;               /* 16px avoids iOS zoom-on-focus */
+    color: var(--ink);
+    background: var(--surface);
+    border: 1.5px solid var(--line-strong);
+    border-radius: 12px;
+    padding: 13px 14px;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .isat-apply .ia-textarea { min-height: 118px; resize: vertical; line-height: 1.55; }
+  .isat-apply .ia-input:focus,
+  .isat-apply .ia-select:focus,
+  .isat-apply .ia-textarea:focus {
+    outline: none;
+    border-color: var(--brand-2);
+    box-shadow: 0 0 0 4px var(--focus);
+  }
+  .isat-apply .ia-select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235a6b82' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    padding-right: 40px;
+  }
+  .isat-apply .ia-input.invalid,
+  .isat-apply .ia-select.invalid,
+  .isat-apply .ia-textarea.invalid {
+    border-color: var(--danger);
+    box-shadow: 0 0 0 4px rgba(208,59,59,0.12);
+  }
+  .isat-apply .ia-err {
+    display: none;
+    color: var(--danger);
+    font-size: 0.8rem;
+    margin-top: 6px;
+    font-weight: 600;
+  }
+  .isat-apply .ia-err.show { display: block; }
+  .isat-apply .ia-hint { color: var(--ink-soft); font-size: 0.8rem; margin-top: 6px; }
+
+  /* Choice chips (position / employment type) */
+  .isat-apply .ia-chips { display: flex; flex-wrap: wrap; gap: 10px; }
+  .isat-apply .ia-chip {
+    position: relative;
+    border: 1.5px solid var(--line-strong);
+    border-radius: 999px;
+    padding: 11px 18px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--ink-soft);
+    cursor: pointer;
+    background: var(--surface);
+    transition: all 0.16s ease;
+    user-select: none;
+  }
+  .isat-apply .ia-chip:hover { border-color: var(--brand-2); color: var(--brand-2); }
+  .isat-apply .ia-chip input { position: absolute; opacity: 0; pointer-events: none; }
+  .isat-apply .ia-chip.sel {
+    background: linear-gradient(135deg, var(--brand), var(--brand-2));
+    border-color: transparent;
+    color: #fff;
+    box-shadow: 0 6px 16px rgba(25,118,210,0.28);
+  }
+
+  /* ===== CV upload ===== */
+  .isat-apply .ia-drop {
+    border: 2px dashed var(--line-strong);
+    border-radius: var(--radius);
+    padding: 30px 20px;
+    text-align: center;
+    background: var(--surface-2);
+    transition: all 0.18s ease;
+    cursor: pointer;
+  }
+  .isat-apply .ia-drop:hover,
+  .isat-apply .ia-drop.drag {
+    border-color: var(--brand-2);
+    background: #eef5fe;
+  }
+  .isat-apply .ia-drop .ia-cloud {
+    width: 52px; height: 52px; margin: 0 auto 12px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--brand), var(--brand-2));
+    display: flex; align-items: center; justify-content: center;
+    color: #fff;
+  }
+  .isat-apply .ia-drop strong { color: var(--brand-2); }
+  .isat-apply .ia-drop .ia-drop-main { font-weight: 600; margin-bottom: 4px; }
+  .isat-apply .ia-drop .ia-drop-sub { color: var(--ink-soft); font-size: 0.82rem; }
+
+  .isat-apply .ia-file {
+    display: none;
+    align-items: center;
+    gap: 14px;
+    border: 1.5px solid var(--line);
+    background: var(--surface);
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin-top: 12px;
+  }
+  .isat-apply .ia-file.show { display: flex; }
+  .isat-apply .ia-file .ia-file-ic {
+    width: 42px; height: 42px; border-radius: 10px; flex-shrink: 0;
+    background: rgba(25,118,210,0.10); color: var(--brand-2);
+    display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.7rem;
+  }
+  .isat-apply .ia-file .ia-file-meta { flex: 1; min-width: 0; }
+  .isat-apply .ia-file .ia-file-name { font-weight: 600; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .isat-apply .ia-file .ia-file-size { color: var(--ink-soft); font-size: 0.8rem; }
+  .isat-apply .ia-file .ia-file-x {
+    border: none; background: var(--surface-2); color: var(--ink-soft);
+    width: 32px; height: 32px; border-radius: 8px; cursor: pointer; font-size: 1.1rem; line-height: 1;
+    flex-shrink: 0; transition: all 0.15s ease;
+  }
+  .isat-apply .ia-file .ia-file-x:hover { background: rgba(208,59,59,0.1); color: var(--danger); }
+
+  /* ===== Review ===== */
+  .isat-apply .ia-review {
+    background: var(--surface-2);
+    border-radius: 14px;
+    padding: 4px 18px;
+    margin-bottom: 18px;
+  }
+  .isat-apply .ia-review .ia-rrow {
+    display: flex; justify-content: space-between; gap: 16px;
+    padding: 12px 0; border-bottom: 1px solid var(--line);
+  }
+  .isat-apply .ia-review .ia-rrow:last-child { border-bottom: none; }
+  .isat-apply .ia-review .ia-rk { color: var(--ink-soft); font-size: 0.85rem; font-weight: 600; flex-shrink: 0; }
+  .isat-apply .ia-review .ia-rv { text-align: right; font-weight: 600; font-size: 0.9rem; word-break: break-word; }
+
+  .isat-apply .ia-consent {
+    display: flex; gap: 12px; align-items: flex-start;
+    font-size: 0.86rem; color: var(--ink-soft); line-height: 1.5;
+  }
+  .isat-apply .ia-consent input { width: 20px; height: 20px; margin-top: 1px; flex-shrink: 0; accent-color: var(--brand-2); }
+
+  /* ===== Footer nav ===== */
+  .isat-apply .ia-foot {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 18px clamp(20px, 4vw, 36px);
+    border-top: 1px solid var(--line);
+    background: var(--surface);
+  }
+  .isat-apply .ia-btn {
+    font: inherit; font-weight: 700; font-size: 0.95rem;
+    border-radius: 999px; padding: 13px 28px; cursor: pointer;
+    border: 1.5px solid transparent; transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  }
+  .isat-apply .ia-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .isat-apply .ia-btn-primary {
+    background: linear-gradient(135deg, var(--brand), var(--brand-2)); color: #fff;
+    box-shadow: 0 8px 20px rgba(10,31,60,0.22);
+  }
+  .isat-apply .ia-btn-primary:not(:disabled):hover { transform: translateY(-2px); box-shadow: 0 12px 26px rgba(10,31,60,0.30); }
+  .isat-apply .ia-btn-ghost { background: var(--surface); border-color: var(--line-strong); color: var(--ink); }
+  .isat-apply .ia-btn-ghost:hover { border-color: var(--brand-2); color: var(--brand-2); }
+  .isat-apply .ia-btn-ghost.hidden { visibility: hidden; }
+
+  /* ===== Success ===== */
+  .isat-apply .ia-done { display: none; padding: clamp(28px, 6vw, 56px) clamp(20px, 4vw, 36px); text-align: center; }
+  .isat-apply .ia-done.show { display: block; animation: iaFade 0.5s ease both; }
+  .isat-apply .ia-done .ia-check {
+    width: 78px; height: 78px; margin: 0 auto 20px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--ok), #22c55e);
+    display: flex; align-items: center; justify-content: center; color: #fff;
+    box-shadow: 0 12px 30px rgba(12,163,12,0.30);
+    animation: iaPop 0.5s cubic-bezier(0.2,0.9,0.3,1.4) both;
+  }
+  @keyframes iaPop { from { transform: scale(0); } to { transform: scale(1); } }
+  .isat-apply .ia-done h2 { color: var(--brand); font-size: 1.5rem; margin: 0 0 8px; }
+  .isat-apply .ia-done p { color: var(--ink-soft); max-width: 420px; margin: 0 auto 18px; line-height: 1.6; }
+  .isat-apply .ia-ref {
+    display: inline-block; background: var(--surface-2); border: 1px dashed var(--line-strong);
+    border-radius: 10px; padding: 10px 18px; font-weight: 800; color: var(--brand); letter-spacing: 0.04em;
+  }
+
+  .isat-apply .ia-spinner {
+    width: 18px; height: 18px; border: 2.5px solid rgba(255,255,255,0.4);
+    border-top-color: #fff; border-radius: 50%; display: inline-block; vertical-align: -3px; margin-right: 8px;
+    animation: iaSpin 0.7s linear infinite;
+  }
+  @keyframes iaSpin { to { transform: rotate(360deg); } }
+
+  .isat-apply .ia-alert {
+    display: none; margin-top: 14px; padding: 12px 16px; border-radius: 12px;
+    background: rgba(208,59,59,0.08); border: 1px solid rgba(208,59,59,0.25);
+    color: #92211f; font-size: 0.86rem; font-weight: 600;
+  }
+  .isat-apply .ia-alert.show { display: block; }
+
+  .isat-apply .ia-demo-tag {
+    text-align: center; font-size: 0.72rem; color: var(--ink-soft);
+    padding: 10px; letter-spacing: 0.04em;
+  }
+
+  /* ===== Mobile ===== */
+  @media (max-width: 560px) {
+    .isat-apply { padding: 0; }
+    .isat-apply .ia-card { border-radius: 0; box-shadow: none; }
+    .isat-apply .ia-row { grid-template-columns: 1fr; gap: 0; }
+    .isat-apply .ia-foot { position: sticky; bottom: 0; }
+    .isat-apply .ia-btn { padding: 13px 22px; }
+  }
+</style>
+
+<div class="isat-apply">
+  <div class="ia-card">
+
+    <!-- HERO -->
+    <div class="ia-head">
+      <h1>Apply to ISAT Jordan</h1>
+      <p>A few quick steps — tell us about yourself and attach your CV. It works great on your phone, and takes about 3 minutes.</p>
+    </div>
+
+    <!-- PROGRESS -->
+    <div class="ia-progress" id="iaProgress">
+      <div class="ia-steps">
+        <div class="bar" data-bar="0"></div>
+        <div class="bar" data-bar="1"></div>
+        <div class="bar" data-bar="2"></div>
+        <div class="bar" data-bar="3"></div>
+        <div class="bar" data-bar="4"></div>
+      </div>
+      <div class="ia-step-label">
+        <span><span class="cur" id="iaStepNum">Step 1</span> of 5</span>
+        <span id="iaStepName">The role</span>
+      </div>
+    </div>
+
+    <form id="iaForm" novalidate>
+      <div class="ia-body">
+
+        <!-- STEP 1 — ROLE -->
+        <section class="ia-panel active" data-step="0">
+          <h2>Which role are you applying for?</h2>
+          <p class="ia-sub">Pick the position you're most interested in.</p>
+
+          <div class="ia-field">
+            <label class="ia-label">Position<span class="req">*</span></label>
+            <div class="ia-chips" id="iaPositionChips">
+              <label class="ia-chip"><input type="radio" name="position" value="Software Engineer">Software Engineer</label>
+              <label class="ia-chip"><input type="radio" name="position" value="Marketing Specialist">Marketing Specialist</label>
+              <label class="ia-chip"><input type="radio" name="position" value="Customer Support Representative">Customer Support</label>
+              <label class="ia-chip"><input type="radio" name="position" value="Other">Other</label>
+            </div>
+            <div class="ia-err" data-err="position">Please choose a position.</div>
+          </div>
+
+          <div class="ia-field" id="iaOtherWrap" style="display:none;">
+            <label class="ia-label" for="iaOtherRole">Tell us the role<span class="req">*</span></label>
+            <input class="ia-input" id="iaOtherRole" name="otherRole" type="text" placeholder="e.g. Data Analyst" autocomplete="off">
+            <div class="ia-err" data-err="otherRole">Please type the role you want.</div>
+          </div>
+
+          <div class="ia-row">
+            <div class="ia-field">
+              <label class="ia-label" for="iaEmployment">Employment type<span class="req">*</span></label>
+              <select class="ia-select" id="iaEmployment" name="employmentType">
+                <option value="">Select…</option>
+                <option>Full-Time</option>
+                <option>Part-Time</option>
+                <option>Contract</option>
+                <option>Internship</option>
+              </select>
+              <div class="ia-err" data-err="employmentType">Please select an employment type.</div>
+            </div>
+            <div class="ia-field">
+              <label class="ia-label" for="iaWorkLocation">Preferred location<span class="req">*</span></label>
+              <select class="ia-select" id="iaWorkLocation" name="workLocation">
+                <option value="">Select…</option>
+                <option>Amman, Jordan</option>
+                <option>Remote</option>
+                <option>Hybrid</option>
+              </select>
+              <div class="ia-err" data-err="workLocation">Please select a location.</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- STEP 2 — ABOUT YOU -->
+        <section class="ia-panel" data-step="1">
+          <h2>About you</h2>
+          <p class="ia-sub">How can we reach you?</p>
+
+          <div class="ia-field">
+            <label class="ia-label" for="iaFullName">Full name<span class="req">*</span></label>
+            <input class="ia-input" id="iaFullName" name="fullName" type="text" placeholder="First and last name" autocomplete="name">
+            <div class="ia-err" data-err="fullName">Please enter your full name.</div>
+          </div>
+
+          <div class="ia-row">
+            <div class="ia-field">
+              <label class="ia-label" for="iaEmail">Email<span class="req">*</span></label>
+              <input class="ia-input" id="iaEmail" name="email" type="email" placeholder="you@example.com" autocomplete="email" inputmode="email">
+              <div class="ia-err" data-err="email">Please enter a valid email address.</div>
+            </div>
+            <div class="ia-field">
+              <label class="ia-label" for="iaPhone">Phone<span class="req">*</span></label>
+              <input class="ia-input" id="iaPhone" name="phone" type="tel" placeholder="+962 7X XXX XXXX" autocomplete="tel" inputmode="tel">
+              <div class="ia-err" data-err="phone">Please enter your phone number.</div>
+            </div>
+          </div>
+
+          <div class="ia-row">
+            <div class="ia-field">
+              <label class="ia-label" for="iaCity">City<span class="req">*</span></label>
+              <input class="ia-input" id="iaCity" name="city" type="text" placeholder="e.g. Amman" autocomplete="address-level2">
+              <div class="ia-err" data-err="city">Please enter your city.</div>
+            </div>
+            <div class="ia-field">
+              <label class="ia-label" for="iaLinkedin">LinkedIn / Portfolio <span class="opt">(optional)</span></label>
+              <input class="ia-input" id="iaLinkedin" name="linkedin" type="url" placeholder="https://…" autocomplete="url" inputmode="url">
+              <div class="ia-err" data-err="linkedin">Please enter a valid URL (or leave blank).</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- STEP 3 — EXPERIENCE -->
+        <section class="ia-panel" data-step="2">
+          <h2>Your experience</h2>
+          <p class="ia-sub">A quick snapshot of your background.</p>
+
+          <div class="ia-row">
+            <div class="ia-field">
+              <label class="ia-label" for="iaExperience">Years of experience<span class="req">*</span></label>
+              <select class="ia-select" id="iaExperience" name="experience">
+                <option value="">Select…</option>
+                <option>Student / Fresh graduate</option>
+                <option>0–1 years</option>
+                <option>1–3 years</option>
+                <option>3–5 years</option>
+                <option>5–8 years</option>
+                <option>8+ years</option>
+              </select>
+              <div class="ia-err" data-err="experience">Please select your experience.</div>
+            </div>
+            <div class="ia-field">
+              <label class="ia-label" for="iaEducation">Highest education<span class="req">*</span></label>
+              <select class="ia-select" id="iaEducation" name="education">
+                <option value="">Select…</option>
+                <option>High school</option>
+                <option>Diploma</option>
+                <option>Bachelor's degree</option>
+                <option>Master's degree</option>
+                <option>PhD</option>
+              </select>
+              <div class="ia-err" data-err="education">Please select your education.</div>
+            </div>
+          </div>
+
+          <div class="ia-row">
+            <div class="ia-field">
+              <label class="ia-label" for="iaCurrentTitle">Current / most recent title <span class="opt">(optional)</span></label>
+              <input class="ia-input" id="iaCurrentTitle" name="currentTitle" type="text" placeholder="e.g. Front-End Developer">
+            </div>
+            <div class="ia-field">
+              <label class="ia-label" for="iaAvailability">Availability to start<span class="req">*</span></label>
+              <select class="ia-select" id="iaAvailability" name="availability">
+                <option value="">Select…</option>
+                <option>Immediately</option>
+                <option>Within 2 weeks</option>
+                <option>1 month notice</option>
+                <option>2 months notice</option>
+                <option>3+ months</option>
+              </select>
+              <div class="ia-err" data-err="availability">Please select your availability.</div>
+            </div>
+          </div>
+
+          <div class="ia-field">
+            <label class="ia-label" for="iaCover">Why do you want to join ISAT? <span class="opt">(optional)</span></label>
+            <textarea class="ia-textarea" id="iaCover" name="coverLetter" placeholder="A few sentences about what makes you a great fit…" maxlength="1500"></textarea>
+            <div class="ia-hint"><span id="iaCoverCount">0</span> / 1500</div>
+          </div>
+        </section>
+
+        <!-- STEP 4 — CV -->
+        <section class="ia-panel" data-step="3">
+          <h2>Upload your CV</h2>
+          <p class="ia-sub">PDF, DOC or DOCX — up to 5&nbsp;MB.</p>
+
+          <div class="ia-drop" id="iaDrop" tabindex="0" role="button" aria-label="Upload your CV">
+            <div class="ia-cloud">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            </div>
+            <div class="ia-drop-main"><strong>Tap to upload</strong> or drag &amp; drop</div>
+            <div class="ia-drop-sub">PDF, DOC, DOCX · max 5&nbsp;MB</div>
+            <input type="file" id="iaCvInput" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden>
+          </div>
+
+          <div class="ia-file" id="iaFileCard">
+            <div class="ia-file-ic" id="iaFileExt">PDF</div>
+            <div class="ia-file-meta">
+              <div class="ia-file-name" id="iaFileName">—</div>
+              <div class="ia-file-size" id="iaFileSize">—</div>
+            </div>
+            <button type="button" class="ia-file-x" id="iaFileRemove" aria-label="Remove file">&times;</button>
+          </div>
+          <div class="ia-err" data-err="cv" style="margin-top:12px;">Please attach your CV.</div>
+        </section>
+
+        <!-- STEP 5 — REVIEW -->
+        <section class="ia-panel" data-step="4">
+          <h2>Review &amp; submit</h2>
+          <p class="ia-sub">Check your details, then send your application.</p>
+
+          <div class="ia-review" id="iaReview"><!-- filled by JS --></div>
+
+          <label class="ia-consent">
+            <input type="checkbox" id="iaConsent" name="consent">
+            <span>I confirm the information above is accurate and I consent to ISAT Jordan storing and processing my data for recruitment purposes.</span>
+          </label>
+          <div class="ia-err" data-err="consent" style="margin-top:10px;">Please confirm to continue.</div>
+
+          <div class="ia-alert" id="iaAlert"></div>
+        </section>
+
+      </div>
+
+      <!-- FOOTER NAV -->
+      <div class="ia-foot" id="iaFoot">
+        <button type="button" class="ia-btn ia-btn-ghost hidden" id="iaBack">Back</button>
+        <button type="button" class="ia-btn ia-btn-primary" id="iaNext">Next</button>
+        <button type="submit" class="ia-btn ia-btn-primary" id="iaSubmit" style="display:none;">Submit application</button>
+      </div>
+    </form>
+
+    <!-- SUCCESS -->
+    <div class="ia-done" id="iaDone">
+      <div class="ia-check">
+        <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <h2>Application received!</h2>
+      <p>Thanks for applying to ISAT Jordan. Our recruitment team will review your application and get back to you by email.</p>
+      <div class="ia-ref">Reference: <span id="iaRefNum">—</span></div>
+    </div>
+
+    <div class="ia-demo-tag" id="iaDemoTag"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ============================================================
+   *  CONFIG  — edit this to go live against Dataverse.
+   *  See README.md for the matching table + Web API setup.
+   * ============================================================ */
+  var CONFIG = {
+    DEMO_MODE: true,                       // <-- set to false for live Dataverse submission
+    apiPath: "/_api",                      // Power Pages Web API root
+    entitySet: "isat_jobapplicants",       // plural logical name of your table
+    cvMode: "file",                        // "file" = Dataverse File column | "notes" = classic Note/annotation
+    cvColumn: "isat_cv",                   // File column logical name (used when cvMode = "file")
+    notesBind: "objectid_isat_jobapplicant", // relationship nav property (used when cvMode = "notes")
+    // Map your Dataverse column logical names to the form fields:
+    columns: {
+      fullName:       "isat_fullname",
+      email:          "isat_email",
+      phone:          "isat_phone",
+      city:           "isat_city",
+      linkedin:       "isat_linkedin",
+      position:       "isat_position",
+      employmentType: "isat_employmenttype",
+      workLocation:   "isat_worklocation",
+      experience:     "isat_experience",
+      education:      "isat_education",
+      currentTitle:   "isat_currenttitle",
+      availability:   "isat_availability",
+      coverLetter:    "isat_coverletter",
+      status:         "isat_status"
+    },
+    defaultStatus: "New",
+    demoStoreKey: "isat_applications"      // localStorage key shared with the admin dashboard
+  };
+
+  var MAX_CV_BYTES = 5 * 1024 * 1024;
+  var STEP_NAMES = ["The role", "About you", "Experience", "Your CV", "Review"];
+
+  /* ---------- tiny DOM helpers ---------- */
+  var $  = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+
+  var form = $("#iaForm");
+  var panels = $$(".ia-panel", form);
+  var current = 0;
+  var cvFile = null;
+
+  /* ---------- progress ---------- */
+  function renderProgress() {
+    $$(".ia-steps .bar").forEach(function (b, i) {
+      b.classList.toggle("done", i < current);
+      b.classList.toggle("active", i === current);
+    });
+    $("#iaStepNum").textContent = "Step " + (current + 1);
+    $("#iaStepName").textContent = STEP_NAMES[current];
+
+    $("#iaBack").classList.toggle("hidden", current === 0);
+    var last = current === panels.length - 1;
+    $("#iaNext").style.display = last ? "none" : "";
+    $("#iaSubmit").style.display = last ? "" : "none";
+  }
+
+  function goTo(step) {
+    current = Math.max(0, Math.min(panels.length - 1, step));
+    panels.forEach(function (p, i) { p.classList.toggle("active", i === current); });
+    renderProgress();
+    if (current === panels.length - 1) buildReview();
+    var card = $(".ia-card");
+    if (card && card.scrollIntoView) card.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  /* ---------- validation ---------- */
+  function showErr(name, show) {
+    var el = $('[data-err="' + name + '"]', form);
+    if (el) el.classList.toggle("show", !!show);
+    var field = form.elements[name];
+    if (field && field.classList) field.classList.toggle("invalid", !!show);
+  }
+
+  var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  function validateStep(step) {
+    var ok = true;
+    function need(name, cond) {
+      var bad = !cond;
+      showErr(name, bad);
+      if (bad && ok) { ok = false; }
+      return !bad;
+    }
+
+    if (step === 0) {
+      var pos = (form.elements["position"].value || "");
+      need("position", !!pos);
+      if (pos === "Other") need("otherRole", ($("#iaOtherRole").value || "").trim().length > 0);
+      need("employmentType", !!$("#iaEmployment").value);
+      need("workLocation", !!$("#iaWorkLocation").value);
+    } else if (step === 1) {
+      need("fullName", ($("#iaFullName").value || "").trim().length > 1);
+      need("email", EMAIL_RE.test(($("#iaEmail").value || "").trim()));
+      need("phone", ($("#iaPhone").value || "").replace(/[^0-9]/g, "").length >= 7);
+      need("city", ($("#iaCity").value || "").trim().length > 0);
+      var url = ($("#iaLinkedin").value || "").trim();
+      need("linkedin", url === "" || /^https?:\/\/.+/i.test(url));
+    } else if (step === 2) {
+      need("experience", !!$("#iaExperience").value);
+      need("education", !!$("#iaEducation").value);
+      need("availability", !!$("#iaAvailability").value);
+    } else if (step === 3) {
+      need("cv", !!cvFile);
+    } else if (step === 4) {
+      need("consent", $("#iaConsent").checked);
+    }
+    return ok;
+  }
+
+  /* ---------- position chips ---------- */
+  $$("#iaPositionChips .ia-chip").forEach(function (chip) {
+    var input = $("input", chip);
+    input.addEventListener("change", function () {
+      $$("#iaPositionChips .ia-chip").forEach(function (c) { c.classList.remove("sel"); });
+      chip.classList.add("sel");
+      $("#iaOtherWrap").style.display = input.value === "Other" ? "" : "none";
+      showErr("position", false);
+    });
+  });
+
+  /* ---------- cover letter counter ---------- */
+  $("#iaCover").addEventListener("input", function () {
+    $("#iaCoverCount").textContent = this.value.length;
+  });
+
+  /* ---------- CV upload ---------- */
+  var drop = $("#iaDrop");
+  var cvInput = $("#iaCvInput");
+
+  function humanSize(bytes) {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + " KB";
+    return (bytes / 1024 / 1024).toFixed(2) + " MB";
+  }
+  function extLabel(name) {
+    var m = /\.([a-z0-9]+)$/i.exec(name || "");
+    return (m ? m[1] : "FILE").toUpperCase().slice(0, 4);
+  }
+
+  function setFile(file) {
+    if (!file) return;
+    var okType = /\.(pdf|docx?|)$/i.test(file.name) ||
+      /pdf|msword|officedocument/.test(file.type);
+    if (!okType) { alertCv("Please upload a PDF, DOC or DOCX file."); return; }
+    if (file.size > MAX_CV_BYTES) { alertCv("That file is larger than 5 MB. Please upload a smaller CV."); return; }
+
+    cvFile = file;
+    $("#iaFileName").textContent = file.name;
+    $("#iaFileSize").textContent = humanSize(file.size);
+    $("#iaFileExt").textContent = extLabel(file.name);
+    $("#iaFileCard").classList.add("show");
+    drop.style.display = "none";
+    showErr("cv", false);
+  }
+  function alertCv(msg) {
+    var el = $('[data-err="cv"]', form);
+    el.textContent = msg;
+    el.classList.add("show");
+  }
+
+  drop.addEventListener("click", function () { cvInput.click(); });
+  drop.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); cvInput.click(); } });
+  cvInput.addEventListener("change", function () { if (this.files && this.files[0]) setFile(this.files[0]); });
+
+  ["dragenter", "dragover"].forEach(function (ev) {
+    drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("drag"); });
+  });
+  ["dragleave", "drop"].forEach(function (ev) {
+    drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove("drag"); });
+  });
+  drop.addEventListener("drop", function (e) {
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
+  });
+  $("#iaFileRemove").addEventListener("click", function () {
+    cvFile = null; cvInput.value = "";
+    $("#iaFileCard").classList.remove("show");
+    drop.style.display = "";
+  });
+
+  /* ---------- gather values ---------- */
+  function positionValue() {
+    var p = form.elements["position"].value || "";
+    if (p === "Other") return ($("#iaOtherRole").value || "").trim() || "Other";
+    return p;
+  }
+  function departmentFor(pos) {
+    if (/engineer|developer|software/i.test(pos)) return "Engineering";
+    if (/market/i.test(pos)) return "Marketing";
+    if (/support|customer/i.test(pos)) return "Support";
+    return "General";
+  }
+  function collect() {
+    var pos = positionValue();
+    return {
+      fullName: $("#iaFullName").value.trim(),
+      email: $("#iaEmail").value.trim(),
+      phone: $("#iaPhone").value.trim(),
+      city: $("#iaCity").value.trim(),
+      linkedin: $("#iaLinkedin").value.trim(),
+      position: pos,
+      department: departmentFor(pos),
+      employmentType: $("#iaEmployment").value,
+      workLocation: $("#iaWorkLocation").value,
+      experience: $("#iaExperience").value,
+      education: $("#iaEducation").value,
+      currentTitle: $("#iaCurrentTitle").value.trim(),
+      availability: $("#iaAvailability").value,
+      coverLetter: $("#iaCover").value.trim()
+    };
+  }
+
+  /* ---------- review ---------- */
+  function buildReview() {
+    var d = collect();
+    var rows = [
+      ["Position", d.position],
+      ["Employment", d.employmentType],
+      ["Location", d.workLocation],
+      ["Name", d.fullName],
+      ["Email", d.email],
+      ["Phone", d.phone],
+      ["City", d.city],
+      ["Experience", d.experience],
+      ["Education", d.education],
+      ["Availability", d.availability],
+      ["CV", cvFile ? cvFile.name : "—"]
+    ];
+    if (d.linkedin) rows.splice(7, 0, ["LinkedIn / Portfolio", d.linkedin]);
+    $("#iaReview").innerHTML = rows.map(function (r) {
+      return '<div class="ia-rrow"><span class="ia-rk">' + r[0] +
+             '</span><span class="ia-rv">' + escapeHtml(r[1] || "—") + "</span></div>";
+    }).join("");
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  /* ---------- nav buttons ---------- */
+  $("#iaNext").addEventListener("click", function () {
+    if (validateStep(current)) goTo(current + 1);
+  });
+  $("#iaBack").addEventListener("click", function () { goTo(current - 1); });
+
+  /* ---------- submit ---------- */
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (!validateStep(current)) return;
+
+    var btn = $("#iaSubmit");
+    btn.disabled = true;
+    btn.innerHTML = '<span class="ia-spinner"></span>Submitting…';
+    $("#iaAlert").classList.remove("show");
+
+    submit(collect(), cvFile).then(function (ref) {
+      $("#iaRefNum").textContent = ref;
+      form.style.display = "none";
+      $("#iaProgress").style.display = "none";
+      $("#iaDone").classList.add("show");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }).catch(function (err) {
+      btn.disabled = false;
+      btn.textContent = "Submit application";
+      var a = $("#iaAlert");
+      a.textContent = "Sorry — something went wrong sending your application. " +
+        (err && err.message ? err.message : "Please try again.");
+      a.classList.add("show");
+    });
+  });
+
+  function makeRef() {
+    var d = new Date();
+    var y = String(d.getFullYear()).slice(2);
+    var rand = Math.random().toString(36).slice(2, 6).toUpperCase();
+    return "ISAT-" + y + (d.getMonth() + 1 < 10 ? "0" : "") + (d.getMonth() + 1) + "-" + rand;
+  }
+
+  /* ---------- data layer ---------- */
+  function submit(data, file) {
+    if (CONFIG.DEMO_MODE) return submitDemo(data, file);
+    return submitLive(data, file);
+  }
+
+  // DEMO: store to localStorage (shared with the admin dashboard demo)
+  function submitDemo(data, file) {
+    return new Promise(function (resolve) {
+      var ref = makeRef();
+      function save(cvDataUrl) {
+        var rec = Object.assign({}, data, {
+          id: "demo-" + Date.now(),
+          reference: ref,
+          status: CONFIG.defaultStatus,
+          appliedOn: new Date().toISOString(),
+          cvName: file ? file.name : "",
+          cvData: cvDataUrl || ""
+        });
+        var list;
+        try { list = JSON.parse(localStorage.getItem(CONFIG.demoStoreKey) || "[]"); }
+        catch (e) { list = []; }
+        list.push(rec);
+        try { localStorage.setItem(CONFIG.demoStoreKey, JSON.stringify(list)); } catch (e) {}
+        setTimeout(function () { resolve(ref); }, 650);
+      }
+      if (file && file.size < 2 * 1024 * 1024) {
+        var fr = new FileReader();
+        fr.onload = function () { save(fr.result); };
+        fr.onerror = function () { save(""); };
+        fr.readAsDataURL(file);
+      } else { save(""); }
+    });
+  }
+
+  // LIVE: Power Pages Web API -> Dataverse
+  function submitLive(data, file) {
+    var payload = {};
+    var c = CONFIG.columns;
+    payload[c.fullName]       = data.fullName;
+    payload[c.email]          = data.email;
+    payload[c.phone]          = data.phone;
+    payload[c.city]           = data.city;
+    payload[c.linkedin]       = data.linkedin;
+    payload[c.position]       = data.position;
+    payload[c.employmentType] = data.employmentType;
+    payload[c.workLocation]   = data.workLocation;
+    payload[c.experience]     = data.experience;
+    payload[c.education]      = data.education;
+    payload[c.currentTitle]   = data.currentTitle;
+    payload[c.availability]   = data.availability;
+    payload[c.coverLetter]    = data.coverLetter;
+    payload[c.status]         = CONFIG.defaultStatus;
+
+    var url = CONFIG.apiPath + "/" + CONFIG.entitySet;
+    return webApi("POST", url, payload, true).then(function (res) {
+      // Grab the new record id from the OData-EntityId response header.
+      var entityId = res.headers.get("OData-EntityId") || "";
+      var m = /\(([0-9a-fA-F-]{36})\)/.exec(entityId);
+      var recordId = m ? m[1] : null;
+      var ref = makeRef();
+      if (recordId && file) {
+        return uploadCv(recordId, file).then(function () { return ref; })
+                                       .catch(function () { return ref; }); // record saved even if CV upload fails
+      }
+      return ref;
+    });
+  }
+
+  // Upload the CV — either into a Dataverse File column or as a Note (annotation).
+  function uploadCv(recordId, file) {
+    return CONFIG.cvMode === "notes" ? uploadCvNote(recordId, file) : uploadCvFile(recordId, file);
+  }
+
+  // File column: PATCH the raw bytes to /<entityset>(id)/<fileColumn>
+  function uploadCvFile(recordId, file) {
+    var url = CONFIG.apiPath + "/" + CONFIG.entitySet + "(" + recordId + ")/" + CONFIG.cvColumn;
+    return getToken().then(function (token) {
+      return fetch(url, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/octet-stream",
+          "x-ms-file-name": file.name,
+          "__RequestVerificationToken": token
+        },
+        body: file
+      }).then(function (r) {
+        if (!r.ok) throw new Error("CV upload failed (" + r.status + ")");
+        return r;
+      });
+    });
+  }
+
+  // Notes/annotation: POST a base64 document linked to the new record.
+  function uploadCvNote(recordId, file) {
+    return fileToBase64(file).then(function (b64) {
+      var body = {
+        subject: "CV",
+        filename: file.name,
+        mimetype: file.type || "application/octet-stream",
+        documentbody: b64
+      };
+      body[CONFIG.notesBind + "@odata.bind"] = "/" + CONFIG.entitySet + "(" + recordId + ")";
+      return webApi("POST", CONFIG.apiPath + "/annotations", body, true);
+    });
+  }
+  function fileToBase64(file) {
+    return new Promise(function (resolve, reject) {
+      var fr = new FileReader();
+      fr.onload = function () { resolve(String(fr.result).split(",")[1] || ""); };
+      fr.onerror = reject;
+      fr.readAsDataURL(file);
+    });
+  }
+
+  function webApi(method, url, body, wantResponse) {
+    return getToken().then(function (token) {
+      return fetch(url, {
+        method: method,
+        headers: {
+          "Accept": "application/json",
+          "Content-Type": "application/json; charset=utf-8",
+          "OData-MaxVersion": "4.0",
+          "OData-Version": "4.0",
+          "__RequestVerificationToken": token
+        },
+        body: body ? JSON.stringify(body) : undefined
+      }).then(function (r) {
+        if (!r.ok) {
+          return r.text().then(function (t) {
+            var msg = t;
+            try { msg = JSON.parse(t).error.message; } catch (e) {}
+            throw new Error(msg || ("Request failed (" + r.status + ")"));
+          });
+        }
+        return wantResponse ? r : r.json();
+      });
+    });
+  }
+
+  // Power Pages anti-forgery token.
+  function getToken() {
+    var el = document.querySelector('[name="__RequestVerificationToken"]');
+    if (el && el.value) return Promise.resolve(el.value);
+    // Fallback: fetch the token endpoint Power Pages exposes.
+    return fetch("/_layout/tokenhtml", { headers: { "Accept": "text/html" } })
+      .then(function (r) { return r.text(); })
+      .then(function (html) {
+        var m = /name="__RequestVerificationToken"[^>]*value="([^"]+)"/.exec(html);
+        return m ? m[1] : "";
+      }).catch(function () { return ""; });
+  }
+
+  /* ---------- init ---------- */
+  renderProgress();
+  $("#iaDemoTag").textContent = CONFIG.DEMO_MODE
+    ? "● Demo mode — applications are saved to this browser so you can preview the dashboard. Set DEMO_MODE = false to go live."
+    : "";
+})();
+</script>

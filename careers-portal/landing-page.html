@@ -1,0 +1,218 @@
+<!--
+  ISAT Careers Jordan — Landing page (updated)
+  ------------------------------------------------------------------
+  This is your original marketing page, kept visually the same but:
+    • made properly responsive on mobile (testimonials + "why us" grids
+      no longer overflow on small screens);
+    • every "Apply Now" / CTA button now links to the application form
+      page at /apply  (change the href if your form page uses a different
+      partial URL);
+    • the raw {% entityform %} embed is replaced by a clean CTA that sends
+      applicants to the polished multi-step form page.
+
+  Paste into the "Copy" / source editor of your home/careers web page.
+-->
+
+<style>
+  .sec-1 { background: #0a1f3c !important; }
+  .sec-2 { background: #d32f2f !important; }
+  .sec-3 { background: #1976d2 !important; }
+  .sec-4 { background: #7b1fa2 !important; }
+  .sec-5 { background: #009688 !important; }
+  .sec-6 { background: #f57c00 !important; }
+  :root { --brand: #0a1f3c; --brand-2: #1976d2; --accent: #f57c00; --brand-shadow: rgba(10,31,60,0.6); }
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+  .isat-careers * { font-family: 'Inter', system-ui, -apple-system, "Segoe UI", sans-serif; box-sizing: border-box; }
+  @keyframes fadeInUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .isat-careers .anim-up { animation: fadeInUp 0.6s ease both; }
+  .isat-careers .anim-fade { animation: fadeIn 0.8s ease both; }
+  .isat-careers .btn-grad { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+  .isat-careers .btn-grad:hover { transform: translateY(-2px); box-shadow: 0 12px 28px var(--brand-shadow); }
+  .isat-careers .card-lift { transition: transform 0.25s ease, box-shadow 0.25s ease; box-shadow: 0 8px 28px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.12); }
+  .isat-careers .card-lift:hover { transform: translateY(-5px); box-shadow: 0 20px 52px rgba(0,0,0,0.38), 0 4px 12px rgba(0,0,0,0.14); }
+
+  /* button-as-link reset so <a> looks exactly like the old <button> */
+  .isat-careers a.button1 { display: inline-block; text-decoration: none; text-align: center; }
+
+  /* responsive grids */
+  .isat-careers .grid-jobs { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; }
+  .isat-careers .grid-testi { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; }
+
+  /* two-column "why work with us" stacks on small screens */
+  .isat-careers .split { display: flex; flex-wrap: wrap; width: 100%; }
+  .isat-careers .split > .col-md-6 { min-width: 280px; }
+
+  @media (max-width: 640px) {
+    .isat-careers .pad-lg { padding: 44px 22px !important; }
+    .isat-careers .clip-none { clip-path: none !important; }
+  }
+</style>
+
+<div class="isat-careers">
+
+  <div class="row sectionBlockLayout sec-1" data-component-theme="portalThemeColor1" style="display: flex; flex-wrap: wrap; min-height: auto;">
+    <div class="container" style="display: flex; flex-wrap: wrap; width: 100%;">
+      <div class="col-md-12 columnBlockLayout pad-lg" style="flex-grow: 1; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 56px 40px;">
+        <img src="https://cdn.hubblecontent.osi.office.net/m365content/publish/4ba0ea26-2db6-4df3-8ebe-fb7c0b49d6df/thumbnails/xxlarge.jpg" alt="ISAT Careers Jordan logo" style="width: 160px; height: auto; margin-bottom: 24px; border-radius: 12px;" />
+        <h1 style="font-size: clamp(1.8rem, 4vw, 2.8rem); font-weight: 800; color: #fff; margin-bottom: 12px;">Welcome to ISAT Careers Jordan</h1>
+        <p style="color: rgba(255,255,255,0.85); font-size: 1.05rem; max-width: 520px; line-height: 1.7;">Explore exciting career opportunities with ISAT Jordan. Join our team and help shape the future of technology and innovation.</p>
+        <a href="/apply" class="button1 btn-grad" style="background: linear-gradient(135deg, var(--brand-2), #42a5f5); color: #fff; border: none; border-radius: 999px; padding: 14px 40px; font-weight: 700; font-size: 1rem; cursor: pointer; margin-top: 28px; box-shadow: 0 8px 24px rgba(0,0,0,0.25);">Apply Now</a>
+      </div>
+    </div>
+  </div>
+
+  <div id="openings" class="row sectionBlockLayout sec-2" data-component-theme="portalThemeColor2" style="display: flex; flex-wrap: wrap; min-height: auto;">
+    <div class="container" style="display: flex; flex-wrap: wrap; width: 100%;">
+      <div class="col-md-12 columnBlockLayout pad-lg" style="flex-grow: 1; display: flex; flex-direction: column; padding: 64px 40px;">
+        <div style="text-align: center; margin-bottom: 48px;">
+          <span style="font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(255,255,255,0.75); font-weight: 600; display: block; margin-bottom: 10px;">Current Openings</span>
+          <h2 style="font-size: clamp(1.5rem, 3vw, 2.2rem); font-weight: 700; color: #fff; margin-bottom: 12px;">Join Our Team</h2>
+          <p style="color: rgba(255,255,255,0.85); max-width: 520px; margin: 0 auto; line-height: 1.7;">Discover the latest job opportunities available at ISAT Jordan. We are looking for talented individuals passionate about technology and growth.</p>
+        </div>
+        <div class="grid-jobs">
+          <div class="card-lift" style="background: rgba(255,255,255,0.15); border-radius: 20px; padding: 24px; display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+              <h3 style="font-size: 1.05rem; font-weight: 700; color: #fff; margin-bottom: 8px;">Software Engineer</h3>
+              <p style="font-weight: 600; color: rgba(255,255,255,0.8); margin-bottom: 4px;">Department: Engineering</p>
+              <p style="font-weight: 600; color: rgba(255,255,255,0.8); margin-bottom: 4px;">Location: Amman, Jordan</p>
+              <p style="font-weight: 600; color: rgba(255,255,255,0.8); margin-bottom: 12px;">Employment Type: Full-Time</p>
+              <p style="color: rgba(255,255,255,0.85); line-height: 1.5;">Develop and maintain software applications, collaborate with cross-functional teams, and contribute to innovative projects.</p>
+            </div>
+            <a href="/apply?role=Software%20Engineer" class="button1 btn-grad" style="background: linear-gradient(135deg, var(--brand), var(--brand-2)); color: #fff; border: none; border-radius: 999px; padding: 14px 36px; font-weight: 700; font-size: 1rem; cursor: pointer; margin-top: 16px; align-self: flex-start;">Apply Now</a>
+          </div>
+          <div class="card-lift" style="background: rgba(255,255,255,0.15); border-radius: 20px; padding: 24px; display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+              <h3 style="font-size: 1.05rem; font-weight: 700; color: #fff; margin-bottom: 8px;">Marketing Specialist</h3>
+              <p style="font-weight: 600; color: rgba(255,255,255,0.8); margin-bottom: 4px;">Department: Marketing</p>
+              <p style="font-weight: 600; color: rgba(255,255,255,0.8); margin-bottom: 4px;">Location: Amman, Jordan</p>
+              <p style="font-weight: 600; color: rgba(255,255,255,0.8); margin-bottom: 12px;">Employment Type: Part-Time</p>
+              <p style="color: rgba(255,255,255,0.85); line-height: 1.5;">Plan and execute marketing campaigns, analyze market trends, and support brand growth initiatives.</p>
+            </div>
+            <a href="/apply?role=Marketing%20Specialist" class="button1 btn-grad" style="background: linear-gradient(135deg, var(--brand), var(--brand-2)); color: #fff; border: none; border-radius: 999px; padding: 14px 36px; font-weight: 700; font-size: 1rem; cursor: pointer; margin-top: 16px; align-self: flex-start;">Apply Now</a>
+          </div>
+          <div class="card-lift" style="background: rgba(255,255,255,0.15); border-radius: 20px; padding: 24px; display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+              <h3 style="font-size: 1.05rem; font-weight: 700; color: #fff; margin-bottom: 8px;">Customer Support Representative</h3>
+              <p style="font-weight: 600; color: rgba(255,255,255,0.8); margin-bottom: 4px;">Department: Support</p>
+              <p style="font-weight: 600; color: rgba(255,255,255,0.8); margin-bottom: 4px;">Location: Remote</p>
+              <p style="font-weight: 600; color: rgba(255,255,255,0.8); margin-bottom: 12px;">Employment Type: Contract</p>
+              <p style="color: rgba(255,255,255,0.85); line-height: 1.5;">Provide excellent customer service, resolve inquiries, and maintain customer satisfaction through multiple channels.</p>
+            </div>
+            <a href="/apply?role=Customer%20Support%20Representative" class="button1 btn-grad" style="background: linear-gradient(135deg, var(--brand), var(--brand-2)); color: #fff; border: none; border-radius: 999px; padding: 14px 36px; font-weight: 700; font-size: 1rem; cursor: pointer; margin-top: 16px; align-self: flex-start;">Apply Now</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row sectionBlockLayout sec-3" data-component-theme="portalThemeColor3" style="display: flex; flex-wrap: wrap; min-height: auto;">
+    <div class="container" style="display: flex; flex-wrap: wrap; width: 100%;">
+      <div class="col-md-12 columnBlockLayout pad-lg" style="flex-grow: 1; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 56px 40px;">
+        <h2 style="font-size: clamp(1.5rem, 3vw, 2.2rem); font-weight: 700; color: #fff; margin-bottom: 16px;">Apply for a Position</h2>
+        <p style="color: rgba(255,255,255,0.85); max-width: 600px; line-height: 1.7; margin-bottom: 28px;">Our quick application takes about 3 minutes on any device. Tell us about yourself and attach your CV — we look forward to reviewing your application.</p>
+        <a href="/apply" class="button1 btn-grad" style="background: #fff; color: var(--brand-2); border: none; border-radius: 999px; padding: 16px 44px; font-weight: 800; font-size: 1.05rem; cursor: pointer; box-shadow: 0 10px 28px rgba(0,0,0,0.22);">Start your application →</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="row sectionBlockLayout sec-4" data-component-theme="portalThemeColor4" style="display: flex; flex-wrap: wrap; min-height: auto;">
+    <div class="container" style="display: flex; flex-wrap: wrap; width: 100%;">
+      <div class="col-md-12 columnBlockLayout pad-lg" style="flex-grow: 1; display: flex; flex-direction: column; padding: 64px 40px;">
+        <div style="text-align: center; margin-bottom: 48px;">
+          <span style="font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(255,255,255,0.75); font-weight: 600; display: block; margin-bottom: 10px;">Testimonials</span>
+          <h2 style="font-size: clamp(1.5rem, 3vw, 2.2rem); font-weight: 700; color: #fff; margin-bottom: 12px;">What Our Employees Say</h2>
+          <p style="color: rgba(255,255,255,0.85); max-width: 520px; margin: 0 auto; line-height: 1.7;">Hear from some of our team members about their experience working at ISAT Careers Jordan.</p>
+        </div>
+        <div class="grid-testi">
+          <div class="card-lift" style="background: rgba(255,255,255,0.12); border-radius: 20px; padding: 32px; border: 1px solid rgba(255,255,255,0.2);">
+            <div style="color: rgba(255,255,255,0.9); font-size: 2.2rem; line-height: 1; margin-bottom: 16px;">&#10077;</div>
+            <p style="color: rgba(255,255,255,0.88); line-height: 1.7; margin-bottom: 24px; font-style: italic; font-size: 0.97rem;">"Working at ISAT has allowed me to grow my skills and be part of innovative projects that truly make a difference."</p>
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <img style="width: 44px; height: 44px; border-radius: 50%; object-fit: cover; flex-shrink: 0;" src="https://cdn.hubblecontent.osi.office.net/m365content/publish/9f54dfe2-3496-44fc-aebb-9d90a293b069/thumbnails/xxlarge.jpg" alt="Sara Ahmed" />
+              <div>
+                <div style="font-weight: 700; color: #fff; font-size: 0.9rem;">Sara Ahmed</div>
+                <div style="color: rgba(255,255,255,0.65); font-size: 0.8rem;">Software Engineer</div>
+              </div>
+            </div>
+          </div>
+          <div class="card-lift" style="background: rgba(255,255,255,0.12); border-radius: 20px; padding: 32px; border: 1px solid rgba(255,255,255,0.2);">
+            <div style="color: rgba(255,255,255,0.9); font-size: 2.2rem; line-height: 1; margin-bottom: 16px;">&#10077;</div>
+            <p style="color: rgba(255,255,255,0.88); line-height: 1.7; margin-bottom: 24px; font-style: italic; font-size: 0.97rem;">"The supportive environment and growth opportunities at ISAT have made my career journey rewarding and inspiring."</p>
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <img style="width: 44px; height: 44px; border-radius: 50%; object-fit: cover; flex-shrink: 0;" src="https://cdn.hubblecontent.osi.office.net/m365content/publish/3f7ff629-8bca-494c-8a11-7f4e6302983f/thumbnails/xxlarge.jpg" alt="Omar Khaled" />
+              <div>
+                <div style="font-weight: 700; color: #fff; font-size: 0.9rem;">Omar Khaled</div>
+                <div style="color: rgba(255,255,255,0.65); font-size: 0.8rem;">Marketing Specialist</div>
+              </div>
+            </div>
+          </div>
+          <div class="card-lift" style="background: rgba(255,255,255,0.12); border-radius: 20px; padding: 32px; border: 1px solid rgba(255,255,255,0.2);">
+            <div style="color: rgba(255,255,255,0.9); font-size: 2.2rem; line-height: 1; margin-bottom: 16px;">&#10077;</div>
+            <p style="color: rgba(255,255,255,0.88); line-height: 1.7; margin-bottom: 24px; font-style: italic; font-size: 0.97rem;">"Being part of ISAT means working with a passionate team that values innovation and collaboration."</p>
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <img style="width: 44px; height: 44px; border-radius: 50%; object-fit: cover; flex-shrink: 0;" src="https://cdn.hubblecontent.osi.office.net/m365content/publish/7cbbbacf-83fb-4eae-a1fd-a1bee23a2515/thumbnails/xxlarge.jpg" alt="Lina Mansour" />
+              <div>
+                <div style="font-weight: 700; color: #fff; font-size: 0.9rem;">Lina Mansour</div>
+                <div style="color: rgba(255,255,255,0.65); font-size: 0.8rem;">Customer Support</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row sectionBlockLayout sec-5 clip-none" data-component-theme="portalThemeColor5" style="display: flex; flex-wrap: wrap; min-height: auto; clip-path: polygon(0 0, 100% 0, 100% 92%, 0 100%);">
+    <div class="container split">
+      <div class="col-md-6 columnBlockLayout pad-lg" style="flex-grow: 1; display: flex; flex-direction: column; justify-content: center; padding: 64px 40px;">
+        <span style="font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(255,255,255,0.75); font-weight: 600; display: block; margin-bottom: 10px;">Why Work With Us</span>
+        <h2 style="font-size: clamp(1.5rem, 3vw, 2.2rem); font-weight: 700; color: #fff; margin-bottom: 24px;">Empowering Your Career Growth</h2>
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+          <div style="display: flex; gap: 14px; align-items: flex-start;">
+            <div style="width: 32px; height: 32px; border-radius: 50%; background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; font-size: 1rem; flex-shrink: 0;">&#10003;</div>
+            <div>
+              <div style="font-weight: 700; color: #fff; margin-bottom: 4px;">Innovative Projects</div>
+              <div style="color: rgba(255,255,255,0.8); font-size: 0.92rem; line-height: 1.6;">Work on cutting-edge technology that drives real-world solutions and impact.</div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 14px; align-items: flex-start;">
+            <div style="width: 32px; height: 32px; border-radius: 50%; background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; font-size: 1rem; flex-shrink: 0;">&#10003;</div>
+            <div>
+              <div style="font-weight: 700; color: #fff; margin-bottom: 4px;">Professional Development</div>
+              <div style="color: rgba(255,255,255,0.8); font-size: 0.92rem; line-height: 1.6;">Access training, mentorship, and growth opportunities to advance your career.</div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 14px; align-items: flex-start;">
+            <div style="width: 32px; height: 32px; border-radius: 50%; background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; font-size: 1rem; flex-shrink: 0;">&#10003;</div>
+            <div>
+              <div style="font-weight: 700; color: #fff; margin-bottom: 4px;">Collaborative Culture</div>
+              <div style="color: rgba(255,255,255,0.8); font-size: 0.92rem; line-height: 1.6;">Join a supportive team environment that values diversity and teamwork.</div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 14px; align-items: flex-start;">
+            <div style="width: 32px; height: 32px; border-radius: 50%; background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; font-size: 1rem; flex-shrink: 0;">&#10003;</div>
+            <div>
+              <div style="font-weight: 700; color: #fff; margin-bottom: 4px;">Work-Life Balance</div>
+              <div style="color: rgba(255,255,255,0.8); font-size: 0.92rem; line-height: 1.6;">Enjoy flexible work arrangements and a healthy balance between work and personal life.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6 columnBlockLayout pad-lg" style="flex-grow: 1; display: flex; flex-direction: column; justify-content: center; padding: 64px 40px;">
+        <img style="width: 100%; height: auto; border-radius: 20px; box-shadow: 0 20px 56px rgba(0,0,0,0.2);" class="anim-fade" src="https://cdn.hubblecontent.osi.office.net/m365content/publish/abd81379-64cb-443c-96c8-9992e1cb95a6/thumbnails/xxlarge.jpg" alt="Team collaboration at ISAT Careers Jordan" />
+      </div>
+    </div>
+  </div>
+
+  <div class="row sectionBlockLayout sec-6" data-component-theme="portalThemeColor6" style="display: flex; flex-wrap: wrap; min-height: auto;">
+    <div class="container" style="display: flex; flex-wrap: wrap; width: 100%;">
+      <div class="col-md-12 columnBlockLayout pad-lg" style="flex-grow: 1; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 72px 48px;">
+        <h2 style="font-size: clamp(1.6rem, 3vw, 2.4rem); font-weight: 700; color: #fff; margin-bottom: 16px;">Ready to Take the Next Step?</h2>
+        <p style="color: rgba(255,255,255,0.85); max-width: 500px; line-height: 1.7; margin-bottom: 36px; padding: 8px 0;">Join ISAT Careers Jordan and be part of a dynamic team shaping the future. Apply today and start your journey with us.</p>
+        <a href="#openings" class="button1" style="background: rgba(255,255,255,0.95); color: var(--accent); border: none; border-radius: 999px; padding: 14px 40px; font-weight: 700; font-size: 1rem; cursor: pointer; box-shadow: 0 8px 24px rgba(0,0,0,0.15);">Explore Open Positions</a>
+      </div>
+    </div>
+  </div>
+
+</div>
