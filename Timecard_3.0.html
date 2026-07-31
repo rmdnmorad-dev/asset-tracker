@@ -2947,33 +2947,41 @@ async function buildSearchablePdf(days){
   const LEGGAP = 30;                                          // clear gap between the task grid and the legends
   const natPageH = M + HB + gridHeadH + bodyH + LEGGAP + legH + 8 + 16 + M;
 
-  // ---- the page is exactly the sheet's size (no A4 shrink); identity transform ----
-  const doc = new jsPDF({orientation: natPageW>=natPageH?'landscape':'portrait', unit:'pt', format:[natPageW, natPageH], compress:true});
-  const SC = 1, offX = 0, offY = 0;
+  // ---- Standard A4 page, with the sheet drawn to fit ----
+  // The layout above is built in the sheet's OWN units (its real column widths), so the design is
+  // identical to the browser; we then place it on a normal A4 sheet. A standard page size is what
+  // mail apps / phone previewers and printers expect — an oversized custom page is what made
+  // Outlook's preview come up blank.
+  const doc = new jsPDF({orientation:'landscape', unit:'pt', format:'a4', compress:true});
+  const PW = doc.internal.pageSize.getWidth(), PH = doc.internal.pageSize.getHeight();
+  const SC = Math.min((PW-2*M)/natPageW, (PH-2*M)/natPageH);
+  const offX = (PW - natPageW*SC)/2, offY = M - M*SC;          // centred across, top-aligned
   const TX = x => offX + x*SC, TY = y => offY + y*SC;
 
+  // everything below is authored in the sheet's own units and drawn through the fit transform
   function box(x,y,wd,ht,bg){
     if(bg){ const c=hx(bg); doc.setFillColor(c[0],c[1],c[2]); }
-    doc.setDrawColor(0,0,0); doc.setLineWidth(0.5);
+    doc.setDrawColor(0,0,0); doc.setLineWidth(Math.max(0.25, 0.5*SC));
     doc.rect(TX(x),TY(y),wd*SC,ht*SC, bg ? 'FD' : 'S');
   }
   function T(str,x,y,wd,ht,o){
     o=o||{}; str=String(str==null?'':str); if(str==='') return;
     const nat=o.size||11; doc.setFont('helvetica','normal'); doc.setFontSize(nat);
-    let disp=str; while(disp.length>1 && doc.getTextWidth(disp) > wd-5){ disp=disp.slice(0,-1); }
+    let disp=str; while(disp.length>1 && doc.getTextWidth(disp) > wd-5){ disp=disp.slice(0,-1); }   // measure in sheet units
     if(disp!==str && disp.length>1) disp=disp.slice(0,-1)+'…';
+    doc.setFontSize(nat*SC);
     const col=o.color||[0,0,0]; doc.setTextColor(col[0],col[1],col[2]);
     const align=o.align||'center';
     const natTx = align==='left'? x+4 : align==='right'? x+wd-4 : x+wd/2;
-    doc.text(disp, TX(natTx), TY(y+ht/2)+nat*0.35, {align});
+    doc.text(disp, TX(natTx), TY(y+ht/2)+nat*SC*0.35, {align});
   }
   function Tlines(lines,x,y,wd,ht,o){
-    o=o||{}; const nat=o.size||11; doc.setFont('helvetica','normal'); doc.setFontSize(nat);
+    o=o||{}; const nat=o.size||11; doc.setFont('helvetica','normal'); doc.setFontSize(nat*SC);
     const col=o.color||[0,0,0]; doc.setTextColor(col[0],col[1],col[2]);
     const lh=nat*1.18, blockH=lines.length*lh; let ly=y+(ht-blockH)/2+nat*0.86;
     lines.forEach(ln=>{ doc.text(ln, TX(x+wd/2), TY(ly), {align:'center'}); ly+=lh; });
   }
-  function dtext(str,x,y,size,o){ o=o||{}; doc.setFont('helvetica','normal'); doc.setFontSize(size);
+  function dtext(str,x,y,size,o){ o=o||{}; doc.setFont('helvetica','normal'); doc.setFontSize(size*SC);
     const c=o.color||[0,0,0]; doc.setTextColor(c[0],c[1],c[2]); doc.text(String(str), TX(x), TY(y), {align:o.align||'left'}); }
   const infoLabel = (y,ht,text,bg,color)=>{ box(M,y,infoW,ht,bg); T(text,M,y,infoW,ht,{size:11,color:color||[0,0,0]}); };
   const dayCells = (y,ht,getText,bg,color)=>{ DYS.forEach((d,i)=>{ box(dayX[i],y,dayW,ht,bg); T(getText(d),dayX[i],y,dayW,ht,{size:11,color:color||[0,0,0]}); }); };
@@ -2997,12 +3005,13 @@ async function buildSearchablePdf(days){
     const lab=row[0], val=row[1], isMail=row[2];
     dtext(lab, eLeft, ey+eRowH*0.72, 11, {align:'left', color:[138,138,138]});
     const vx = eLeft+eLabW, vw = eBlockW-eLabW;
-    doc.setDrawColor(127,127,127); doc.setLineWidth(0.6); doc.setFillColor(255,255,255); doc.rect(TX(vx), TY(ey), vw, eRowH-1, 'FD');
-    doc.setFont('helvetica','normal'); doc.setFontSize(11);
+    doc.setDrawColor(127,127,127); doc.setLineWidth(Math.max(0.25,0.6*SC)); doc.setFillColor(255,255,255);
+    doc.rect(TX(vx), TY(ey), vw*SC, (eRowH-1)*SC, 'FD');
+    doc.setFont('helvetica','normal'); doc.setFontSize(11*SC);
     const col=isMail?[5,99,193]:[17,17,17]; doc.setTextColor(col[0],col[1],col[2]);
     doc.text(String(val), TX(vx+4), TY(ey+eRowH*0.72), {align:'left'});
-    if(isMail && val){ const uw=doc.getTextWidth(String(val)); doc.setDrawColor(5,99,193); doc.setLineWidth(0.5);
-      doc.line(TX(vx+4), TY(ey+eRowH*0.72)+1.5, TX(vx+4)+uw, TY(ey+eRowH*0.72)+1.5); }
+    if(isMail && val){ const uw=doc.getTextWidth(String(val)); doc.setDrawColor(5,99,193); doc.setLineWidth(Math.max(0.25,0.5*SC));
+      doc.line(TX(vx+4), TY(ey+eRowH*0.72)+1.5*SC, TX(vx+4)+uw, TY(ey+eRowH*0.72)+1.5*SC); }
     ey += eRowH;
   });
 
@@ -3048,7 +3057,7 @@ async function buildSearchablePdf(days){
         box(infoX[i], y, iw[i], rH, '#D9D9D9');
         const lines = wrapped[i]; const blockH = lines.length*LINE;
         let ly = y + (rH-blockH)/2 + LINE*0.72;
-        doc.setFont('helvetica','normal'); doc.setFontSize(12.5); doc.setTextColor(255,0,0);
+        doc.setFont('helvetica','normal'); doc.setFontSize(12.5*SC); doc.setTextColor(255,0,0);
         lines.forEach(ln=>{ doc.text(ln, TX(infoX[i]+iw[i]/2), TY(ly), {align:'center'}); ly += LINE; });
       });
       DYS.forEach((d,i)=>{
