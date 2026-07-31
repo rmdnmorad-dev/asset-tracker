@@ -546,7 +546,7 @@
   <div class="grp">
     <button class="btn" id="btnSearch" title="Search every timecard (Ctrl+F)">🔍 Search</button>
     <button class="btn" id="btnSettings">⚙ Settings</button>
-    <span style="font-size:10px;color:#9aa4b2;align-self:center;margin-left:1px" title="Version 3.2">v3.2</span>
+    <span style="font-size:10px;color:#9aa4b2;align-self:center;margin-left:1px" title="Version 3.3">v3.3</span>
   </div>
   <div id="hoursInd" class="hoursind" title="Total hours this week on whatever box you click / hover"></div>
   <div class="grp right">
@@ -581,7 +581,11 @@
   <div class="row" style="align-items:flex-end">
     <div class="fld" style="flex:1;min-width:300px">
       <span>EMAIL MESSAGE — written at the top of every email, above the timecard</span>
-      <textarea id="setMessage" placeholder="Hi, hope you are all doing well.&#10;Please find my timecard below."></textarea></div>
+      <textarea id="setMessage" placeholder="Hi, hope you are all doing well.&#10;Please find my timecard below."></textarea>
+      <div class="subchecks" style="padding-top:6px">
+        <label><input type="checkbox" id="incProjects"> Include the <b>projects worked on</b> summary table in the message</label>
+        <label><input type="checkbox" id="creditOn"> Show the <b>Created by m0rad</b> logo on the sheet</label>
+      </div></div>
     <div class="fld"><span>DRAFT FILE FORMAT — the file each send button creates</span>
       <div class="subchecks">
         <label><input type="checkbox" id="fmtEml"> .eml <span style="color:#888;font-weight:normal">— recommended · opens as a ready draft in classic Outlook, Apple Mail, Windows Mail</span></label>
@@ -1185,6 +1189,7 @@ function defaultState(){
       subject:'{type} Timecard-{date}',
       subjectV2:true, subjectMode:'auto', sendFormat:'eml',
       customDay:false, customDayIdx:null,      // custom single day for a Daily send
+      includeProjects:true, creditOn:true,     // projects-worked-on summary in the message · credit logo on the sheet
       taskLegend: TASK_LEGEND.map(t=>[t[0],t[1]]),
       jobLegend: JOB_LEGEND.map(t=>[t[0],t[1]]),
       employee:'Morad Ramadan', manager:'C. Hattar',
@@ -1225,6 +1230,8 @@ if(state.settings.remBefore1===undefined) state.settings.remBefore1 = 30;
 if(state.settings.remBefore2===undefined) state.settings.remBefore2 = 5;
 if(state.settings.customDay===undefined) state.settings.customDay = false;
 if(state.settings.customDayIdx===undefined) state.settings.customDayIdx = null;
+if(state.settings.includeProjects===undefined) state.settings.includeProjects = true;
+if(state.settings.creditOn===undefined) state.settings.creditOn = true;
 if(!Array.isArray(state.settings.hiddenSections)) state.settings.hiddenSections = SECTIONS.map((s,i)=>i>=3);
 while(state.settings.hiddenSections.length < SECTIONS.length) state.settings.hiddenSections.push(true);   // new sections hidden by default
 if(!Array.isArray(state.settings.sectionNames)) state.settings.sectionNames = SECTIONS.map(s=>s.name);
@@ -2346,10 +2353,22 @@ function bindSettings(){
   cx.addEventListener('change', ()=>{
     state.settings.customDay = cx.checked;
     if(cx.checked && state.settings.customDayIdx==null) state.settings.customDayIdx = todayCol();
-    save(); updateDayIndicator(); syncCustomDayUI(); updPreview();
+    // a custom day is a single day -> switch to Daily; unticking follows the calendar again
+    // (so a Sunday goes back to ticking Weekly automatically)
+    state.settings.subjectMode = cx.checked ? 'daily' : 'auto';
+    save(); updateDayIndicator(); syncCustomDayUI(); reflect(); updPreview();
   });
   csel.addEventListener('change', ()=>{ setCustomDay(+csel.value, true); updPreview(); });
   syncCustomDayUI();
+  // include the projects-worked-on summary in the message?
+  const ip = document.getElementById('incProjects');
+  if(ip){ ip.checked = state.settings.includeProjects!==false;
+    ip.addEventListener('change', ()=>{ state.settings.includeProjects = ip.checked; save(); }); }
+  // show the "Created by m0rad" logo?
+  const cr = document.getElementById('creditOn');
+  if(cr){ cr.checked = state.settings.creditOn!==false;
+    cr.addEventListener('change', ()=>{ state.settings.creditOn = cr.checked; save(); applyCredit(); }); }
+  applyCredit();
   // draft file format (.eml / .msg) — behave like a radio pair, one is always on
   const fe = document.getElementById('fmtEml'), fm = document.getElementById('fmtMsg');
   const reflectFmt = ()=>{ const msg = state.settings.sendFormat==='msg'; fe.checked = !msg; fm.checked = msg; };
@@ -2802,13 +2821,19 @@ function replaceInputsInClone(doc){
     c.parentNode.replaceChild(d, c);
   });
 }
+// Keep the emailed picture a sane size: a very wide sheet at scale 2 makes a huge PNG that some
+// mail apps refuse to show inline (that's the "can't preview it" case). Cap the pixel width.
+function capScale(el, max){
+  const wpx = (el && el.offsetWidth) || 1000;
+  return Math.max(1, Math.min(2, (max||2200) / wpx));
+}
 async function captureSheet(){
   closePopups();
   if(document.activeElement) document.activeElement.blur();
   document.body.classList.add('capturing');           // forces light even in dark theme
   await raf2();
   try{ return await html2canvas(document.getElementById('sheet'),
-        {scale:2, backgroundColor:'#ffffff', logging:false, onclone: replaceInputsInClone}); }
+        {scale:capScale(document.getElementById('sheet')), backgroundColor:'#ffffff', logging:false, onclone: replaceInputsInClone}); }
   finally{ document.body.classList.remove('capturing'); }
 }
 /* Daily image: render the clean single-day HTML table off-screen and capture that. */
@@ -2818,7 +2843,7 @@ async function captureHtmlTable(days){
   holder.innerHTML = buildHtmlEmail('', days).replace(/^<html><body>/,'').replace(/<\/body><\/html>$/,'');
   document.body.appendChild(holder);
   await raf2();
-  try{ return await html2canvas(holder, {scale:2, backgroundColor:'#ffffff', logging:false,
+  try{ return await html2canvas(holder, {scale:capScale(holder), backgroundColor:'#ffffff', logging:false,
         onclone: doc=>doc.body.classList.remove('dark')}); }
   finally{ holder.remove(); }
 }
@@ -3482,6 +3507,7 @@ function projHours(p, one, html){
   return fmtNum(p.hours)+' h';
 }
 function projectsMsgHtml(days){
+  if(state.settings.includeProjects===false) return '';        // turned off in Settings
   const list = projectsWorked(days), one = days && days.length===1;
   const F = 'font-family:Segoe UI,Arial,sans-serif;';
   let h = '<div style="'+F+'font-size:13px;margin:2px 0 14px">';
@@ -3506,6 +3532,7 @@ function projectsMsgHtml(days){
   return h + '</div>';
 }
 function projectsMsgText(days){
+  if(state.settings.includeProjects===false) return '';        // turned off in Settings
   const list = projectsWorked(days), one = days && days.length===1;
   const L = [projectsTitle(days).toUpperCase()+' ('+list.length+')'];
   if(list.length){
@@ -3614,12 +3641,14 @@ function buildHtmlEmail(prefixHtml, days){
   const targetLegH = Math.max(tLeg.length, jLeg.length) * 22;
   const legRow = (code,desc,wd)=> '<tr><td style="'+B+'background:#B7DDE8;color:#FF0000;font-size:10px;text-align:center;width:70px">'+code+
                  '</td><td style="'+B+'background:#E5E0EC;font-size:10px;width:'+wd+'px">'+escHtml(desc)+'</td></tr>';
-  const legHead = t=>'<div style="'+B+'background:#D9D9D9;font-weight:bold;font-size:11px;padding:1px 8px;box-sizing:border-box;height:22px">'+t+'</div>';
+  // small label box only (like the sheet + the PDF) — NOT a full-width grey bar
+  const legHead = t=> t ? '<div style="height:22px"><span style="'+B+'background:#D9D9D9;font-size:11px;padding:1px 8px;box-sizing:border-box;display:inline-block;width:110px">'+t+'</span></div>'
+                        : '<div style="height:22px"></div>';
   h += '<table cellspacing="0" cellpadding="1" style="border-collapse:collapse;margin-top:14px"><tr>'+
        '<td style="vertical-align:top;border:none;padding-right:30px">'+legHead('TASKS :')+
        '<table cellspacing="0" cellpadding="1" style="border-collapse:collapse;height:'+targetLegH+'px">';
   for(const t of tLeg) h += legRow(t[0], t[1], 260);
-  h += '</table></td><td style="vertical-align:top;border:none">'+legHead('JOB TYPES :')+
+  h += '</table></td><td style="vertical-align:top;border:none">'+legHead('')+
        '<table cellspacing="0" cellpadding="1" style="border-collapse:collapse;height:'+targetLegH+'px">';
   for(const t of jLeg) h += legRow(t[0], t[1], 210);
   h += '</table></td></tr></table>';
@@ -4351,6 +4380,11 @@ function hexToRgba(hex, a){
 function luminance(hex){
   hex = String(hex||'#000').replace('#',''); if(hex.length===3) hex = hex.split('').map(x=>x+x).join('');
   const n = parseInt(hex,16)||0; return (0.2126*((n>>16)&255) + 0.7152*((n>>8)&255) + 0.0722*(n&255)) / 255;
+}
+// show / hide the "Created by m0rad" logo (Settings)
+function applyCredit(){
+  const box = document.querySelector('.creditbox');
+  if(box) box.style.display = (state.settings.creditOn===false) ? 'none' : '';
 }
 function applyBeam(){
   const c = state.settings.beamColor || '#8ab4ff', via = hexToRgba(c, .35);
