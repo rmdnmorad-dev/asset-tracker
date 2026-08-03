@@ -12,6 +12,39 @@ namespace TPBR
         float s = 1f, VW = 1920f;
         const float VH = 1080f;
 
+        string hoveredNow, lastHovered;
+
+        static readonly string[] HowToLines =
+        {
+            "You own one wedge of the ring. You can never leave it, and nobody can enter it.",
+            "Last player alive wins.",
+            "",
+            "@PREP  (10 seconds)",
+            "Everyone walks around their own zone in real time, and everyone can see it.",
+            "This is the only information in the game. It is also the only place to lie.",
+            "",
+            "@COMMIT  (15 seconds)",
+            "Secretly pick three things:",
+            "   1.  a tile in YOUR zone      - where you will actually be standing",
+            "   2.  a tile in SOMEONE's zone - where you are attacking",
+            "   3.  a gadget, if you want one",
+            "Click your own tile, then click an enemy tile. 1-4 picks a gadget. SPACE locks.",
+            "",
+            "@REVEAL",
+            "Everything resolves at once. Stand on a tile that gets hit and you are out.",
+            "Results are fully public. Who attacked whom is never revealed, to anyone, ever.",
+            "",
+            "@THE ANTI-DOGPILE RULE",
+            "If 4 players attack the same person in one round, all 4 of them lose a tile.",
+            "Once 10 or fewer players are alive that drops to 3.",
+            "It applies even if the target dies. Spread your fire or pay for it.",
+            "",
+            "@LAVA",
+            "From round 3, every 2 rounds, everyone loses their outermost tile.",
+            "Doomed tiles glow orange a full round before they go.",
+            "Nobody ever drops below 2 tiles - and at 2 tiles, a zone is a pure coin flip.",
+        };
+
         public static Hud Create(Transform parent = null)
         {
             var go = new GameObject("HUD");
@@ -29,18 +62,145 @@ namespace TPBR
             s = Screen.height / VH;
             GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(s, s, s));
             VW = Screen.width / s;
+            hoveredNow = null;
 
-            WorldLabels(gm);
-            Popups();
-            TopBar(gm);
-            Feed(gm);
-            SidePanel(gm);
-            Roster(gm);
-            BannerText(gm);
-            if (gm.phase == Phase.GameOver) GameOverPanel(gm);
+            bool inMatch = gm.screen == UiScreen.Playing || gm.screen == UiScreen.Paused;
+            if (inMatch)
+            {
+                WorldLabels(gm);
+                Popups();
+                TopBar(gm);
+                Feed(gm);
+                SidePanel(gm);
+                Roster(gm);
+                BannerText(gm);
+            }
+
+            switch (gm.screen)
+            {
+                case UiScreen.Title:  TitleScreen(gm); break;
+                case UiScreen.HowTo:  HowToScreen(gm); break;
+                case UiScreen.Paused: PauseScreen(gm); break;
+                default:
+                    if (gm.phase == Phase.GameOver) GameOverPanel(gm);
+                    break;
+            }
+
+            if (Event.current.type == EventType.Repaint && hoveredNow != lastHovered)
+            {
+                lastHovered = hoveredNow;
+                if (!string.IsNullOrEmpty(hoveredNow)) Audio.Play(Sfx.UiHover, 1f, 0.25f);
+            }
         }
 
-        // ------------------------------------------------------------------ pieces
+        // ------------------------------------------------------------- menu layers
+
+        void TitleScreen(GameManager gm)
+        {
+            Fill(new Rect(0, 0, VW, VH), new Color(0.02f, 0.025f, 0.04f, 0.55f));
+
+            float cx = VW * 0.5f;
+            Text(new Rect(cx - 700, VH * 0.13f, 1400, 96), "TILE PREDICTION", 82, Palette.Paper, TextAnchor.MiddleCenter, FontStyle.Bold);
+            Text(new Rect(cx - 700, VH * 0.13f + 88, 1400, 96), "BATTLE ROYALE", 82, Palette.Gold, TextAnchor.MiddleCenter, FontStyle.Bold);
+
+            Text(new Rect(cx - 700, VH * 0.13f + 196, 1400, 36),
+                 "16 players bluff inside private tile zones, secretly predict each other,",
+                 24, new Color(1, 1, 1, 0.62f), TextAnchor.MiddleCenter, FontStyle.Normal);
+            Text(new Rect(cx - 700, VH * 0.13f + 228, 1400, 36),
+                 "and survive simultaneous attacks in a shrinking arena.",
+                 24, new Color(1, 1, 1, 0.62f), TextAnchor.MiddleCenter, FontStyle.Normal);
+
+            float by = VH * 0.52f;
+            if (Button(new Rect(cx - 190, by, 380, 68), "PLAY", Palette.Safe, 32)) gm.StartMatch();
+            if (Button(new Rect(cx - 190, by + 82, 380, 56), "HOW TO PLAY", Palette.Gold, 24)) gm.ShowHowTo();
+            if (Button(new Rect(cx - 190, by + 150, 182, 48), Audio.Muted ? "SOUND: OFF" : "SOUND: ON",
+                       Audio.Muted ? Palette.Danger : Palette.Safe, 19))
+                Audio.Muted = !Audio.Muted;
+            if (Button(new Rect(cx + 8, by + 150, 182, 48), "QUIT", Palette.Danger, 19)) Application.Quit();
+
+            Text(new Rect(cx - 700, VH - 62, 1400, 28),
+                 "1 human + 15 AI   |   prototype   |   every mesh, sound and pixel of UI is generated at runtime",
+                 17, new Color(1, 1, 1, 0.34f), TextAnchor.MiddleCenter, FontStyle.Normal);
+        }
+
+        void HowToScreen(GameManager gm)
+        {
+            Fill(new Rect(0, 0, VW, VH), new Color(0.015f, 0.02f, 0.035f, 0.94f));
+
+            float w = 1180f;
+            float x = VW * 0.5f - w * 0.5f;
+            Text(new Rect(x, 34, w, 56), "HOW TO PLAY", 42, Palette.Gold, TextAnchor.MiddleLeft, FontStyle.Bold);
+            Fill(new Rect(x, 92, w, 2), new Color(1, 1, 1, 0.16f));
+
+            float y = 112f;
+            for (int i = 0; i < HowToLines.Length; i++)
+            {
+                string line = HowToLines[i];
+                if (line.Length == 0) { y += 12f; continue; }
+
+                bool heading = line[0] == '@';
+                if (heading) line = line.Substring(1);
+
+                Text(new Rect(x, y, w, 30), line,
+                     heading ? 24 : 20,
+                     heading ? Palette.Gold : new Color(1, 1, 1, 0.86f),
+                     TextAnchor.MiddleLeft, heading ? FontStyle.Bold : FontStyle.Normal);
+                y += heading ? 36f : 30f;
+            }
+
+            if (Button(new Rect(x, VH - 92, 300, 56), "BACK   [ESC]", Palette.Paper, 24)) gm.CloseHowTo();
+        }
+
+        void PauseScreen(GameManager gm)
+        {
+            Fill(new Rect(0, 0, VW, VH), new Color(0.01f, 0.015f, 0.03f, 0.78f));
+
+            float cx = VW * 0.5f;
+            Text(new Rect(cx - 400, VH * 0.22f, 800, 70), "PAUSED", 58, Palette.Paper, TextAnchor.MiddleCenter, FontStyle.Bold);
+
+            float by = VH * 0.36f;
+            if (Button(new Rect(cx - 190, by, 380, 62), "RESUME   [ESC]", Palette.Safe, 26)) gm.SetPaused(false);
+            if (Button(new Rect(cx - 190, by + 76, 380, 54), "HOW TO PLAY", Palette.Gold, 22)) gm.ShowHowTo();
+            if (Button(new Rect(cx - 190, by + 140, 380, 54), "RESTART MATCH", Palette.Paper, 22)) gm.PlayAgain();
+            if (Button(new Rect(cx - 190, by + 204, 380, 54), "MAIN MENU", Palette.Paper, 22)) gm.ToMainMenu();
+            if (Button(new Rect(cx - 190, by + 268, 380, 54),
+                       Audio.Muted ? "SOUND: OFF" : "SOUND: ON",
+                       Audio.Muted ? Palette.Danger : Palette.Safe, 22))
+                Audio.Muted = !Audio.Muted;
+            if (Button(new Rect(cx - 190, by + 332, 380, 54), "QUIT", Palette.Danger, 22)) Application.Quit();
+        }
+
+        void GameOverPanel(GameManager gm)
+        {
+            Fill(new Rect(0, 0, VW, VH), new Color(0.01f, 0.015f, 0.03f, 0.72f));
+            var w = gm.Winner();
+
+            var r = new Rect(VW * 0.5f - 460, VH * 0.24f, 920, 380);
+            Fill(r, new Color(0.04f, 0.05f, 0.08f, 0.95f));
+            Fill(new Rect(r.x, r.y, r.width, 6), w != null ? w.color : Palette.Lava);
+
+            Text(new Rect(r.x, r.y + 30, r.width, 70),
+                 w != null ? w.name + " WINS" : "DRAW", 62, w != null ? w.color : Palette.Lava,
+                 TextAnchor.MiddleCenter, FontStyle.Bold);
+
+            var me = gm.human != null ? gm.human.me : null;
+            string sub = me == null ? "" :
+                         (me.alive ? "You read them all." : "You finished #" + me.placement + " of " + Cfg.PlayerCount + ".");
+            if (w == null) sub = "Everyone left standing died in the same round.";
+            Text(new Rect(r.x, r.y + 108, r.width, 40), sub, 26, Palette.Paper, TextAnchor.MiddleCenter, FontStyle.Normal);
+
+            Text(new Rect(r.x, r.y + 152, r.width, 34), "rounds played: " + gm.round, 20,
+                 new Color(1, 1, 1, 0.5f), TextAnchor.MiddleCenter, FontStyle.Normal);
+
+            if (Button(new Rect(r.x + 130, r.y + 208, 300, 62), "PLAY AGAIN   [R]", Palette.Safe, 25)) gm.PlayAgain();
+            if (Button(new Rect(r.x + 490, r.y + 208, 300, 62), "MAIN MENU   [M]", Palette.Paper, 25)) gm.ToMainMenu();
+
+            Text(new Rect(r.x, r.y + 296, r.width, 34),
+                 w != null && w.isHuman ? "Last one standing." : "The trophy stays where it is.",
+                 18, new Color(1, 1, 1, 0.4f), TextAnchor.MiddleCenter, FontStyle.Normal);
+        }
+
+        // ------------------------------------------------------------- match hud
 
         void TopBar(GameManager gm)
         {
@@ -111,8 +271,7 @@ namespace TPBR
 
                 Text(new Rect(r.x + 18, r.y + 10, 340, 28), "YOUR COMMITMENT", 21, Palette.Gold, TextAnchor.MiddleLeft, FontStyle.Bold);
 
-                string hide = "TILE " + (gm.human.hideTile + 1);
-                Row(r.x + 18, r.y + 46, "HIDE ON", hide, me.color);
+                Row(r.x + 18, r.y + 46, "HIDE ON", "TILE " + (gm.human.hideTile + 1), me.color);
 
                 string tgt = gm.human.targetPlayer >= 0
                     ? gm.players[gm.human.targetPlayer].name + "   TILE " + (gm.human.targetTile + 1)
@@ -215,8 +374,8 @@ namespace TPBR
                 }
             }
 
-            Text(new Rect(20, VH - 26, 700, 22),
-                 "scroll = zoom   |   prep: WASD   |   commit: click your tile, then an enemy tile   |   1-4 gadget   |   SPACE lock",
+            Text(new Rect(20, VH - 26, 900, 22),
+                 "scroll = zoom   |   prep: WASD   |   commit: click your tile, then an enemy tile   |   1-4 gadget   |   SPACE lock   |   ESC pause",
                  15, new Color(1, 1, 1, 0.33f), TextAnchor.MiddleLeft, FontStyle.Normal);
         }
 
@@ -230,31 +389,6 @@ namespace TPBR
             var r = new Rect(VW * 0.5f - 620, VH * 0.30f, 1240, 78);
             Fill(new Rect(r.x, r.y, r.width, r.height), new Color(0.02f, 0.03f, 0.05f, 0.55f * c.a));
             Text(r, gm.banner, 52, c, TextAnchor.MiddleCenter, FontStyle.Bold);
-        }
-
-        void GameOverPanel(GameManager gm)
-        {
-            Fill(new Rect(0, 0, VW, VH), new Color(0.01f, 0.015f, 0.03f, 0.72f));
-            var w = gm.Winner();
-
-            var r = new Rect(VW * 0.5f - 460, VH * 0.30f, 920, 300);
-            Fill(r, new Color(0.04f, 0.05f, 0.08f, 0.95f));
-            Fill(new Rect(r.x, r.y, r.width, 6), w != null ? w.color : Palette.Lava);
-
-            Text(new Rect(r.x, r.y + 34, r.width, 70),
-                 w != null ? w.name + " WINS" : "DRAW", 62, w != null ? w.color : Palette.Lava,
-                 TextAnchor.MiddleCenter, FontStyle.Bold);
-
-            var me = gm.human != null ? gm.human.me : null;
-            string sub = me == null ? "" :
-                         (me.alive ? "You read them all." : "You finished #" + me.placement + " of " + Cfg.PlayerCount + ".");
-            Text(new Rect(r.x, r.y + 116, r.width, 40), sub, 26, Palette.Paper, TextAnchor.MiddleCenter, FontStyle.Normal);
-
-            Text(new Rect(r.x, r.y + 176, r.width, 40), "rounds played: " + gm.round, 20,
-                 new Color(1, 1, 1, 0.5f), TextAnchor.MiddleCenter, FontStyle.Normal);
-
-            Text(new Rect(r.x, r.y + 226, r.width, 44), "[ R ]  PLAY AGAIN", 30, Palette.Gold,
-                 TextAnchor.MiddleCenter, FontStyle.Bold);
         }
 
         // ------------------------------------------------------------ world space
@@ -329,6 +463,25 @@ namespace TPBR
         }
 
         // ------------------------------------------------------------------ atoms
+
+        bool Button(Rect r, string label, Color accent, int size)
+        {
+            bool hover = r.Contains(Event.current.mousePosition);
+            if (hover) hoveredNow = label;
+
+            Fill(r, hover ? new Color(accent.r * 0.5f, accent.g * 0.5f, accent.b * 0.5f, 0.85f)
+                          : new Color(0.05f, 0.06f, 0.09f, 0.92f));
+            Fill(new Rect(r.x, r.y, 5, r.height), accent);
+            Fill(new Rect(r.x, r.y + r.height - 2, r.width, 2), new Color(1, 1, 1, hover ? 0.22f : 0.07f));
+            Text(r, label, size, hover ? Color.white : Palette.Paper, TextAnchor.MiddleCenter, FontStyle.Bold);
+
+            if (GUI.Button(r, GUIContent.none, GUIStyle.none))
+            {
+                Audio.Play(Sfx.UiClick, 1f, 0.7f);
+                return true;
+            }
+            return false;
+        }
 
         void Fill(Rect r, Color c)
         {

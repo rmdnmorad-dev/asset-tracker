@@ -15,12 +15,17 @@ namespace TPBR
         static Bootstrap instance;
         static GameObject root;
 
+        /// Set before Restart() to drop straight into a new match instead of the
+        /// title screen (what "PLAY AGAIN" on the results screen does).
+        public static bool AutoStart;
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         static void ResetStatics()
         {
             booted = false;
             instance = null;
             root = null;
+            AutoStart = false;
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -41,7 +46,13 @@ namespace TPBR
 
         void BuildWorld()
         {
+            Time.timeScale = 1f;
             root = new GameObject("TPBR");
+
+            // Audio hangs off the persistent Bootstrap object, not the match root:
+            // regenerating every synthesised clip on each restart would cost a hitch
+            // for no benefit.
+            Audio.Init(transform);
 
             SetupLighting(root.transform);
             Fx.Init(root.transform);
@@ -60,7 +71,9 @@ namespace TPBR
 
             Hud.Create(root.transform);
 
-            Debug.Log("[TPBR] Booted. Arena, 16 players, FX and UI all generated at runtime.");
+            if (AutoStart) { AutoStart = false; gm.StartMatch(); }
+
+            Debug.Log("[TPBR] Booted. Arena, 16 players, audio, FX and UI all generated at runtime.");
         }
 
         public static void Restart()

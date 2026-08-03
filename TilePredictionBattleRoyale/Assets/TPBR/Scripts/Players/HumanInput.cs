@@ -82,6 +82,7 @@ namespace TPBR
                 hoverPlayer = hp;
                 hoverTile = ht;
                 Dirty = true;
+                if (hp >= 0) Audio.Play(Sfx.UiHover, 1f, 0.3f);
             }
 
             if (Input.GetMouseButtonDown(0) && hp >= 0)
@@ -90,12 +91,14 @@ namespace TPBR
                 {
                     hideTile = ht;
                     Dirty = true;
+                    Audio.Play(Sfx.UiClick, 1.25f, 0.6f);
                 }
                 else if (players[hp].alive)
                 {
                     targetPlayer = hp;
                     targetTile = ht;
                     Dirty = true;
+                    Audio.Play(Sfx.UiClick, 0.85f, 0.7f);
                 }
             }
 
@@ -112,9 +115,10 @@ namespace TPBR
 
         public void SetGadget(Gadget g)
         {
-            if (g != Gadget.None && !me.Has(g)) return;
+            if (g != Gadget.None && !me.Has(g)) { Audio.Play(Sfx.UiBack, 1f, 0.4f); return; }
             gadget = (gadget == g) ? Gadget.None : g;
             Dirty = true;
+            Audio.Play(gadget == Gadget.None ? Sfx.UiBack : Sfx.UiClick, 1.1f, 0.55f);
         }
 
         public bool CanLock(List<PlayerState> players)

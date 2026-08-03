@@ -13,6 +13,9 @@ namespace TPBR
         public float minDistance = 28f;
         public float maxDistance = 66f;
 
+        /// Slow continuous rotation, used behind the title screen.
+        public bool orbit;
+
         Camera cam;
         Vector3 focusTarget;
         Vector3 focus;
@@ -65,8 +68,7 @@ namespace TPBR
         void Apply(float t)
         {
             // a hair of sway keeps it feeling alive without hurting readability
-            float sway = Mathf.Sin(t * 0.28f) * 0.7f;
-            yaw = sway;
+            yaw = orbit ? t * 5.5f : Mathf.Sin(t * 0.28f) * 0.7f;
 
             Quaternion rot = Quaternion.Euler(tilt, yaw, 0f);
             Vector3 pos = focus - rot * Vector3.forward * distance;

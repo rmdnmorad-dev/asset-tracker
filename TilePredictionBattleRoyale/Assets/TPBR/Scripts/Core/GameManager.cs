@@ -4,7 +4,11 @@ using UnityEngine;
 
 namespace TPBR
 {
-    public enum Phase { Boot, Prep, Decision, Reveal, GameOver }
+    public enum Phase { Menu, Prep, Decision, Reveal, GameOver }
+
+    /// Which full-screen UI layer is up. Orthogonal to Phase: the match can be
+    /// mid-reveal while the pause screen is showing over the top of it.
+    public enum UiScreen { Title, HowTo, Playing, Paused }
 
     /// Round loop, phase timing and every state mutation in the match.
     /// Rules live in <see cref="Resolver"/>; this class only applies them.
@@ -17,7 +21,8 @@ namespace TPBR
         public readonly List<BotBrain> bots = new List<BotBrain>();
         public HumanInput human;
 
-        public Phase phase = Phase.Boot;
+        public Phase phase = Phase.Menu;
+        public UiScreen screen = UiScreen.Title;
         public int round;
         public float phaseTimer, phaseLength;
         public bool lavaThisRound;
@@ -32,6 +37,9 @@ namespace TPBR
         public readonly List<string> feed = new List<string>();
 
         bool looksDirty = true;
+        int lastTickSecond = -1;
+        UiScreen howToReturnTo = UiScreen.Title;
+        Coroutine matchRoutine, idleRoutine;
 
         static readonly string[] Names =
         {
@@ -63,7 +71,11 @@ namespace TPBR
                 else bots.Add(new BotBrain(p));
             }
 
-            StartCoroutine(RunMatch());
+            phase = Phase.Menu;
+            screen = UiScreen.Title;
+            Audio.SetIntensity(0f);
+            if (ArenaCamera.I != null) ArenaCamera.I.orbit = true;
+            idleRoutine = StartCoroutine(MenuIdle());
         }
 
         public bool IsAlive(int index)
@@ -71,14 +83,79 @@ namespace TPBR
             return index >= 0 && index < players.Count && players[index].alive;
         }
 
+        /// Idles the arena behind the title screen so the menu is not a still frame.
+        IEnumerator MenuIdle()
+        {
+            while (true)
+            {
+                float dt = Time.deltaTime;
+                for (int i = 0; i < bots.Count; i++)
+                {
+                    var b = bots[i];
+                    if (b.me.avatar == null) continue;
+                    b.me.avatar.MoveTo(b.TickPrep(dt, b.me.avatar.transform.position), dt);
+                }
+                if (human != null && human.me.avatar != null)
+                {
+                    var hp = human.me;
+                    hp.avatar.MoveTo(hp.zone.Clamp(hp.avatar.transform.position), dt);
+                }
+                yield return null;
+            }
+        }
+
+        public void StartMatch()
+        {
+            if (matchRoutine != null) return;
+            if (idleRoutine != null) { StopCoroutine(idleRoutine); idleRoutine = null; }
+            screen = UiScreen.Playing;
+            if (ArenaCamera.I != null) ArenaCamera.I.orbit = false;
+            Audio.Play(Sfx.RoundStart);
+            matchRoutine = StartCoroutine(RunMatch());
+        }
+
+        // ------------------------------------------------------------- pause / ui
+
+        public void SetPaused(bool p)
+        {
+            if (p && screen == UiScreen.Playing) { screen = UiScreen.Paused; Time.timeScale = 0f; }
+            else if (!p && screen == UiScreen.Paused) { screen = UiScreen.Playing; Time.timeScale = 1f; }
+        }
+
+        public void ShowHowTo()
+        {
+            howToReturnTo = screen == UiScreen.HowTo ? howToReturnTo : screen;
+            screen = UiScreen.HowTo;
+        }
+
+        public void CloseHowTo()
+        {
+            screen = howToReturnTo;
+            Time.timeScale = screen == UiScreen.Paused ? 0f : 1f;
+        }
+
+        public void ToMainMenu()
+        {
+            Time.timeScale = 1f;
+            Bootstrap.AutoStart = false;
+            Bootstrap.Restart();
+        }
+
+        public void PlayAgain()
+        {
+            Time.timeScale = 1f;
+            Bootstrap.AutoStart = true;
+            Bootstrap.Restart();
+        }
+
         // ------------------------------------------------------------- match loop
 
         IEnumerator RunMatch()
         {
-            Banner("TILE PREDICTION BATTLE ROYALE", Palette.Gold, 2.4f);
+            Banner("TILE PREDICTION BATTLE ROYALE", Palette.Gold, 2.2f);
             Feed("16 players. Private zones. Targeting is anonymous.");
             Feed("Watch how they move - it is the only tell you get.");
-            yield return new WaitForSeconds(2.4f);
+            yield return new WaitForSeconds(2.2f);
 
             while (AliveCount() > 1)
             {
@@ -103,6 +180,9 @@ namespace TPBR
             phaseLength = phaseTimer = Cfg.PrepSeconds;
             scoutReveal = -1;
             revealCaption = "";
+            lastTickSecond = -1;
+            Audio.SetIntensity(0.12f);
+            Audio.Play(Sfx.RoundStart, 1f, 0.5f);
 
             for (int i = 0; i < players.Count; i++) players[i].DecayDwell();
 
@@ -144,6 +224,7 @@ namespace TPBR
             phase = Phase.Decision;
             bool spectating = human == null || !human.me.alive;
             phaseLength = phaseTimer = spectating ? 2.0f : Cfg.DecisionSeconds;
+            lastTickSecond = -1;
 
             for (int i = 0; i < bots.Count; i++)
                 if (bots[i].me.alive)
@@ -160,13 +241,21 @@ namespace TPBR
             while (phaseTimer > 0f)
             {
                 phaseTimer -= Time.deltaTime;
+                Audio.SetIntensity(Mathf.Lerp(0.45f, 1f, 1f - Mathf.Clamp01(phaseTimer / Mathf.Max(phaseLength, 0.01f))));
+
+                int sec = Mathf.CeilToInt(phaseTimer);
+                if (!spectating && sec != lastTickSecond && sec <= 3 && sec > 0)
+                {
+                    lastTickSecond = sec;
+                    Audio.Play(Sfx.Tick, 1f + (4 - sec) * 0.12f, 0.5f);
+                }
 
                 if (!spectating)
                 {
                     human.TickDecision(players);
                     if (human.Dirty) { human.Dirty = false; looksDirty = true; }
                     if (ArenaCamera.I != null) ArenaCamera.I.Focus(human.targetPlayer);
-                    if (human.locked) break;
+                    if (human.locked) { Audio.Play(Sfx.Lock); break; }
                 }
 
                 if (looksDirty) { RefreshLooks(); looksDirty = false; }
@@ -183,10 +272,12 @@ namespace TPBR
         {
             phase = Phase.Reveal;
             phaseLength = phaseTimer = 0f;
+            Audio.SetIntensity(0.55f);
             arena.ResetAllLooks();
 
             // ---- beat 1: everyone reveals where they actually went -------------
             revealCaption = "COMMITTED POSITIONS";
+            int hops = 0;
             for (int i = 0; i < players.Count; i++)
             {
                 var p = players[i];
@@ -197,11 +288,13 @@ namespace TPBR
                 p.lastHideTile = p.decision.hideTile;
                 p.RememberHide(cell);
                 arena.SetLook(cell, TileLook.Standing, p.color);
+                if (hops++ < 4) Audio.Play(Sfx.Hop, Random.Range(0.85f, 1.25f), 0.35f);
             }
             yield return new WaitForSeconds(Cfg.BeatLock);
 
             // ---- beat 2: telegraph every incoming strike ------------------------
             revealCaption = "INCOMING";
+            Audio.Play(Sfx.Incoming, 1f, 0.7f);
             foreach (var kv in res.hitTilesByZone)
             {
                 var z = players[kv.Key].zone;
@@ -217,6 +310,8 @@ namespace TPBR
 
             // ---- beat 3: simultaneous impact -------------------------------------
             revealCaption = "IMPACT";
+            Audio.Play(Sfx.Impact, 1f, 1f);
+            Audio.Play(Sfx.Impact, 0.72f, 0.8f);
             foreach (var kv in res.hitTilesByZone)
             {
                 var z = players[kv.Key].zone;
@@ -236,12 +331,14 @@ namespace TPBR
                 var p = players[res.shieldSaves[i]];
                 Fx.Say(AvatarTop(p), "SHIELD", Palette.Safe, 2f, 1f);
                 Feed(p.name + " was hit and SHIELDED it.");
+                if (i < 3) Audio.Play(Sfx.Shield, 1f, 0.7f);
             }
             for (int i = 0; i < res.decoySaves.Count; i++)
             {
                 var p = players[res.decoySaves[i]];
                 Fx.Say(AvatarTop(p), "DECOY", Palette.Gold, 2f, 1f);
                 Feed(p.name + " ate the hit with a DECOY (-1 tile).");
+                if (i < 3) Audio.Play(Sfx.Decoy, 1f, 0.7f);
             }
 
             ApplyDeaths(res);
@@ -255,6 +352,7 @@ namespace TPBR
                     Banner("ANTI-DOGPILE  -  " + res.dogpileThreshold + "+ ON ONE TARGET",
                            Palette.Lava, 2.2f);
                     revealCaption = "ANTI-DOGPILE PENALTY";
+                    Audio.Play(Sfx.Dogpile, 1f, 0.85f);
                     for (int i = 0; i < res.dogpiledTargets.Count; i++)
                     {
                         int t = res.dogpiledTargets[i];
@@ -263,6 +361,7 @@ namespace TPBR
                     }
                 }
 
+                int sounds = 0;
                 foreach (var kv in res.instantTileLoss)
                 {
                     var p = players[kv.Key];
@@ -270,6 +369,7 @@ namespace TPBR
                     bool penalised = res.penalisedAttackers.Contains(p.index);
                     ApplyTileLoss(p, kv.Value);
                     Fx.Say(ZoneTop(p), penalised ? "-1 TILE  DOGPILE" : "-1 TILE", Palette.Lava, 2f, 0.95f);
+                    if (sounds++ < 3) Audio.Play(Sfx.Crumble, Random.Range(0.9f, 1.15f), 0.6f);
                 }
                 yield return new WaitForSeconds(Cfg.BeatDogpile);
             }
@@ -280,11 +380,14 @@ namespace TPBR
                 Banner("LAVA RISES", Palette.Lava, 2f);
                 revealCaption = "THE ARENA SHRINKS";
                 Fx.Shake = Mathf.Max(Fx.Shake, 0.7f);
+                Audio.Play(Sfx.Lava, 1f, 0.9f);
+                int sounds = 0;
                 for (int i = 0; i < res.lavaLosers.Count; i++)
                 {
                     var p = players[res.lavaLosers[i]];
                     if (!p.alive) continue;
                     ApplyTileLoss(p, 1);
+                    if (sounds++ < 3) Audio.Play(Sfx.Crumble, Random.Range(0.85f, 1.2f), 0.45f);
                 }
                 Feed("Lava claimed a tile from every survivor.");
                 yield return new WaitForSeconds(Cfg.BeatLava);
@@ -294,6 +397,7 @@ namespace TPBR
             if (human != null && human.me.alive && res.scoutUsers.Contains(human.me.index))
             {
                 scoutReveal = human.me.incomingCount;
+                Audio.Play(Sfx.Scout, 1f, 0.8f);
                 Feed("SCOUT: " + scoutReveal + " player(s) attacked you. (Who? Never told.)");
             }
 
@@ -329,6 +433,7 @@ namespace TPBR
                 if (p.avatar != null) p.avatar.Die();
                 Fx.Say(where, "ELIMINATED", Palette.Danger, 2.4f, 1.15f);
                 Feed(p.name + " read wrong. Eliminated. (#" + p.placement + ")");
+                if (i < 4) Audio.Play(Sfx.Death, Random.Range(0.9f, 1.1f), p.isHuman ? 1f : 0.55f);
             }
         }
 
@@ -361,17 +466,21 @@ namespace TPBR
         void EndMatch()
         {
             phase = Phase.GameOver;
+            matchRoutine = null;
+            Audio.SetIntensity(0f);
             var w = Winner();
             if (w != null)
             {
                 w.placement = 1;
                 Banner(w.name + " WINS", w.color, 999f);
                 Feed(w.name + " is the last one standing.");
+                Audio.Play(w.isHuman ? Sfx.Win : Sfx.Lose, 1f, 0.9f);
             }
             else
             {
                 Banner("EVERYBODY DIED  -  DRAW", Palette.Lava, 999f);
                 Feed("Mutual destruction. Nobody reaches the trophy.");
+                Audio.Play(Sfx.Lose, 1f, 0.9f);
             }
         }
 
@@ -450,8 +559,19 @@ namespace TPBR
 
         void Update()
         {
-            if (phase == Phase.GameOver && Input.GetKeyDown(KeyCode.R)) Bootstrap.Restart();
-            if (Input.GetKeyDown(KeyCode.Escape)) Application.Quit();
+            if (Input.GetKeyDown(KeyCode.Escape))
+            {
+                if (screen == UiScreen.HowTo) CloseHowTo();
+                else if (screen == UiScreen.Paused) SetPaused(false);
+                // the results screen has its own buttons - pausing over it just hides them
+                else if (screen == UiScreen.Playing && phase != Phase.GameOver) SetPaused(true);
+            }
+
+            if (screen == UiScreen.Playing && phase == Phase.GameOver)
+            {
+                if (Input.GetKeyDown(KeyCode.R)) PlayAgain();
+                if (Input.GetKeyDown(KeyCode.M)) ToMainMenu();
+            }
 
             for (int i = 0; i < players.Count; i++)
             {
