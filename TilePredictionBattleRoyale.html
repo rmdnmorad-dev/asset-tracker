@@ -1,0 +1,2201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tile Prediction Battle Royale</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;user-select:none;-webkit-user-select:none}
+html,body{width:100%;height:100%;overflow:hidden;background:#05070c}
+#game{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:crosshair}
+#ui{position:absolute;inset:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;color:#e8eef7;pointer-events:none}
+.screen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:12px;pointer-events:auto;padding:24px}
+.hidden{display:none!important}
+.dim{background:rgba(3,5,11,.78);backdrop-filter:blur(2px)}
+.title{font-size:min(9vw,86px);font-weight:900;letter-spacing:4px;line-height:.98;text-align:center;
+  color:#f2f6fc;text-shadow:0 4px 0 #2a1206,0 8px 30px #ff6a1e44}
+.title em{font-style:normal;color:#ffd24d;display:block}
+.sub{color:#93a6c2;letter-spacing:1px;margin-top:14px;margin-bottom:26px;text-align:center;max-width:640px;line-height:1.5;font-size:16px}
+.btn{pointer-events:auto;min-width:320px;padding:14px 30px;font-size:20px;font-weight:800;letter-spacing:3px;
+  color:#eef4ff;background:linear-gradient(180deg,#16203a,#0a1120);border:2px solid #3c5580;border-radius:7px;
+  cursor:pointer;transition:.12s;box-shadow:0 5px 16px #0009,inset 0 1px 0 #ffffff14;text-align:center;font-family:inherit}
+.btn:hover{border-color:#ffd24d;background:linear-gradient(180deg,#2b2410,#140f06);box-shadow:0 0 20px #ffd24d55}
+.btn:active{transform:translateY(1px) scale(.995)}
+.btn.go{border-color:#4ddb8a}
+.btn.go:hover{border-color:#4ddb8a;background:linear-gradient(180deg,#0f2a1c,#06140d);box-shadow:0 0 22px #4ddb8a66}
+.btn.sm{min-width:190px;padding:10px 18px;font-size:15px;letter-spacing:2px}
+.row{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+.panel{background:#080c16f2;border:1px solid #2b3c5c;border-radius:12px;padding:26px 34px;
+  box-shadow:0 14px 50px #000b;max-width:900px;width:100%}
+.panel h2{color:#ffd24d;letter-spacing:4px;font-size:26px;margin-bottom:4px;font-weight:900}
+.panel h3{color:#ffd24d;letter-spacing:2px;font-size:15px;margin:16px 0 6px;font-weight:800}
+.panel p{color:#c3d0e4;font-size:14.5px;line-height:1.62;margin:3px 0}
+.panel .k{color:#7f8fa8}
+.scroll{max-height:74vh;overflow-y:auto;padding-right:8px}
+.scroll::-webkit-scrollbar{width:8px}
+.scroll::-webkit-scrollbar-thumb{background:#2b3c5c;border-radius:4px}
+#results h2{font-size:46px;letter-spacing:5px;text-align:center;margin-bottom:10px}
+#resultSub{text-align:center;color:#c3d0e4;font-size:17px;margin-bottom:6px}
+#resultMeta{text-align:center;color:#7f8fa8;font-size:14px;margin-bottom:22px}
+.foot{position:absolute;bottom:16px;left:0;right:0;text-align:center;color:#55627a;font-size:12.5px;letter-spacing:1px}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="ui">
+  <!-- ---------------------------------------------------------- title -->
+  <div id="scr-title" class="screen dim">
+    <div class="title">TILE PREDICTION<em>BATTLE ROYALE</em></div>
+    <div class="sub">16 players bluff inside private tile zones, secretly predict each
+      other's positions, and survive simultaneous attacks in a shrinking arena.</div>
+    <button class="btn go" id="btnPlay">PLAY</button>
+    <button class="btn" id="btnHow">HOW TO PLAY</button>
+    <div class="row" style="margin-top:4px">
+      <button class="btn sm" id="btnSound">SOUND: ON</button>
+    </div>
+    <div class="foot">1 human + 15 AI &nbsp;|&nbsp; every shape and sound on screen is generated at runtime</div>
+  </div>
+
+  <!-- ---------------------------------------------------------- how to -->
+  <div id="scr-howto" class="screen dim hidden">
+    <div class="panel scroll">
+      <h2>HOW TO PLAY</h2>
+      <p>You own one wedge of the ring. You can never leave it, and nobody can enter it.
+         Last player alive wins.</p>
+
+      <h3>PREP &mdash; 10 SECONDS</h3>
+      <p>Everyone walks around their own zone in real time, and everyone can see it.
+         This is the only information in the game. It is also the only place to lie.</p>
+
+      <h3>COMMIT &mdash; 15 SECONDS</h3>
+      <p>Secretly pick three things:</p>
+      <p><span class="k">1.</span> a tile in <b>your</b> zone &mdash; where you will actually be standing</p>
+      <p><span class="k">2.</span> a tile in <b>someone else's</b> zone &mdash; where you are attacking</p>
+      <p><span class="k">3.</span> a gadget, if you want one</p>
+      <p class="k" style="margin-top:8px">Click your own tile, then click an enemy tile.
+         Keys 1&ndash;4 pick a gadget, SPACE locks it in.</p>
+
+      <h3>REVEAL</h3>
+      <p>Everything resolves at once. Stand on a tile that gets hit and you are out.
+         Results are fully public. <b>Who attacked whom is never revealed, to anyone, ever.</b></p>
+
+      <h3>THE ANTI-DOGPILE RULE</h3>
+      <p>If <b>4</b> players attack the same person in one round, all 4 of them lose a tile.
+         Once 10 or fewer players are alive that drops to <b>3</b>.
+         It applies even if the target dies. Spread your fire or pay for it.</p>
+
+      <h3>LAVA</h3>
+      <p>From round 3, every 2 rounds, everyone loses their outermost tile. Doomed tiles glow
+         orange a full round before they go. Nobody ever drops below 2 tiles &mdash; and at
+         2 tiles, a zone is a pure coin flip.</p>
+
+      <h3>GADGETS</h3>
+      <p><b>SPLASH</b> <span class="k">your attack also hits the tiles next to it</span></p>
+      <p><b>SHIELD</b> <span class="k">survive one hit this round</span></p>
+      <p><b>DECOY</b> <span class="k">if hit, lose a tile instead of dying</span></p>
+      <p><b>SCOUT</b> <span class="k">learn how many players attacked you &mdash; never who</span></p>
+
+      <div class="row" style="margin-top:24px"><button class="btn" id="btnHowBack">BACK &nbsp;[ESC]</button></div>
+    </div>
+  </div>
+
+  <!-- ---------------------------------------------------------- pause -->
+  <div id="scr-pause" class="screen dim hidden">
+    <div class="title" style="font-size:52px;letter-spacing:8px">PAUSED</div>
+    <div style="height:18px"></div>
+    <button class="btn go" id="btnResume">RESUME &nbsp;[ESC]</button>
+    <button class="btn" id="btnPauseHow">HOW TO PLAY</button>
+    <button class="btn" id="btnRestart">RESTART MATCH</button>
+    <button class="btn" id="btnMenu">MAIN MENU</button>
+    <button class="btn sm" id="btnSound2">SOUND: ON</button>
+  </div>
+
+  <!-- ---------------------------------------------------------- results -->
+  <div id="scr-results" class="screen dim hidden">
+    <div class="panel" style="max-width:640px">
+      <h2 id="resultTitle">WINNER</h2>
+      <div id="resultSub"></div>
+      <div id="resultMeta"></div>
+      <div class="row">
+        <button class="btn go sm" id="btnAgain">PLAY AGAIN &nbsp;[R]</button>
+        <button class="btn sm" id="btnResultsMenu">MAIN MENU &nbsp;[M]</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* =====================================================================
+   TILE PREDICTION BATTLE ROYALE
+   Single file, no dependencies. Canvas 2D with a real perspective
+   camera; every shape, sound and pixel of UI is generated at runtime.
+
+   Sections:
+     1  config          6  bot AI
+     2  math + rng      7  audio (WebAudio synthesis)
+     3  palette         8  camera + projection
+     4  zones/tiles     9  rendering
+     5  rules engine   10  HUD / input / match loop
+   Sections 1-6 are DOM-free so the rules can be soak-tested in Node.
+   ===================================================================== */
+
+/* ============================== 1. CONFIG ============================ */
+const Cfg = {
+  PLAYERS: 16,
+  HUMAN: 8,                 // zone 8 sits at 180deg = bottom of screen, best seat
+
+  ROWS: 4, COLS: 2,         // radial x angular tiles per zone
+  START_TILES: 8,
+  MIN_TILES: 2,
+
+  INNER_R: 8.5, OUTER_R: 15.5,
+  ZONE_GAP_DEG: 2.5,
+  TILE_H: 0.5,
+
+  PREP: 10, DECISION: 15,
+
+  LAVA_FIRST: 3, LAVA_EVERY: 2,
+
+  DOGPILE_ALIVE_BREAK: 11,
+  DOGPILE_HI: 4,
+  DOGPILE_LO: 3,
+
+  CHARGES: { splash: 2, shield: 1, decoy: 1, scout: 2 },
+
+  BEAT_LOCK: 1.05, BEAT_INCOMING: 1.25, BEAT_IMPACT: 1.35,
+  BEAT_DOGPILE: 1.75, BEAT_LAVA: 1.55, BEAT_SUMMARY: 2.0,
+};
+Cfg.ZONE_STEP = 360 / Cfg.PLAYERS;
+Cfg.ZONE_SPAN = Cfg.ZONE_STEP - Cfg.ZONE_GAP_DEG;
+Cfg.COL_SPAN  = Cfg.ZONE_SPAN / Cfg.COLS;
+Cfg.ROW_DEPTH = (Cfg.OUTER_R - Cfg.INNER_R) / Cfg.ROWS;
+
+/** 4+ attackers on one target while 11+ are alive; 3+ once 10 or fewer remain. */
+function dogpileThreshold(aliveAtRoundStart) {
+  return aliveAtRoundStart >= Cfg.DOGPILE_ALIVE_BREAK ? Cfg.DOGPILE_HI : Cfg.DOGPILE_LO;
+}
+
+const GADGETS = ['splash', 'shield', 'decoy', 'scout'];
+const GADGET_BLURB = {
+  splash: 'hits adjacent tiles too',
+  shield: 'survive one hit',
+  decoy:  'lose a tile, not your life',
+  scout:  'how many hit you',
+};
+
+/* ============================ 2. MATH + RNG ========================== */
+const DEG = Math.PI / 180;
+const clampf = (v, a, b) => v < a ? a : (v > b ? b : v);
+const clampi = (v, a, b) => v < a ? a : (v > b ? b : v);
+const lerp = (a, b, t) => a + (b - a) * clampf(t, 0, 1);
+
+/** Seedable LCG so the headless soak test is reproducible. */
+let _seed = 12345 >>> 0;
+function srand(s) { _seed = (s >>> 0) || 1; }
+function rnd() { _seed = (Math.imul(_seed, 1664525) + 1013904223) >>> 0; return _seed / 4294967296; }
+const rrange = (a, b) => a + rnd() * (b - a);
+const rint = (a, b) => a + Math.floor(rnd() * (b - a));       // [a, b)
+const rpick = arr => arr[rint(0, arr.length)];
+
+/** Angle convention everywhere: x = r sin(deg), z = r cos(deg). */
+function polar(r, deg, y) { const a = deg * DEG; return { x: r * Math.sin(a), y: y || 0, z: r * Math.cos(a) }; }
+function angleOf(p) { const d = Math.atan2(p.x, p.z) / DEG; return d < 0 ? d + 360 : d; }
+function deltaAngle(a, b) { let d = ((b - a) % 360 + 360) % 360; return d > 180 ? d - 360 : d; }
+const dist2 = (a, b) => (a.x - b.x) ** 2 + (a.z - b.z) ** 2;
+
+/* ============================= 3. PALETTE ============================ */
+const PALETTE = [
+  '#f24343', '#4d9eff', '#59de6b', '#ffca33', '#c26bfa', '#33e6db', '#ff8233', '#fa70bf',
+  '#9ed13d', '#737aff', '#eaeadc', '#d9576b', '#3db69a', '#c9a95a', '#945ecc', '#70bfde',
+];
+const COL = {
+  floor: '#151b24', tileDark: '#0b0f16',
+  lava: '#ff5714', lavaDeep: '#8c1703',
+  danger: '#ff2f33', safe: '#4ddb8a', gold: '#ffd24d',
+  paper: '#eff3fa', ink: '#080b11',
+};
+
+/** '#rrggbb' -> 'rgba(r,g,b,a)' */
+function rgba(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return 'rgba(' + (n >> 16 & 255) + ',' + (n >> 8 & 255) + ',' + (n & 255) + ',' + a + ')';
+}
+/** Blend two hex colours. */
+function mix(h1, h2, t) {
+  const a = parseInt(h1.slice(1), 16), b = parseInt(h2.slice(1), 16);
+  const r = Math.round(lerp(a >> 16 & 255, b >> 16 & 255, t));
+  const g = Math.round(lerp(a >> 8 & 255, b >> 8 & 255, t));
+  const c = Math.round(lerp(a & 255, b & 255, t));
+  return '#' + ((1 << 24) + (r << 16) + (g << 8) + c).toString(16).slice(1);
+}
+const shade = (h, f) => mix(h, '#000000', 1 - f);
+
+/* ========================== 4. ZONES AND TILES ======================= */
+const cellKey = c => c.row * Cfg.COLS + c.col;
+
+class Zone {
+  constructor(owner) {
+    this.owner = owner;
+    this.centerDeg = owner * Cfg.ZONE_STEP;
+    this.aStart = this.centerDeg - Cfg.ZONE_SPAN / 2;
+    this.aEnd = this.centerDeg + Cfg.ZONE_SPAN / 2;
+
+    this.grid = [];
+    this.active = [];
+    this.removalOrder = [];
+
+    for (let r = 0; r < Cfg.ROWS; r++) {
+      for (let c = 0; c < Cfg.COLS; c++) {
+        const cell = {
+          row: r, col: c,
+          rIn: Cfg.INNER_R + r * Cfg.ROW_DEPTH,
+          rOut: Cfg.INNER_R + (r + 1) * Cfg.ROW_DEPTH,
+          aStart: this.aStart + c * Cfg.COL_SPAN,
+          aEnd: this.aStart + (c + 1) * Cfg.COL_SPAN,
+          alive: true,
+          look: 'idle', drop: 0, dying: false,
+        };
+        cell.aMid = (cell.aStart + cell.aEnd) / 2;
+        cell.center = polar((cell.rIn + cell.rOut) / 2, cell.aMid);
+        this.grid.push(cell);
+        this.active.push(cell);
+      }
+    }
+    // Lava creeps inward: outermost row first, and the last row standing is
+    // row 0 - exactly MIN_TILES tiles, which is the coin-flip endgame.
+    for (let r = Cfg.ROWS - 1; r >= 1; r--)
+      for (let c = 0; c < Cfg.COLS; c++) this.removalOrder.push(this.cell(r, c));
+  }
+
+  get tileCount() { return this.active.length; }
+  get atMinimum() { return this.active.length <= Cfg.MIN_TILES; }
+
+  cell(row, col) { return this.grid.find(c => c.row === row && c.col === col) || null; }
+  tile(i) { return (i >= 0 && i < this.active.length) ? this.active[i] : null; }
+  indexOf(c) { return this.active.indexOf(c); }
+  centerOf(i) { const t = this.tile(i); return t ? t.center : polar((Cfg.INNER_R + Cfg.OUTER_R) / 2, this.centerDeg); }
+
+  /** The two-tile floor is a hard rule, enforced here and nowhere else. */
+  removeNextTile() {
+    if (this.atMinimum) return null;
+    for (const c of this.removalOrder) {
+      if (!c.alive) continue;
+      c.alive = false;
+      this.active.splice(this.active.indexOf(c), 1);
+      return c;
+    }
+    return null;
+  }
+
+  /** Which still-standing tile of this zone contains the point, if any. */
+  cellAt(p) {
+    const r = Math.hypot(p.x, p.z);
+    if (r < Cfg.INNER_R || r > Cfg.OUTER_R) return null;
+    const d = deltaAngle(this.centerDeg, angleOf(p));
+    if (Math.abs(d) > Cfg.ZONE_SPAN / 2) return null;
+    const row = clampi(Math.floor((r - Cfg.INNER_R) / Cfg.ROW_DEPTH), 0, Cfg.ROWS - 1);
+    const col = clampi(Math.floor((d + Cfg.ZONE_SPAN / 2) / Cfg.COL_SPAN), 0, Cfg.COLS - 1);
+    const c = this.cell(row, col);
+    return (c && c.alive) ? c : null;
+  }
+
+  /** Keeps a walking avatar inside its own zone and off dead tiles. */
+  clamp(p) {
+    if (this.active.length === 0) return polar(Cfg.INNER_R, this.centerDeg);
+    let r = Math.hypot(p.x, p.z);
+    let d = deltaAngle(this.centerDeg, angleOf(p));
+
+    const margin = 0.28, half = Cfg.ZONE_SPAN / 2;
+    const angMargin = (margin / Math.max(r, 1)) / DEG;
+    d = clampf(d, -half + angMargin, half - angMargin);
+    r = clampf(r, Cfg.INNER_R + margin, Cfg.OUTER_R - margin);
+
+    const q = polar(r, this.centerDeg + d);
+    if (this.cellAt(q)) return q;
+
+    let best = null, bd = Infinity;
+    for (const c of this.active) {
+      const dd = dist2(c.center, q);
+      if (dd < bd) { bd = dd; best = c; }
+    }
+    return best ? { x: best.center.x, y: 0, z: best.center.z } : q;
+  }
+}
+
+/* ============================= 5. PLAYERS ============================ */
+function emptyDecision() {
+  return { hideTile: 0, targetPlayer: -1, targetTile: 0, gadget: 'none', locked: false };
+}
+
+class Player {
+  constructor(i, name, isHuman) {
+    this.index = i;
+    this.name = name;
+    this.isHuman = isHuman;
+    this.color = PALETTE[i % PALETTE.length];
+
+    this.alive = true;
+    this.deathRound = -1;
+    this.placement = 0;
+    this.zone = null;
+
+    this.decision = emptyDecision();
+    this.charges = Object.assign({}, Cfg.CHARGES);
+
+    // Habit memory, keyed by grid cell so it stays meaningful after the zone
+    // shrinks and active indices shift underneath.
+    this.hideHistory = new Array(Cfg.ROWS * Cfg.COLS).fill(0);
+    this.prepDwell = new Array(Cfg.ROWS * Cfg.COLS).fill(0);
+
+    this.lastHideTile = -1;
+    this.incomingCount = 0;
+
+    // presentation only
+    this.pos = { x: 0, y: 0, z: 0 };
+    this.facing = 0;
+    this.bob = 0;
+    this.hop = null;
+    this.dieT = -1;
+  }
+
+  get tileCount() { return this.zone ? this.zone.tileCount : 0; }
+  has(g) { return g !== 'none' && this.charges[g] > 0; }
+  spend(g) { if (this.has(g)) this.charges[g]--; }
+
+  rememberHide(c) {
+    if (!c) return;
+    for (let i = 0; i < this.hideHistory.length; i++) this.hideHistory[i] *= 0.72;
+    this.hideHistory[cellKey(c)] += 1;
+  }
+  rememberDwell(c, dt) { if (c) this.prepDwell[cellKey(c)] += dt; }
+  decayDwell() { for (let i = 0; i < this.prepDwell.length; i++) this.prepDwell[i] *= 0.55; }
+}
+
+/* =========================== 6. RULES ENGINE ========================= */
+/* Pure: reads locked decisions, mutates nothing. The reveal replays the
+   returned result beat by beat, so what you watch is what was resolved. */
+
+function neighbours(zone, activeIndex) {
+  const out = [];
+  const c = zone.tile(activeIndex);
+  if (!c) return out;
+  const tryAdd = (row, col) => {
+    if (row < 0 || row >= Cfg.ROWS || col < 0 || col >= Cfg.COLS) return;
+    const cell = zone.cell(row, col);
+    if (!cell || !cell.alive) return;
+    const i = zone.indexOf(cell);
+    if (i >= 0) out.push(i);
+  };
+  tryAdd(c.row + 1, c.col); tryAdd(c.row - 1, c.col);
+  tryAdd(c.row, c.col + 1); tryAdd(c.row, c.col - 1);
+  return out;
+}
+
+function attackersOn(res, target) {
+  const l = res.attackersByTarget.get(target);
+  return l ? l.length : 0;
+}
+function wasHit(res, zone, tileIndex) {
+  const s = res.hitTilesByZone.get(zone);
+  return !!s && s.has(tileIndex);
+}
+function addLoss(res, player, n) {
+  res.instantTileLoss.set(player, (res.instantTileLoss.get(player) || 0) + n);
+}
+function tileLossFor(res, player) { return res.instantTileLoss.get(player) || 0; }
+
+function resolve(players, round, lavaThisRound) {
+  const res = {
+    round, lavaThisRound,
+    aliveAtStart: 0, dogpileThreshold: 0,
+    attacks: [],
+    attackersByTarget: new Map(),
+    hitTilesByZone: new Map(),
+    dogpiledTargets: [], penalisedAttackers: [],
+    deaths: [], shieldSaves: [], decoySaves: [], scoutUsers: [],
+    lavaLosers: [], instantTileLoss: new Map(),
+  };
+
+  const alive = players.filter(p => p.alive);
+  res.aliveAtStart = alive.length;
+  res.dogpileThreshold = dogpileThreshold(alive.length);
+
+  // ---- 1. collect attacks -------------------------------------------
+  for (const p of alive) {
+    const d = p.decision;
+    if (d.targetPlayer < 0 || d.targetPlayer >= players.length) continue;
+    const t = players[d.targetPlayer];
+    if (!t.alive || t.index === p.index) continue;
+
+    const rec = {
+      attacker: p.index, target: t.index, targetTile: d.targetTile,
+      gadget: d.gadget, hitTiles: [d.targetTile], killed: false,
+    };
+    if (d.gadget === 'splash' && p.has('splash')) {
+      for (const n of neighbours(t.zone, d.targetTile))
+        if (rec.hitTiles.indexOf(n) < 0) rec.hitTiles.push(n);
+    }
+    res.attacks.push(rec);
+
+    if (!res.attackersByTarget.has(t.index)) res.attackersByTarget.set(t.index, []);
+    res.attackersByTarget.get(t.index).push(p.index);
+
+    if (!res.hitTilesByZone.has(t.index)) res.hitTilesByZone.set(t.index, new Set());
+    const set = res.hitTilesByZone.get(t.index);
+    for (const h of rec.hitTiles) set.add(h);
+  }
+
+  // ---- 2. who is standing in the blast ------------------------------
+  for (const p of alive) {
+    p.incomingCount = attackersOn(res, p.index);
+    if (p.decision.gadget === 'scout' && p.has('scout')) res.scoutUsers.push(p.index);
+
+    if (!wasHit(res, p.index, p.decision.hideTile)) continue;
+
+    if (p.decision.gadget === 'shield' && p.has('shield')) {
+      res.shieldSaves.push(p.index);
+    } else if (p.decision.gadget === 'decoy' && p.has('decoy')) {
+      res.decoySaves.push(p.index);
+      addLoss(res, p.index, 1);
+    } else {
+      res.deaths.push(p.index);
+    }
+  }
+  for (const a of res.attacks) a.killed = res.deaths.indexOf(a.target) >= 0;
+
+  // ---- 3. anti-dogpiling ---------------------------------------------
+  // The penalty lands on every attacker who piled on, and it lands even when
+  // the target dies - that is the whole point of the rule.
+  for (const [target, attackers] of res.attackersByTarget) {
+    if (attackers.length < res.dogpileThreshold) continue;
+    res.dogpiledTargets.push(target);
+    for (const at of attackers) {
+      if (res.deaths.indexOf(at) >= 0) continue;            // already eliminated
+      if (res.penalisedAttackers.indexOf(at) >= 0) continue;
+      res.penalisedAttackers.push(at);
+      addLoss(res, at, 1);
+    }
+  }
+
+  // ---- 4. lava ---------------------------------------------------------
+  if (lavaThisRound) {
+    for (const p of alive) {
+      if (res.deaths.indexOf(p.index) >= 0) continue;
+      if (p.zone.atMinimum) continue;                        // the 2-tile floor is absolute
+      res.lavaLosers.push(p.index);
+    }
+  }
+
+  return res;
+}
+
+/* ============================== 7. BOT AI ============================ */
+const BOT_KINDS = ['CAMPER', 'DRIFTER', 'EDGE-LORD', 'TRICKSTER', 'MIRROR', 'HUNTER'];
+
+class Bot {
+  constructor(p) {
+    this.me = p;
+    this.kind = rpick(BOT_KINDS);
+
+    this.skill = rrange(0.35, 0.9);       // how hard it reads your habits
+    this.sticky = 0.2;                    // how often it revisits its favourite tile
+    this.honesty = 0.5;                   // chance prep dwell matches where it hides
+    this.aggression = rrange(0.25, 0.8);
+    this.spread = rrange(0.25, 0.75);     // willingness to skip the obvious target
+
+    switch (this.kind) {
+      case 'CAMPER':    this.sticky = 0.75; this.honesty = 0.70; break;
+      case 'DRIFTER':   this.sticky = 0.15; this.honesty = 0.45; break;
+      case 'EDGE-LORD': this.sticky = 0.45; this.honesty = 0.60; break;
+      case 'TRICKSTER': this.sticky = 0.05; this.honesty = 0.12; break;   // prep is theatre
+      case 'MIRROR':    this.sticky = 0.35; this.honesty = 0.50; break;
+      case 'HUNTER':    this.sticky = 0.30; this.honesty = 0.55; this.skill = Math.min(1, this.skill + 0.2); break;
+    }
+
+    this.favouriteKey = rint(0, Cfg.ROWS * Cfg.COLS);
+    this.wanderTarget = p.zone ? p.zone.centerOf(0) : { x: 0, y: 0, z: 0 };
+    this.wanderTimer = 0;
+  }
+
+  // ---- prep -------------------------------------------------------
+  tickPrep(dt, cur) {
+    this.wanderTimer -= dt;
+    if (this.wanderTimer <= 0 || dist2(cur, this.wanderTarget) < 0.10) {
+      this.wanderTarget = this.pickWanderPoint();
+      this.wanderTimer = rrange(0.55, 1.7);
+    }
+    const speed = this.kind === 'TRICKSTER' ? 5.4 : 4.2;
+    const dx = this.wanderTarget.x - cur.x, dz = this.wanderTarget.z - cur.z;
+    const m = Math.hypot(dx, dz);
+    const step = Math.min(m, speed * dt);
+    const next = m < 1e-5 ? cur : { x: cur.x + dx / m * step, y: 0, z: cur.z + dz / m * step };
+    return this.me.zone.clamp(next);
+  }
+
+  pickWanderPoint() {
+    const z = this.me.zone;
+    if (z.active.length === 0) return { x: 0, y: 0, z: 0 };
+    let cell;
+    if (rnd() < this.sticky) {
+      cell = this.byKey(z, this.favouriteKey) || rpick(z.active);
+    } else if (this.kind === 'EDGE-LORD') {
+      // gravitates to the rim, which is exactly where the lava is coming from
+      cell = rnd() < 0.35 ? rpick(z.active) : z.active[z.active.length - 1];
+    } else {
+      cell = rpick(z.active);
+    }
+    return randomPointIn(cell);
+  }
+
+  byKey(z, key) { return z.active.find(c => cellKey(c) === key) || null; }
+
+  // ---- commit -----------------------------------------------------
+  decide(players, prepEndPos) {
+    const d = emptyDecision();
+    d.hideTile = this.pickHide(prepEndPos);
+    const target = this.pickTarget(players);
+    d.targetPlayer = target;
+    d.targetTile = target >= 0 ? this.predictTile(players[target]) : 0;
+    d.gadget = this.pickGadget(players, target);
+    d.locked = true;
+    this.me.decision = d;
+  }
+
+  pickHide(prepEndPos) {
+    const z = this.me.zone;
+    if (z.active.length === 0) return 0;
+    if (z.active.length <= Cfg.MIN_TILES) return rint(0, z.active.length);   // pure 50/50
+
+    // "honesty" is the bluff dial: an honest bot ends up where it was
+    // loitering, a trickster spent the whole prep phase lying to you.
+    if (rnd() < this.honesty) {
+      const cell = z.cellAt(prepEndPos);
+      if (cell) {
+        const i = z.indexOf(cell);
+        if (i >= 0 && !(i === this.me.lastHideTile && rnd() < 0.6)) return i;
+      }
+    }
+    if (rnd() < this.sticky) {
+      const fav = this.byKey(z, this.favouriteKey);
+      if (fav) return z.indexOf(fav);
+    }
+    let p = rint(0, z.active.length);
+    if (p === this.me.lastHideTile && z.active.length > 1)
+      p = (p + 1 + rint(0, z.active.length - 1)) % z.active.length;
+    return p;
+  }
+
+  pickTarget(players) {
+    const cands = players.filter(p => p.alive && p.index !== this.me.index);
+    if (cands.length === 0) return -1;
+
+    // Spreading fire is not altruism - piling on trips the anti-dogpile rule
+    // and costs the attacker a tile, so good bots deliberately scatter.
+    if (rnd() < this.spread) return rpick(cands).index;
+
+    let best = -Infinity, bestIdx = cands[0].index;
+    for (const c of cands) {
+      // Fewer tiles = easier to guess right, so wounded players draw fire.
+      // Deliberately no "prefer the human" term: 15 bots applying the same
+      // identity bias compound into a pile-on that halves the player's win rate.
+      const score = (Cfg.START_TILES - c.tileCount) * 1.2 + rrange(0, 2.4);
+      if (score > best) { best = score; bestIdx = c.index; }
+    }
+    return bestIdx;
+  }
+
+  /** Reads the target's habits: past hiding spots blended with prep dwell. */
+  predictTile(target) {
+    const z = target.zone;
+    if (z.active.length <= 1) return 0;
+
+    const w = new Array(z.active.length);
+    let total = 0;
+    for (let i = 0; i < z.active.length; i++) {
+      const k = cellKey(z.active[i]);
+      const habit = target.hideHistory[k] * 0.62 + target.prepDwell[k] * 0.38;
+      const v = lerp(1, 0.15 + habit * 2.2, this.skill) + 0.001;
+      w[i] = v; total += v;
+    }
+    let roll = rnd() * total;
+    for (let i = 0; i < w.length; i++) { roll -= w[i]; if (roll <= 0) return i; }
+    return z.active.length - 1;
+  }
+
+  pickGadget(players, target) {
+    const me = this.me;
+    const endgame = me.tileCount <= Cfg.MIN_TILES + 1;
+
+    if (endgame && me.has('shield') && rnd() < 0.55) return 'shield';
+    if (endgame && me.has('decoy') && rnd() < 0.35) return 'decoy';
+
+    if (target >= 0 && me.has('splash')) {
+      const t = players[target];
+      const chance = this.aggression * (t.tileCount <= 4 ? 0.7 : 0.35);
+      if (rnd() < chance) return 'splash';
+    }
+    if (me.has('scout') && rnd() < 0.14) return 'scout';
+    if (me.has('shield') && rnd() < 0.10) return 'shield';
+    return 'none';
+  }
+}
+
+function randomPointIn(c) {
+  const m = 0.3;
+  const r = rrange(c.rIn + m, c.rOut - m);
+  const angM = (m / Math.max(r, 1)) / DEG;
+  return polar(r, rrange(c.aStart + angM, c.aEnd - angM));
+}
+
+/* Everything past this point is browser-only. */
+if (typeof document !== 'undefined') {
+
+/* ============================== 8. AUDIO ============================= */
+/* Every sound is synthesised into PCM the first time the player interacts -
+   no audio files anywhere. */
+const SR = 44100;
+
+const Snd = {
+  ctx: null, master: null, calmGain: null, tenseGain: null, ambGain: null,
+  buffers: {}, muted: false, intensity: 0, target: 0, ready: false,
+
+  init() {
+    if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    this.ctx = new AC();
+
+    this.master = this.ctx.createGain();
+    this.master.gain.value = 0.85;
+    this.master.connect(this.ctx.destination);
+
+    this.build();
+
+    this.calmGain = this.loopSource(this.buffers.musicCalm, 0.42);
+    this.tenseGain = this.loopSource(this.buffers.musicTense, 0);
+    this.ambGain = this.loopSource(this.buffers.ambience, 0.16);
+    this.ready = true;
+  },
+
+  loopSource(buf, vol) {
+    const g = this.ctx.createGain();
+    g.gain.value = vol;
+    g.connect(this.master);
+    const s = this.ctx.createBufferSource();
+    s.buffer = buf; s.loop = true; s.connect(g);
+    s.start(0);                 // all beds start together so they stay phase-locked
+    return g;
+  },
+
+  play(name, pitch, vol) {
+    if (!this.ready || this.muted) return;
+    const buf = this.buffers[name];
+    if (!buf) return;
+    const s = this.ctx.createBufferSource();
+    s.buffer = buf;
+    s.playbackRate.value = clampf(pitch || 1, 0.25, 3);
+    const g = this.ctx.createGain();
+    g.gain.value = clampf(vol === undefined ? 1 : vol, 0, 1);
+    s.connect(g); g.connect(this.master);
+    s.start(0);
+  },
+
+  /** 0 = calm prep bed, 1 = tense commit-countdown bed. */
+  setIntensity(t) { this.target = clampf(t, 0, 1); },
+
+  update(dt) {
+    if (!this.ready) return;
+    const d = this.target - this.intensity;
+    this.intensity += Math.sign(d) * Math.min(Math.abs(d), dt * 0.8);
+    const m = this.muted ? 0 : 1;
+    this.calmGain.gain.value = (1 - this.intensity) * 0.42 * m;
+    this.tenseGain.gain.value = this.intensity * 0.42 * m;
+    this.ambGain.gain.value = 0.16 * m;
+  },
+
+  // ---- synthesis ---------------------------------------------------
+  buf(sec) { return new Float32Array(Math.max(16, Math.floor(sec * SR))); },
+
+  ship(name, d) {
+    for (let i = 0; i < d.length; i++) d[i] = clampf(d[i], -1, 1);
+    const b = this.ctx.createBuffer(1, d.length, SR);
+    b.getChannelData(0).set(d);
+    this.buffers[name] = b;
+  },
+
+  build() {
+    // deterministic noise so the sound set is identical every load
+    let ns = 7 >>> 0;
+    const noise = () => { ns = (Math.imul(ns, 1664525) + 1013904223) >>> 0; return (ns >>> 8) / 16777216; };
+    const env = (i, n, atk) => {
+      const t = i / n;
+      return (atk <= 0 ? 1 : clampf(t / atk, 0, 1)) * Math.exp(-4.2 * t);
+    };
+
+    const blip = (name, f, dur, amp, square) => {
+      const d = this.buf(dur);
+      for (let i = 0; i < d.length; i++) {
+        const s = Math.sin(2 * Math.PI * f * i / SR);
+        d[i] = (square ? (s >= 0 ? 1 : -1) : s) * env(i, d.length, 0.06) * amp;
+      }
+      this.ship(name, d);
+    };
+    const sweep = (name, f0, f1, dur, amp, wave) => {
+      const d = this.buf(dur);
+      let ph = 0;
+      for (let i = 0; i < d.length; i++) {
+        const t = i / d.length;
+        ph += 2 * Math.PI * lerp(f0, f1, t * t) / SR;
+        let v = Math.sin(ph);
+        if (wave === 'sq') v = v >= 0 ? 1 : -1;
+        if (wave === 'saw') v = (ph / (2 * Math.PI)) % 1 * 2 - 1;
+        d[i] = v * env(i, d.length, 0.08) * amp;
+      }
+      this.ship(name, d);
+    };
+    const chord = (name, freqs, dur, amp) => {
+      const d = this.buf(dur);
+      for (let i = 0; i < d.length; i++) {
+        let v = 0;
+        for (let k = 0; k < freqs.length; k++) {
+          const t = i / SR - k * 0.05;          // staggered so it reads as a roll
+          if (t <= 0) continue;
+          v += Math.sin(2 * Math.PI * freqs[k] * t) * Math.exp(-3.4 * t);
+        }
+        d[i] = v / freqs.length * amp * clampf(i / (SR * 0.004), 0, 1);
+      }
+      this.ship(name, d);
+    };
+
+    blip('uiHover', 1180, 0.035, 0.18, false);
+    blip('uiClick', 760, 0.055, 0.42, true);
+    blip('tick', 1560, 0.028, 0.30, true);
+    sweep('uiBack', 620, 380, 0.09, 0.38, 'sq');
+    sweep('hop', 300, 620, 0.10, 0.22, 'sin');
+    sweep('incoming', 240, 900, 0.34, 0.26, 'saw');
+    sweep('shield', 520, 1180, 0.28, 0.40, 'sin');
+    sweep('decoy', 880, 330, 0.26, 0.36, 'sq');
+    chord('lock', [392, 523, 784], 0.30, 0.42);
+    chord('scout', [880, 1320], 0.22, 0.30);
+    chord('roundStart', [261, 329, 392], 0.50, 0.36);
+
+    { // impact: pitched-down body plus a low-passed crack
+      const d = this.buf(0.55); let ph = 0, lp = 0;
+      for (let i = 0; i < d.length; i++) {
+        const t = i / d.length;
+        ph += 2 * Math.PI * lerp(190, 38, Math.sqrt(t)) / SR;
+        const body = Math.sin(ph) * Math.exp(-3.6 * t);
+        lp += ((noise() * 2 - 1) - lp) * 0.09;
+        d[i] = (body * 0.85 + lp * Math.exp(-16 * t) * 0.7) * 0.85;
+      }
+      this.ship('impact', d);
+    }
+    { // elimination sting
+      const d = this.buf(0.8); let ph = 0;
+      for (let i = 0; i < d.length; i++) {
+        const t = i / d.length;
+        ph += 2 * Math.PI * lerp(520, 62, t * t) / SR;
+        const saw = (ph / (2 * Math.PI)) % 1 * 2 - 1;
+        const n = (noise() * 2 - 1) * Math.exp(-11 * t) * 0.35;
+        d[i] = (saw * 0.55 + n) * Math.exp(-3.1 * t) * 0.6;
+      }
+      this.ship('death', d);
+    }
+    { // tile crumbling: gravel plus a few discrete knocks
+      const d = this.buf(0.5); let lp = 0;
+      for (let i = 0; i < d.length; i++) {
+        const t = i / d.length;
+        lp += ((noise() * 2 - 1) - lp) * 0.22;
+        let knock = 0;
+        for (let k = 0; k < 4; k++) {
+          const kt = t - k * 0.09;
+          if (kt > 0) knock += Math.sin(2 * Math.PI * (120 - k * 14) * kt) * Math.exp(-42 * kt);
+        }
+        d[i] = (lp * 0.5 + knock * 0.35) * Math.exp(-3.4 * t) * 0.8;
+      }
+      this.ship('crumble', d);
+    }
+    { // lava swell
+      const d = this.buf(1.4); let lp = 0, lp2 = 0;
+      for (let i = 0; i < d.length; i++) {
+        const t = i / d.length;
+        lp += ((noise() * 2 - 1) - lp) * 0.035;
+        lp2 += (lp - lp2) * 0.035;
+        d[i] = lp2 * 5.5 * Math.sin(Math.PI * clampf(t, 0, 1));
+      }
+      this.ship('lava', d);
+    }
+    { // anti-dogpile alarm
+      const d = this.buf(0.62);
+      for (let i = 0; i < d.length; i++) {
+        const t = i / SR;
+        const f = (Math.floor(t / 0.09) % 2 === 0) ? 740 : 560;
+        const sq = Math.sin(2 * Math.PI * f * t) >= 0 ? 1 : -1;
+        d[i] = sq * 0.32 * Math.exp(-2.1 * (i / d.length)) * clampf(i / (SR * 0.004), 0, 1);
+      }
+      this.ship('dogpile', d);
+    }
+    for (const major of [true, false]) {
+      const notes = major ? [392, 523, 659, 784] : [440, 392, 330, 262];
+      const d = this.buf(1.5);
+      for (let i = 0; i < d.length; i++) {
+        const t = i / SR; let v = 0;
+        for (let k = 0; k < notes.length; k++) {
+          const nt = t - k * 0.16;
+          if (nt <= 0) continue;
+          v += (Math.sin(2 * Math.PI * notes[k] * nt) * 0.6 +
+                Math.sin(4 * Math.PI * notes[k] * nt) * 0.2) * Math.exp(-2.2 * nt);
+        }
+        d[i] = v * 0.3;
+      }
+      this.ship(major ? 'win' : 'lose', d);
+    }
+
+    // ---- music: two beds over the same Am-F-C-G progression ----------
+    const LOOP = 7.2, ROOTS = [110.00, 87.31, 130.81, 98.00];
+    for (const tense of [false, true]) {
+      const d = this.buf(LOOP), n = d.length, bar = LOOP / 4;
+      let lp = 0;
+      for (let i = 0; i < n; i++) {
+        const t = i / SR;
+        const bi = Math.min(3, Math.floor(t / bar));
+        const root = ROOTS[bi];
+        const inBar = t - bi * bar;
+
+        let pad = Math.sin(2 * Math.PI * root * t) * 0.5
+                + Math.sin(2 * Math.PI * root * 1.4983 * t) * 0.26
+                + Math.sin(2 * Math.PI * root * 2 * t + 0.4) * 0.18;
+        pad *= 0.5 + 0.5 * Math.sin(Math.PI * clampf(inBar / bar, 0, 1));
+        let v = pad * 0.30;
+
+        if (tense) {
+          const beat = 0.45, bt = inBar % beat;
+          v += Math.sin(2 * Math.PI * lerp(120, 45, bt / beat) * bt) * Math.exp(-24 * bt) * 0.55;
+          const step = Math.floor(inBar / (beat * 0.5));
+          const arpF = root * 4 * (step % 3 === 0 ? 1 : (step % 3 === 1 ? 1.2 : 1.5));
+          const at = inBar % (beat * 0.5);
+          v += Math.sin(2 * Math.PI * arpF * at) * Math.exp(-13 * at) * 0.16;
+        } else {
+          lp += ((noise() * 2 - 1) - lp) * 0.012;
+          v += lp * 0.5;
+        }
+
+        const edge = 0.06 * SR;                 // fade the loop seam
+        if (i < edge) v *= i / edge;
+        else if (i > n - edge) v *= (n - i) / edge;
+        d[i] = v * 0.62;
+      }
+      this.ship(tense ? 'musicTense' : 'musicCalm', d);
+    }
+    { // lava ambience bed
+      const d = this.buf(5), n = d.length;
+      let lp = 0, lp2 = 0;
+      for (let i = 0; i < n; i++) {
+        lp += ((noise() * 2 - 1) - lp) * 0.02;
+        lp2 += (lp - lp2) * 0.02;
+        let v = lp2 * 4.5;
+        const edge = 0.25 * SR;
+        if (i < edge) v *= i / edge;
+        else if (i > n - edge) v *= (n - i) / edge;
+        d[i] = v;
+      }
+      this.ship('ambience', d);
+    }
+  },
+};
+
+/* ====================== 9. CAMERA AND PROJECTION ===================== */
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let W = 0, H = 0, DPR = 1, US = 1;              // US = ui scale
+
+const cam = { pitch: 56 * DEG, yaw: 0, dist: 47, fov: 46 * DEG, zoom: 1, orbit: false, shake: 0, focus: 0, focusT: 0 };
+let camPos = { x: 0, y: 0, z: 0 };
+let projF = 800;
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = Math.floor(W * DPR);
+  canvas.height = Math.floor(H * DPR);
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  US = clampf(H / 900, 0.62, 1.3);
+}
+window.addEventListener('resize', resize);
+
+function updateCamera() {
+  const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+  const d = cam.dist / cam.zoom;
+  camPos = { x: -d * cp * Math.sin(cam.yaw), y: d * sp, z: -d * cp * Math.cos(cam.yaw) };
+
+  // Fit the whole arena on screen at any aspect ratio - all 16 zones have to
+  // stay readable, so nothing is ever allowed off the edge.
+  const R = 22;
+  const fW = (W * 0.46) * d / R;
+  const fH = (H * 0.44) * d / (R * sp + 3);
+  projF = Math.min(fW, fH);
+}
+
+/** World point -> screen. Returns null behind the camera. */
+function project(p) {
+  const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
+  const x = p.x * cy - p.z * sy;
+  const z = p.x * sy + p.z * cy;
+  const y = p.y || 0;
+  const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+  const y2 = y * cp + z * sp;
+  const z2 = -y * sp + z * cp + cam.dist / cam.zoom;
+  if (z2 < 0.5) return null;
+  return { x: W * 0.5 + projF * x / z2 + cam.shakeX, y: H * 0.5 - projF * y2 / z2 + cam.shakeY, d: z2 };
+}
+cam.shakeX = 0; cam.shakeY = 0;
+
+/* ============================ 10. EFFECTS =========================== */
+const fx = { sparks: [], rings: [], popups: [] };
+
+function burst(p, color, count, speed) {
+  for (let i = 0; i < count; i++) {
+    const a = rnd() * Math.PI * 2, e = rrange(0.25, 1);
+    const s = rrange(0.55, 1.35) * speed;
+    fx.sparks.push({
+      x: p.x, y: (p.y || 0) + 0.3, z: p.z,
+      vx: Math.cos(a) * s * (1 - e * 0.5), vy: (e * 1.4 + 0.35) * s, vz: Math.sin(a) * s * (1 - e * 0.5),
+      life: rrange(0.45, 0.95), age: 0, size: rrange(0.5, 1.4), color,
+    });
+  }
+}
+function wave(p, color, maxR, life) { fx.rings.push({ x: p.x, z: p.z, age: 0, life, maxR, color }); }
+function impact(p, color) {
+  burst(p, color, 26, 6); burst(p, '#ffffff', 10, 8);
+  wave(p, color, 3.4, 0.55);
+  cam.shake = Math.max(cam.shake, 0.55);
+}
+function say(p, text, color, life, size) {
+  fx.popups.push({ x: p.x, y: (p.y || 0), z: p.z, text, color, age: 0, life: life || 1.6, size: size || 1 });
+}
+
+function updateFx(dt) {
+  cam.shake = Math.max(0, cam.shake - dt * 2.2);
+  const t = performance.now() * 0.02;
+  cam.shakeX = cam.shake > 0.001 ? Math.sin(t * 1.7) * cam.shake * 9 : 0;
+  cam.shakeY = cam.shake > 0.001 ? Math.cos(t * 2.3) * cam.shake * 6 : 0;
+
+  for (let i = fx.sparks.length - 1; i >= 0; i--) {
+    const s = fx.sparks[i];
+    s.age += dt;
+    if (s.age >= s.life) { fx.sparks.splice(i, 1); continue; }
+    s.vy -= 18 * dt;
+    s.x += s.vx * dt; s.y += s.vy * dt; s.z += s.vz * dt;
+  }
+  for (let i = fx.rings.length - 1; i >= 0; i--) {
+    fx.rings[i].age += dt;
+    if (fx.rings[i].age >= fx.rings[i].life) fx.rings.splice(i, 1);
+  }
+  for (let i = fx.popups.length - 1; i >= 0; i--) {
+    fx.popups[i].age += dt;
+    if (fx.popups[i].age >= fx.popups[i].life) fx.popups.splice(i, 1);
+  }
+}
+
+/* =========================== 11. RENDERING ========================== */
+const TILE_LOOK = {
+  idle:     (own) => mix(own, COL.floor, 0.62),
+  dead:     ()    => mix(COL.tileDark, COL.floor, 0.45),
+  owned:    (own) => mix(own, COL.floor, 0.26),
+  standing: (own) => mix(own, '#ffffff', 0.45),
+  aimed:    ()    => mix(COL.danger, '#ffffff', 0.25),
+  incoming: ()    => mix(COL.danger, COL.floor, 0.30),
+  burning:  ()    => mix(COL.lava, COL.floor, 0.18),
+  hit:      ()    => '#ffffff',
+};
+const LOOK_GLOW = { idle: 0, dead: 0, owned: 0.10, standing: 0.35, aimed: 0.65, incoming: 0.5, burning: 0.7, hit: 1 };
+
+const ARC_SEG = 5;
+
+/** Top-face polygon of a tile in world space. */
+function tilePoly(c, y) {
+  const pts = [];
+  for (let i = 0; i <= ARC_SEG; i++) pts.push(polar(c.rIn, lerp(c.aStart, c.aEnd, i / ARC_SEG), y));
+  for (let i = ARC_SEG; i >= 0; i--) pts.push(polar(c.rOut, lerp(c.aStart, c.aEnd, i / ARC_SEG), y));
+  return pts;
+}
+
+function pathPts(scr) {
+  ctx.beginPath();
+  ctx.moveTo(scr[0].x, scr[0].y);
+  for (let i = 1; i < scr.length; i++) ctx.lineTo(scr[i].x, scr[i].y);
+  ctx.closePath();
+}
+
+/** Point-in-polygon on screen coords, used for tile picking. */
+function inPoly(px, py, pts) {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    if ((pts[i].y > py) !== (pts[j].y > py) &&
+        px < (pts[j].x - pts[i].x) * (py - pts[i].y) / (pts[j].y - pts[i].y) + pts[i].x) inside = !inside;
+  }
+  return inside;
+}
+
+/* Tile geometry is projected exactly once per frame, in cacheTilePolys(), and
+   the same screen points feed both picking and drawing. */
+let tileScreenCache = [];
+let lavaGrad = null, lavaGradKey = '';
+
+function drawArena() {
+  // ---- lava sea + floor ------------------------------------------
+  const seg = 64;
+  const LAVA_R = 26, RIM = Cfg.OUTER_R + 1.2;
+  const lavaOuter = [], floorPts = [];
+  for (let i = 0; i <= seg; i++) {
+    const a = 360 * i / seg;
+    const o = project(polar(LAVA_R, a, -Cfg.TILE_H - 0.35));
+    const f = project(polar(RIM, a, -Cfg.TILE_H - 0.12));
+    if (o) lavaOuter.push(o);
+    if (f) floorPts.push(f);
+  }
+  if (lavaOuter.length > 2) {
+    // A hot band hugging the arena rim that falls off to near-black, rather than
+    // a flat orange field - the arena has to stay the brightest thing on screen.
+    const d = cam.dist / cam.zoom;
+    const rimS = projF * RIM / d, outS = projF * LAVA_R / d;
+    const edge = clampf(rimS / outS, 0.05, 0.95);
+    // quantised so the gradient object is rebuilt ~8x/second, not every frame
+    const pulse = Math.round((0.5 + 0.5 * Math.sin(performance.now() * 0.0016)) * 8);
+    const key = pulse + '|' + Math.round(rimS) + '|' + Math.round(outS);
+    if (key !== lavaGradKey) {
+      lavaGradKey = key;
+      lavaGrad = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, outS);
+      lavaGrad.addColorStop(0, '#2a0a03');
+      lavaGrad.addColorStop(Math.max(0, edge - 0.02), '#4a1004');
+      lavaGrad.addColorStop(edge, mix(COL.lava, '#ffcc55', 0.22 * pulse / 8));
+      lavaGrad.addColorStop(Math.min(1, edge + 0.16), COL.lavaDeep);
+      lavaGrad.addColorStop(1, '#0b0407');
+    }
+    ctx.fillStyle = lavaGrad;
+    pathPts(lavaOuter); ctx.fill();
+  }
+  if (floorPts.length > 2) { ctx.fillStyle = COL.floor; pathPts(floorPts); ctx.fill(); }
+
+  // ---- collect drawables so tiles and avatars sort together --------
+  const draws = [];
+  for (const t of tileScreenCache) draws.push({ d: t.d, kind: 'tile', t });
+  for (const p of G.players) {
+    if (p.dieT >= 0 && p.dieT > 0.95) continue;
+    const s = project(p.pos);
+    if (s) draws.push({ d: s.d - 0.35, kind: 'avatar', player: p });
+  }
+  { const s = project({ x: 0, y: 1, z: 0 }); if (s) draws.push({ d: s.d, kind: 'trophy' }); }
+
+  draws.sort((a, b) => b.d - a.d);          // painter's algorithm, far first
+
+  for (const it of draws) {
+    if (it.kind === 'tile') drawTile(it.t);
+    else if (it.kind === 'avatar') drawAvatar(it.player);
+    else drawTrophy();
+  }
+}
+
+function drawTile(t) {
+  const c = t.cell, p = G.players[t.player];
+  const look = p.alive ? c.look : 'dead';
+  const base = TILE_LOOK[look](p.color);
+  const glow = LOOK_GLOW[look];
+  const top = t.pts, bot = t.bot, world = t.world;
+
+  // extruded sides: only the faces pointing at the camera
+  const cx = c.center.x, cz = c.center.z;
+  ctx.fillStyle = shade(base, 0.42);
+  for (let i = 0; i < world.length; i++) {
+    const j = (i + 1) % world.length;
+    const mx = (world[i].x + world[j].x) / 2, mz = (world[i].z + world[j].z) / 2;
+    // outward direction from the tile centroid vs direction to the camera
+    if ((mx - cx) * (camPos.x - mx) + (mz - cz) * (camPos.z - mz) <= 0) continue;
+    ctx.beginPath();
+    ctx.moveTo(top[i].x, top[i].y);
+    ctx.lineTo(top[j].x, top[j].y);
+    ctx.lineTo(bot[j].x, bot[j].y);
+    ctx.lineTo(bot[i].x, bot[i].y);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  pathPts(top);
+  ctx.fillStyle = c.dying ? mix(COL.lava, '#ffdd88', 0.3) : base;
+  ctx.fill();
+
+  if (glow > 0.02) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = glow * 0.42;
+    ctx.fillStyle = base;
+    ctx.fill();
+    ctx.restore();
+  }
+
+  ctx.lineWidth = Math.max(1, 1.6 * US);
+  ctx.strokeStyle = (look === 'idle' || look === 'dead') ? rgba(COL.ink, 0.75) : rgba('#ffffff', 0.32);
+  ctx.stroke();
+}
+
+function drawTrophy() {
+  const base = project({ x: 0, y: 0, z: 0 });
+  if (!base) return;
+  const scale = projF / base.d;
+
+  // pedestal
+  const ped = [];
+  for (let i = 0; i <= 40; i++) { const s = project(polar(3.4, 360 * i / 40, -Cfg.TILE_H + 0.55)); if (s) ped.push(s); }
+  if (ped.length > 2) { ctx.fillStyle = '#232a36'; pathPts(ped); ctx.fill(); ctx.strokeStyle = '#39424f'; ctx.lineWidth = 2 * US; ctx.stroke(); }
+
+  const t = performance.now() * 0.001;
+  const bob = Math.sin(t * 1.4) * 0.12;
+  const foot = project({ x: 0, y: 1.0 + bob, z: 0 });
+  const lip = project({ x: 0, y: 2.9 + bob, z: 0 });
+  if (!foot || !lip) return;
+
+  const w = 1.25 * scale;
+  ctx.save();
+  ctx.shadowColor = COL.gold; ctx.shadowBlur = 22 * US;
+  ctx.fillStyle = COL.gold;
+  ctx.beginPath();                                    // cup
+  ctx.moveTo(lip.x - w, lip.y);
+  ctx.lineTo(lip.x + w, lip.y);
+  ctx.lineTo(foot.x + w * 0.34, foot.y);
+  ctx.lineTo(foot.x - w * 0.34, foot.y);
+  ctx.closePath(); ctx.fill();
+  ctx.fillRect(foot.x - w * 0.16, foot.y, w * 0.32, 0.55 * scale);   // stem
+  ctx.fillRect(foot.x - w * 0.62, foot.y + 0.55 * scale, w * 1.24, 0.22 * scale);
+  ctx.restore();
+  ctx.fillStyle = rgba('#fff6cf', 0.55);
+  ctx.beginPath(); ctx.ellipse(lip.x, lip.y, w, w * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+}
+
+function drawAvatar(p) {
+  const die = p.dieT >= 0 ? clampf(p.dieT / 0.95, 0, 1) : 0;
+  if (die >= 1) return;
+
+  const lift = die > 0 ? die * 3.2 - die * die * 1.6 : 0;
+  const base = project({ x: p.pos.x, y: p.pos.y + lift, z: p.pos.z });
+  if (!base) return;
+  const scale = projF / base.d;
+  const k = 1 - die;
+
+  // ground ring
+  if (die === 0) {
+    const ring = [];
+    for (let i = 0; i <= 16; i++) {
+      const a = 360 * i / 16;
+      const s = project({ x: p.pos.x + Math.sin(a * DEG) * 0.6, y: 0.03, z: p.pos.z + Math.cos(a * DEG) * 0.6 });
+      if (s) ring.push(s);
+    }
+    if (ring.length > 2) {
+      const isMe = G.human && p.index === G.human.index;
+      pathPts(ring);
+      ctx.fillStyle = rgba(p.color, isMe ? 0.55 : 0.25);
+      ctx.fill();
+      if (isMe) { ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2 * US; ctx.stroke(); }
+    }
+  }
+
+  const bob = Math.abs(Math.sin(p.bob)) * 0.07;
+  const head = project({ x: p.pos.x, y: p.pos.y + lift + (1.32 + bob) * k, z: p.pos.z });
+  if (!head) return;
+
+  const bw = 0.40 * scale * k;
+  ctx.save();
+  if (die > 0) ctx.globalAlpha = 1 - die * 0.15;
+
+  // body
+  ctx.fillStyle = p.color;
+  ctx.beginPath();
+  ctx.moveTo(base.x - bw, base.y);
+  ctx.lineTo(base.x + bw, base.y);
+  ctx.lineTo(head.x + bw * 0.78, head.y + bw * 0.5);
+  ctx.lineTo(head.x - bw * 0.78, head.y + bw * 0.5);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = rgba(COL.ink, 0.55); ctx.lineWidth = 1.4 * US; ctx.stroke();
+
+  // head
+  const hr = bw * 0.92;
+  ctx.fillStyle = mix(p.color, '#ffffff', 0.12);
+  ctx.beginPath(); ctx.arc(head.x, head.y, hr, 0, Math.PI * 2); ctx.fill();
+  ctx.stroke();
+
+  // visor, offset toward facing so you can read which way they are looking
+  const fx2 = Math.sin(p.facing), fz2 = Math.cos(p.facing);
+  const fp = project({ x: p.pos.x + fx2 * 0.34, y: p.pos.y + lift + (1.30 + bob) * k, z: p.pos.z + fz2 * 0.34 });
+  if (fp) {
+    ctx.fillStyle = '#12161f';
+    ctx.beginPath();
+    ctx.ellipse(lerp(head.x, fp.x, 0.9), lerp(head.y, fp.y, 0.9), hr * 0.62, hr * 0.34,
+                Math.atan2(fp.y - head.y, fp.x - head.x), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawFx() {
+  for (const r of fx.rings) {
+    const k = r.age / r.life;
+    const rad = lerp(0.2, r.maxR, 1 - (1 - k) * (1 - k));
+    const pts = [];
+    for (let i = 0; i <= 24; i++) {
+      const a = 360 * i / 24;
+      const s = project({ x: r.x + Math.sin(a * DEG) * rad, y: 0.08, z: r.z + Math.cos(a * DEG) * rad });
+      if (s) pts.push(s);
+    }
+    if (pts.length < 3) continue;
+    pathPts(pts);
+    ctx.strokeStyle = rgba(r.color, (1 - k) * 0.8);
+    ctx.lineWidth = Math.max(1.5, 3.5 * US * (1 - k));
+    ctx.stroke();
+  }
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (const s of fx.sparks) {
+    const p = project(s);
+    if (!p) continue;
+    const k = 1 - s.age / s.life;
+    const sz = Math.max(1, s.size * k * projF / p.d * 0.16);
+    ctx.fillStyle = rgba(s.color, k);
+    ctx.fillRect(p.x - sz / 2, p.y - sz / 2, sz, sz);
+  }
+  ctx.restore();
+}
+
+/* ============================== 12. HUD ============================= */
+function text(str, x, y, size, color, align, weight, alpha, maxW) {
+  ctx.save();
+  ctx.globalAlpha = alpha === undefined ? 1 : alpha;
+  ctx.font = (weight || 700) + ' ' + Math.round(size * US) + 'px "Segoe UI", system-ui, sans-serif';
+  ctx.textAlign = align || 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(0,0,0,.6)';
+  if (maxW) ctx.fillText(str, x + 1.5, y + 1.5, maxW); else ctx.fillText(str, x + 1.5, y + 1.5);
+  ctx.fillStyle = color;
+  if (maxW) ctx.fillText(str, x, y, maxW); else ctx.fillText(str, x, y);
+  ctx.restore();
+}
+function box(x, y, w, h, fill, stroke) {
+  ctx.fillStyle = fill;
+  ctx.fillRect(x, y, w, h);
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.strokeRect(x + .5, y + .5, w - 1, h - 1); }
+}
+
+function drawHud() {
+  const barH = 56 * US;
+  box(0, 0, W, barH, 'rgba(5,8,14,.85)');
+  box(0, barH, W, 1.5, 'rgba(255,255,255,.10)');
+
+  text('ROUND ' + Math.max(1, G.round), 18 * US, barH / 2, 26, COL.paper, 'left', 900);
+
+  const phaseInfo = {
+    prep:     ['PREP — everyone is watching', COL.safe],
+    decision: ['COMMIT — secret', COL.gold],
+    reveal:   [G.revealCaption, COL.danger],
+    over:     ['MATCH OVER', COL.gold],
+    menu:     ['', COL.paper],
+  }[G.phase] || ['', COL.paper];
+  text(phaseInfo[0], W / 2, 18 * US, 19, phaseInfo[1], 'center', 800);
+
+  if (G.phaseLength > 0.01 && (G.phase === 'prep' || G.phase === 'decision')) {
+    const bw = Math.min(420 * US, W * 0.34), bx = W / 2 - bw / 2, by = 36 * US;
+    const k = clampf(G.phaseTimer / G.phaseLength, 0, 1);
+    box(bx, by, bw, 9 * US, 'rgba(255,255,255,.13)');
+    const c = k < 0.25 ? COL.danger : phaseInfo[1];
+    box(bx, by, bw * k, 9 * US, c);
+    text(Math.ceil(G.phaseTimer) + 's', bx + bw + 9 * US, by + 4 * US, 15, c, 'left', 800);
+  }
+
+  const alive = G.aliveCount();
+  text('ALIVE ' + alive + '/' + Cfg.PLAYERS, W - 18 * US, 18 * US, 23,
+       alive <= 4 ? COL.danger : COL.paper, 'right', 900);
+  text('anti-dogpile: ' + dogpileThreshold(alive) + '+ on one target = attackers lose a tile',
+       W - 18 * US, 42 * US, 12.5, 'rgba(255,255,255,.45)', 'right', 600);
+
+  drawFeed();
+  drawSidePanel();
+  drawRoster();
+  drawWorldLabels();
+  drawPopups();
+  drawBanner();
+}
+
+function drawFeed() {
+  if (!G.feed.length) return;
+  const lh = 20 * US, x = 16 * US, y = 68 * US;
+  const w = Math.min(470 * US, W * 0.4), h = lh * G.feed.length + 14 * US;
+  box(x, y, w, h, 'rgba(5,8,14,.6)');
+  for (let i = 0; i < G.feed.length; i++) {
+    const a = lerp(0.42, 1, (i + 1) / G.feed.length);
+    text(G.feed[i], x + 11 * US, y + 7 * US + lh * (i + .5), 13, COL.paper, 'left', 600, a);
+  }
+}
+
+function drawSidePanel() {
+  const me = G.human;
+  if (!me) return;
+  const w = 296 * US, x = W - w - 16 * US, y = 68 * US;
+
+  if (G.phase === 'decision' && me.alive) {
+    const h = 268 * US;
+    box(x, y, w, h, 'rgba(5,8,14,.85)');
+    box(x, y, 4 * US, h, COL.gold);
+    text('YOUR COMMITMENT', x + 14 * US, y + 17 * US, 16, COL.gold, 'left', 900);
+
+    const row = (yy, label, val, col) => {
+      text(label, x + 14 * US, yy, 11.5, 'rgba(255,255,255,.45)', 'left', 600);
+      text(val, x + 88 * US, yy, 15, col, 'left', 800);
+    };
+    row(y + 46 * US, 'HIDE ON', 'TILE ' + (In.hideTile + 1), me.color);
+    row(y + 72 * US, 'ATTACK',
+        In.targetPlayer >= 0 ? G.players[In.targetPlayer].name + '  T' + (In.targetTile + 1) : '— pick a tile —',
+        In.targetPlayer >= 0 ? G.players[In.targetPlayer].color : COL.danger);
+    row(y + 98 * US, 'GADGET', In.gadget === 'none' ? 'NONE' : In.gadget.toUpperCase(),
+        In.gadget === 'none' ? 'rgba(255,255,255,.5)' : COL.safe);
+
+    let gy = y + 124 * US;
+    In.gadgetRects = [];
+    for (let i = 0; i < GADGETS.length; i++) {
+      const g = GADGETS[i], ch = me.charges[g], sel = In.gadget === g;
+      const r = { x: x + 12 * US, y: gy, w: w - 24 * US, h: 24 * US, g };
+      In.gadgetRects.push(r);
+      if (sel) box(r.x, r.y, r.w, r.h, rgba(COL.safe, 0.18));
+      else if (In.hoverGadget === g) box(r.x, r.y, r.w, r.h, 'rgba(255,255,255,.07)');
+      const col = ch > 0 ? COL.paper : 'rgba(255,255,255,.25)';
+      text('' + (i + 1), r.x + 5 * US, gy + 12 * US, 12, COL.gold, 'left', 900);
+      text(g.toUpperCase(), r.x + 22 * US, gy + 12 * US, 12.5, col, 'left', 800);
+      text(GADGET_BLURB[g], r.x + 84 * US, gy + 12 * US, 10.5,
+           ch > 0 ? 'rgba(255,255,255,.5)' : 'rgba(255,255,255,.2)', 'left', 600, 1, r.w - 116 * US);
+      text('x' + ch, r.x + r.w - 6 * US, gy + 12 * US, 12.5, col, 'right', 800);
+      gy += 24 * US;
+    }
+
+    const ready = In.canLock();
+    text(ready ? '[SPACE]  LOCK IT IN' : 'pick a target tile first',
+         x + w / 2, y + h - 16 * US, 14.5, ready ? COL.safe : 'rgba(255,255,255,.4)', 'center', 900);
+
+  } else if (G.phase === 'prep' && me.alive) {
+    const h = 104 * US;
+    box(x, y, w, h, 'rgba(5,8,14,.75)');
+    box(x, y, 4 * US, h, me.color);
+    text('PREP', x + 14 * US, y + 17 * US, 16, me.color, 'left', 900);
+    text('WASD / arrows to move.', x + 14 * US, y + 44 * US, 13, COL.paper, 'left', 600);
+    text('Everyone can see you right now.', x + 14 * US, y + 64 * US, 13, 'rgba(255,255,255,.62)', 'left', 600);
+    text('So lie with your feet.', x + 14 * US, y + 84 * US, 13, COL.gold, 'left', 700);
+
+  } else if (!me.alive && G.phase !== 'over') {
+    const h = 62 * US;
+    box(x, y, w, h, 'rgba(5,8,14,.75)');
+    box(x, y, 4 * US, h, COL.danger);
+    text('SPECTATING', x + 14 * US, y + 18 * US, 16, COL.danger, 'left', 900);
+    text('You placed #' + me.placement + '. Watching it out.', x + 14 * US, y + 42 * US, 12, 'rgba(255,255,255,.6)', 'left', 600);
+  }
+
+  if (G.scoutReveal >= 0) {
+    const sy = y + 290 * US, h = 50 * US;
+    box(x, sy, w, h, 'rgba(5,8,14,.85)');
+    box(x, sy, 4 * US, h, COL.safe);
+    text('SCOUT REPORT', x + 14 * US, sy + 15 * US, 12.5, COL.safe, 'left', 900);
+    text(G.scoutReveal + ' attacked you. Names withheld.', x + 14 * US, sy + 34 * US, 12, COL.paper, 'left', 600);
+  }
+}
+
+function drawRoster() {
+  const n = G.players.length;
+  const cw = Math.min(96 * US, (W - 24) / n);
+  const x0 = (W - cw * n) / 2, y = H - 62 * US;
+
+  for (let i = 0; i < n; i++) {
+    const p = G.players[i];
+    const x = x0 + i * cw + 1.5;
+    box(x, y, cw - 3, 50 * US, p.alive ? 'rgba(7,10,16,.9)' : 'rgba(4,5,8,.82)');
+    box(x, y, cw - 3, 4 * US, p.alive ? p.color : shade(p.color, 0.3));
+
+    const nameCol = !p.alive ? 'rgba(255,255,255,.28)' : (p.isHuman ? COL.gold : COL.paper);
+    text(p.name, x + 5 * US, y + 15 * US, 11.5, nameCol, 'left', 800);
+    if (p.alive) {
+      text('' + p.tileCount, x + 5 * US, y + 34 * US, 21,
+           p.tileCount <= Cfg.MIN_TILES ? COL.danger : p.color, 'left', 900);
+      text('tiles', x + cw - 8 * US, y + 37 * US, 9.5, 'rgba(255,255,255,.32)', 'right', 600);
+    } else {
+      text('OUT #' + p.placement, x + 5 * US, y + 34 * US, 11.5, 'rgba(255,255,255,.3)', 'left', 800);
+    }
+  }
+
+  text('scroll = zoom  |  prep: WASD  |  commit: click your tile, then an enemy tile  |  1-4 gadget  |  SPACE lock  |  ESC pause',
+       12 * US, H - 8 * US, 11, 'rgba(255,255,255,.3)', 'left', 600);
+}
+
+function drawWorldLabels() {
+  for (const p of G.players) {
+    const s = project(polar(Cfg.OUTER_R + 3.6, p.zone.centerDeg, 2.4));
+    if (!s) continue;
+    const w = 84 * US, h = 30 * US;
+    const x = s.x - w / 2, y = s.y - h / 2;
+    box(x, y, w, h, p.alive ? 'rgba(4,7,13,.78)' : 'rgba(4,7,13,.45)');
+    box(x, y, w, 2.5 * US, p.alive ? p.color : 'rgba(255,255,255,.2)');
+    text(p.name, s.x, y + 12 * US, 11.5, p.alive ? p.color : 'rgba(255,255,255,.25)', 'center', 800);
+    text(p.alive ? p.tileCount + ' tiles' : 'OUT', s.x, y + 24 * US, 9.5, 'rgba(255,255,255,.5)', 'center', 600);
+  }
+
+  // tile numbers, only where they help
+  if (G.phase !== 'decision' || !G.human || !G.human.alive) return;
+  const zones = new Set([G.human.index]);
+  if (In.targetPlayer >= 0) zones.add(In.targetPlayer);
+  if (In.hoverPlayer >= 0) zones.add(In.hoverPlayer);
+  for (const zi of zones) {
+    const p = G.players[zi];
+    if (!p.alive) continue;
+    for (let i = 0; i < p.zone.active.length; i++) {
+      const s = project({ x: p.zone.active[i].center.x, y: 0.4, z: p.zone.active[i].center.z });
+      if (s) text('' + (i + 1), s.x, s.y, 16, 'rgba(255,255,255,.9)', 'center', 900);
+    }
+  }
+}
+
+function drawPopups() {
+  for (const p of fx.popups) {
+    const k = p.age / p.life;
+    const s = project({ x: p.x, y: p.y + k * 1.6, z: p.z });
+    if (!s) continue;
+    text(p.text, s.x, s.y, 19 * p.size, p.color, 'center', 900, 1 - k * k);
+  }
+}
+
+function drawBanner() {
+  if (G.bannerUntil <= G.time || !G.banner) return;
+  const a = Math.min(1, (G.bannerUntil - G.time) * 2.4);
+  const y = H * 0.145;      // above the far-side zone plates, below the top bar
+  const size = Math.round(clampf(W / 42, 20, 38) * US);
+
+  ctx.save();
+  ctx.font = '900 ' + size + 'px "Segoe UI", system-ui, sans-serif';
+  const tw = ctx.measureText(G.banner).width;
+  ctx.restore();
+
+  // a centred pill, so it never collides with the side panel
+  const padX = 26 * US, h = size * 1.9, w = Math.min(tw + padX * 2, W - 40);
+  const x = W / 2 - w / 2, r = h / 2;
+  ctx.beginPath();
+  ctx.moveTo(x + r, y - h / 2);
+  ctx.arcTo(x + w, y - h / 2, x + w, y + h / 2, r);
+  ctx.arcTo(x + w, y + h / 2, x, y + h / 2, r);
+  ctx.arcTo(x, y + h / 2, x, y - h / 2, r);
+  ctx.arcTo(x, y - h / 2, x + w, y - h / 2, r);
+  ctx.closePath();
+  ctx.fillStyle = rgba('#05070c', 0.86 * a);
+  ctx.fill();
+  ctx.strokeStyle = rgba(G.bannerColor, 0.5 * a);
+  ctx.lineWidth = 2 * US;
+  ctx.stroke();
+
+  text(G.banner, W / 2, y, size / US, G.bannerColor, 'center', 900, a);
+}
+
+/* ======================= 13. MATCH STATE + LOOP ====================== */
+const G = {
+  players: [], bots: [], human: null,
+  phase: 'menu', round: 0,
+  phaseTimer: 0, phaseLength: 0,
+  lavaThisRound: false,
+  banner: '', bannerColor: COL.paper, bannerUntil: 0,
+  revealCaption: '', scoutReveal: -1,
+  feed: [],
+  time: 0, paused: false, running: false,
+  matchToken: 0,
+
+  aliveCount() { return this.players.reduce((n, p) => n + (p.alive ? 1 : 0), 0); },
+  winner() {
+    const a = this.players.filter(p => p.alive);
+    return a.length === 1 ? a[0] : null;
+  },
+  say(t, c, sec) { this.banner = t; this.bannerColor = c; this.bannerUntil = this.time + sec; },
+  log(line) { this.feed.push(line); while (this.feed.length > 6) this.feed.shift(); },
+};
+
+const NAMES = ['VIPER', 'ROOK', 'MOTH', 'CINDER', 'JUDE', 'OKRA', 'PIXEL', 'BASIL',
+               'YOU', 'NOMAD', 'QUARTZ', 'FLINT', 'WREN', 'TALLY', 'HUSK', 'ZEPHYR'];
+
+function newMatch() {
+  G.players = []; G.bots = []; G.human = null;
+  G.round = 0; G.feed = []; G.scoutReveal = -1; G.revealCaption = '';
+  G.banner = ''; G.bannerUntil = 0; G.lavaThisRound = false;
+  fx.sparks = []; fx.rings = []; fx.popups = [];
+  cam.zoom = 1; cam.shake = 0;
+
+  for (let i = 0; i < Cfg.PLAYERS; i++) {
+    const isHuman = i === Cfg.HUMAN;
+    const p = new Player(i, isHuman ? 'YOU' : NAMES[i % NAMES.length], isHuman);
+    p.zone = new Zone(i);
+    const c = p.zone.centerOf(0);
+    p.pos = { x: c.x, y: 0, z: c.z };
+    p.facing = (p.zone.centerDeg + 180) * DEG;
+    G.players.push(p);
+    if (isHuman) G.human = p; else G.bots.push(new Bot(p));
+  }
+  In.reset();
+}
+
+/* --- frame-accurate awaits that respect pause ---------------------- */
+let frameWaiters = [], timeWaiters = [];
+const nextFrame = () => new Promise(r => frameWaiters.push(r));
+const wait = sec => new Promise(r => timeWaiters.push({ t: G.time + sec, r }));
+
+function pumpWaiters() {
+  const f = frameWaiters; frameWaiters = [];
+  for (const r of f) r();
+  if (timeWaiters.length) {
+    const due = timeWaiters.filter(w => w.t <= G.time);
+    if (due.length) {
+      timeWaiters = timeWaiters.filter(w => w.t > G.time);
+      for (const w of due) w.r();
+    }
+  }
+}
+
+function resetLooks() {
+  for (const p of G.players)
+    for (const c of p.zone.active) c.look = p.alive ? 'idle' : 'dead';
+}
+function previewLava() {
+  for (const p of G.players) {
+    if (!p.alive || p.zone.atMinimum) continue;
+    let best = -1, bestRow = -1;
+    for (let i = 0; i < p.zone.active.length; i++)
+      if (p.zone.active[i].row > bestRow) { bestRow = p.zone.active[i].row; best = i; }
+    if (bestRow > 0 && best >= 0) p.zone.active[best].look = 'burning';
+  }
+}
+
+async function runMatch() {
+  const token = ++G.matchToken;
+  const live = () => token === G.matchToken;
+
+  G.running = true;
+  G.say('TILE PREDICTION BATTLE ROYALE', COL.gold, 2.2);
+  G.log('16 players. Private zones. Targeting is anonymous.');
+  G.log('Watch how they move — it is the only tell you get.');
+  await wait(2.2);
+  if (!live()) return;
+
+  while (G.aliveCount() > 1) {
+    G.round++;
+    G.lavaThisRound = G.round >= Cfg.LAVA_FIRST && (G.round - Cfg.LAVA_FIRST) % Cfg.LAVA_EVERY === 0;
+
+    await prepPhase();       if (!live()) return;
+    await decisionPhase();   if (!live()) return;
+
+    const res = resolve(G.players, G.round, G.lavaThisRound);
+    spendGadgets(res);
+    await revealPhase(res);  if (!live()) return;
+  }
+  endMatch();
+}
+
+async function prepPhase() {
+  G.phase = 'prep';
+  G.phaseLength = G.phaseTimer = Cfg.PREP;
+  G.scoutReveal = -1; G.revealCaption = '';
+  G.tickSec = -1;
+  Snd.setIntensity(0.12);
+  Snd.play('roundStart', 1, 0.5);
+
+  for (const p of G.players) p.decayDwell();
+  resetLooks();
+  if (G.lavaThisRound) { previewLava(); G.log('LAVA RISES at the end of this round.'); }
+
+  G.say('ROUND ' + G.round + '  —  PREP', COL.paper, 1.5);
+  await wait(Cfg.PREP);
+}
+
+async function decisionPhase() {
+  G.phase = 'decision';
+  const spectating = !G.human.alive;
+  G.phaseLength = G.phaseTimer = spectating ? 2 : Cfg.DECISION;
+  G.tickSec = -1;
+
+  for (const b of G.bots) if (b.me.alive) b.decide(G.players, b.me.pos);
+
+  if (!spectating) {
+    In.beginDecision();
+    G.say('COMMIT  —  nobody can see your choice', COL.paper, 1.8);
+  }
+
+  while (G.phaseTimer > 0 && !(In.locked && !spectating)) await nextFrame();
+  if (!spectating) In.commit();
+}
+
+async function revealPhase(res) {
+  G.phase = 'reveal';
+  G.phaseLength = G.phaseTimer = 0;
+  Snd.setIntensity(0.55);
+  resetLooks();
+
+  // ---- beat 1: where everyone actually went -------------------------
+  G.revealCaption = 'COMMITTED POSITIONS';
+  let hops = 0;
+  for (const p of G.players) {
+    if (!p.alive) continue;
+    const cell = p.zone.tile(p.decision.hideTile);
+    if (!cell) continue;
+    startHop(p, cell.center, 0.5);
+    p.lastHideTile = p.decision.hideTile;
+    p.rememberHide(cell);
+    cell.look = 'standing';
+    if (hops++ < 4) Snd.play('hop', rrange(0.85, 1.25), 0.35);
+  }
+  await wait(Cfg.BEAT_LOCK);
+
+  // ---- beat 2: telegraph every incoming strike ----------------------
+  G.revealCaption = 'INCOMING';
+  Snd.play('incoming', 1, 0.7);
+  for (const [zi, tiles] of res.hitTilesByZone) {
+    for (const idx of tiles) {
+      const c = G.players[zi].zone.tile(idx);
+      if (!c) continue;
+      c.look = 'incoming';
+      wave(c.center, COL.danger, 1.5, 0.55);
+    }
+  }
+  await wait(Cfg.BEAT_INCOMING);
+
+  // ---- beat 3: simultaneous impact ----------------------------------
+  G.revealCaption = 'IMPACT';
+  Snd.play('impact', 1, 1); Snd.play('impact', 0.72, 0.8);
+  for (const [zi, tiles] of res.hitTilesByZone) {
+    for (const idx of tiles) {
+      const c = G.players[zi].zone.tile(idx);
+      if (!c) continue;
+      c.look = 'hit';
+      impact(c.center, COL.danger);
+    }
+  }
+  cam.shake = 1.1;
+  await wait(0.4);
+
+  for (let i = 0; i < res.shieldSaves.length; i++) {
+    const p = G.players[res.shieldSaves[i]];
+    say({ x: p.pos.x, y: 2, z: p.pos.z }, 'SHIELD', COL.safe, 2, 1);
+    G.log(p.name + ' was hit and SHIELDED it.');
+    if (i < 3) Snd.play('shield', 1, 0.7);
+  }
+  for (let i = 0; i < res.decoySaves.length; i++) {
+    const p = G.players[res.decoySaves[i]];
+    say({ x: p.pos.x, y: 2, z: p.pos.z }, 'DECOY', COL.gold, 2, 1);
+    G.log(p.name + ' ate the hit with a DECOY (-1 tile).');
+    if (i < 3) Snd.play('decoy', 1, 0.7);
+  }
+
+  applyDeaths(res);
+  await wait(Cfg.BEAT_IMPACT);
+
+  // ---- beat 4: anti-dogpiling ---------------------------------------
+  if (res.instantTileLoss.size > 0) {
+    if (res.dogpiledTargets.length > 0) {
+      G.say('ANTI-DOGPILE  —  ' + res.dogpileThreshold + '+ ON ONE TARGET', COL.lava, 2.2);
+      G.revealCaption = 'ANTI-DOGPILE PENALTY';
+      Snd.play('dogpile', 1, 0.85);
+      for (const t of res.dogpiledTargets)
+        G.log(attackersOn(res, t) + ' players piled on ' + G.players[t].name + ' — all of them lose a tile.');
+    }
+    let sounds = 0;
+    for (const [pi, n] of res.instantTileLoss) {
+      const p = G.players[pi];
+      if (!p.alive) continue;
+      const penalised = res.penalisedAttackers.indexOf(pi) >= 0;
+      applyTileLoss(p, n);
+      say(polar((Cfg.INNER_R + Cfg.OUTER_R) / 2, p.zone.centerDeg, 2.6),
+          penalised ? '-1 TILE  DOGPILE' : '-1 TILE', COL.lava, 2, 0.95);
+      if (sounds++ < 3) Snd.play('crumble', rrange(0.9, 1.15), 0.6);
+    }
+    await wait(Cfg.BEAT_DOGPILE);
+  }
+
+  // ---- beat 5: lava ---------------------------------------------------
+  if (res.lavaThisRound) {
+    G.say('LAVA RISES', COL.lava, 2);
+    G.revealCaption = 'THE ARENA SHRINKS';
+    cam.shake = Math.max(cam.shake, 0.7);
+    Snd.play('lava', 1, 0.9);
+    let sounds = 0;
+    for (const pi of res.lavaLosers) {
+      const p = G.players[pi];
+      if (!p.alive) continue;
+      applyTileLoss(p, 1);
+      if (sounds++ < 3) Snd.play('crumble', rrange(0.85, 1.2), 0.45);
+    }
+    G.log('Lava claimed a tile from every survivor.');
+    await wait(Cfg.BEAT_LAVA);
+  }
+
+  // ---- beat 6: scout + summary ----------------------------------------
+  if (G.human.alive && res.scoutUsers.indexOf(G.human.index) >= 0) {
+    G.scoutReveal = G.human.incomingCount;
+    Snd.play('scout', 1, 0.8);
+    G.log('SCOUT: ' + G.scoutReveal + ' player(s) attacked you. (Who? Never told.)');
+  }
+
+  for (const p of G.players) {
+    if (!p.alive) continue;
+    const safe = p.zone.clamp(p.pos);
+    if (dist2(safe, p.pos) > 0.01) startHop(p, safe, 0.35);
+  }
+  resetLooks();
+  G.revealCaption = G.aliveCount() + ' REMAIN';
+  await wait(Cfg.BEAT_SUMMARY);
+}
+
+function spendGadgets(res) {
+  for (const a of res.attacks) if (a.gadget === 'splash') G.players[a.attacker].spend('splash');
+  for (const i of res.shieldSaves) G.players[i].spend('shield');
+  for (const i of res.decoySaves) G.players[i].spend('decoy');
+  for (const i of res.scoutUsers) G.players[i].spend('scout');
+}
+
+function applyDeaths(res) {
+  const survivors = res.aliveAtStart - res.deaths.length;
+  for (let i = 0; i < res.deaths.length; i++) {
+    const p = G.players[res.deaths[i]];
+    say({ x: p.pos.x, y: 2, z: p.pos.z }, 'ELIMINATED', COL.danger, 2.4, 1.15);
+    p.alive = false;
+    p.deathRound = res.round;
+    p.placement = survivors + 1;
+    p.dieT = 0;
+    p.hop = null;
+    G.log(p.name + ' read wrong. Eliminated. (#' + p.placement + ')');
+    if (i < 4) Snd.play('death', rrange(0.9, 1.1), p.isHuman ? 1 : 0.55);
+  }
+}
+
+function applyTileLoss(p, count) {
+  for (let i = 0; i < count; i++) {
+    const cell = p.zone.removeNextTile();
+    if (!cell) { G.log(p.name + ' is already at the 2-tile floor — nothing left to take.'); break; }
+    cell.dying = true;
+    burst(cell.center, COL.lava, 20, 4.5);
+    wave(cell.center, COL.lava, 2.6, 0.7);
+  }
+}
+
+function endMatch() {
+  G.phase = 'over';
+  G.running = false;
+  Snd.setIntensity(0);
+  const w = G.winner();
+  if (w) {
+    w.placement = 1;
+    G.say(w.name + ' WINS', w.color, 999);
+    G.log(w.name + ' is the last one standing.');
+    Snd.play(w.isHuman ? 'win' : 'lose', 1, 0.9);
+  } else {
+    G.say('EVERYBODY DIED — DRAW', COL.lava, 999);
+    G.log('Mutual destruction. Nobody reaches the trophy.');
+    Snd.play('lose', 1, 0.9);
+  }
+  showResults(w);
+}
+
+function startHop(p, to, dur) {
+  p.hop = { fx: p.pos.x, fz: p.pos.z, tx: to.x, tz: to.z, t: 0, dur };
+}
+
+/* ============================ 14. INPUT ============================= */
+const keys = {};
+const In = {
+  hideTile: 0, targetPlayer: -1, targetTile: 0, gadget: 'none', locked: false,
+  hoverPlayer: -1, hoverTile: -1, hoverGadget: null,
+  mouseX: 0, mouseY: 0, gadgetRects: [],
+
+  reset() {
+    this.hideTile = 0; this.targetPlayer = -1; this.targetTile = 0;
+    this.gadget = 'none'; this.locked = false;
+    this.hoverPlayer = this.hoverTile = -1;
+  },
+
+  beginDecision() {
+    this.locked = false;
+    this.gadget = 'none';
+    this.hoverPlayer = this.hoverTile = -1;
+    const cell = G.human.zone.cellAt(G.human.pos);
+    this.hideTile = cell ? Math.max(0, G.human.zone.indexOf(cell)) : 0;
+    this.targetPlayer = -1;
+    this.targetTile = 0;
+  },
+
+  canLock() {
+    return this.targetPlayer >= 0 && this.targetPlayer < G.players.length && G.players[this.targetPlayer].alive;
+  },
+
+  setGadget(g) {
+    if (g !== 'none' && !G.human.has(g)) { Snd.play('uiBack', 1, 0.4); return; }
+    this.gadget = this.gadget === g ? 'none' : g;
+    Snd.play(this.gadget === 'none' ? 'uiBack' : 'uiClick', 1.1, 0.55);
+  },
+
+  /** Fills in anything not chosen, then writes the commitment. */
+  commit() {
+    if (!this.canLock()) {
+      const pool = G.players.filter(p => p.alive && p.index !== G.human.index);
+      if (pool.length) {
+        const t = rpick(pool);
+        this.targetPlayer = t.index;
+        this.targetTile = rint(0, Math.max(1, t.zone.tileCount));
+      }
+    }
+    if (this.targetPlayer >= 0)
+      this.targetTile = clampi(this.targetTile, 0, Math.max(0, G.players[this.targetPlayer].zone.tileCount - 1));
+    this.hideTile = clampi(this.hideTile, 0, Math.max(0, G.human.zone.tileCount - 1));
+
+    G.human.decision = {
+      hideTile: this.hideTile, targetPlayer: this.targetPlayer,
+      targetTile: this.targetTile, gadget: this.gadget, locked: true,
+    };
+    this.locked = true;
+  },
+};
+
+function pickTile(mx, my) {
+  for (const t of tileScreenCache) if (inPoly(mx, my, t.pts)) return t;
+  return null;
+}
+
+canvas.addEventListener('mousemove', e => {
+  const r = canvas.getBoundingClientRect();
+  In.mouseX = e.clientX - r.left;
+  In.mouseY = e.clientY - r.top;
+});
+canvas.addEventListener('mousedown', e => {
+  if (e.button !== 0) return;
+  Snd.init();
+  if (G.phase !== 'decision' || G.paused || !G.human.alive || In.locked) return;
+
+  for (const gr of In.gadgetRects) {
+    if (In.mouseX >= gr.x && In.mouseX <= gr.x + gr.w && In.mouseY >= gr.y && In.mouseY <= gr.y + gr.h) {
+      In.setGadget(gr.g);
+      return;
+    }
+  }
+  const hit = pickTile(In.mouseX, In.mouseY);
+  if (!hit) return;
+  if (hit.player === G.human.index) {
+    In.hideTile = hit.index;
+    Snd.play('uiClick', 1.25, 0.6);
+  } else if (G.players[hit.player].alive) {
+    In.targetPlayer = hit.player;
+    In.targetTile = hit.index;
+    Snd.play('uiClick', 0.85, 0.7);
+  }
+});
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  cam.zoom = clampf(cam.zoom * (e.deltaY > 0 ? 0.92 : 1.08), 0.72, 1.75);
+}, { passive: false });
+
+window.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'Escape') { e.preventDefault(); onEscape(); return; }
+
+  if (G.phase === 'over') {
+    if (e.code === 'KeyR') { hideAll(); startMatch(); }
+    if (e.code === 'KeyM') { hideAll(); toMenu(); }
+    return;
+  }
+  if (G.phase !== 'decision' || G.paused || !G.human.alive || In.locked) return;
+
+  if (e.code === 'Digit1') In.setGadget('splash');
+  if (e.code === 'Digit2') In.setGadget('shield');
+  if (e.code === 'Digit3') In.setGadget('decoy');
+  if (e.code === 'Digit4') In.setGadget('scout');
+  if (e.code === 'Digit0' || e.code === 'KeyQ') In.setGadget('none');
+  if ((e.code === 'Space' || e.code === 'Enter') && In.canLock()) {
+    e.preventDefault();
+    In.locked = true;
+    Snd.play('lock', 1, 0.8);
+  }
+});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+/* ============================ 15. SCREENS =========================== */
+const scr = {
+  title: document.getElementById('scr-title'),
+  howto: document.getElementById('scr-howto'),
+  pause: document.getElementById('scr-pause'),
+  results: document.getElementById('scr-results'),
+};
+let howToReturn = 'title';
+
+function hideAll() { for (const k in scr) scr[k].classList.add('hidden'); }
+function show(name) { hideAll(); scr[name].classList.remove('hidden'); }
+
+function toMenu() {
+  G.matchToken++;                 // abandon any running match coroutine
+  G.running = false;
+  G.paused = false;
+  G.phase = 'menu';
+  cam.orbit = true;
+  newMatch();
+  Snd.setIntensity(0);
+  show('title');
+}
+
+function startMatch() {
+  Snd.init();
+  G.matchToken++;
+  G.paused = false;
+  cam.orbit = false;
+  newMatch();
+  hideAll();
+  runMatch();
+}
+
+function setPaused(p) {
+  if (G.phase === 'menu' || G.phase === 'over') return;
+  G.paused = p;
+  if (p) show('pause'); else hideAll();
+}
+
+function onEscape() {
+  if (!scr.howto.classList.contains('hidden')) {
+    show(howToReturn === 'pause' ? 'pause' : 'title');
+    if (howToReturn === 'none') hideAll();
+    Snd.play('uiBack', 1, 0.5);
+    return;
+  }
+  if (G.paused) setPaused(false);
+  else if (G.phase !== 'menu' && G.phase !== 'over') setPaused(true);
+}
+
+function showResults(w) {
+  const t = document.getElementById('resultTitle');
+  t.textContent = w ? w.name + ' WINS' : 'DRAW';
+  t.style.color = w ? w.color : COL.lava;
+  const me = G.human;
+  document.getElementById('resultSub').textContent =
+    !w ? 'Everyone left standing died in the same round.'
+       : (me.alive ? 'You read them all.' : 'You finished #' + me.placement + ' of ' + Cfg.PLAYERS + '.');
+  document.getElementById('resultMeta').textContent = 'rounds played: ' + G.round;
+  show('results');
+}
+
+function refreshSoundLabels() {
+  const s = 'SOUND: ' + (Snd.muted ? 'OFF' : 'ON');
+  document.getElementById('btnSound').textContent = s;
+  document.getElementById('btnSound2').textContent = s;
+}
+function toggleSound() { Snd.init(); Snd.muted = !Snd.muted; refreshSoundLabels(); Snd.play('uiClick', 1, 0.6); }
+
+document.getElementById('btnPlay').onclick = () => { Snd.init(); Snd.play('uiClick', 1, .7); startMatch(); };
+document.getElementById('btnHow').onclick = () => { Snd.init(); howToReturn = 'title'; show('howto'); };
+document.getElementById('btnHowBack').onclick = () => { show(howToReturn === 'pause' ? 'pause' : 'title'); };
+document.getElementById('btnResume').onclick = () => setPaused(false);
+document.getElementById('btnPauseHow').onclick = () => { howToReturn = 'pause'; show('howto'); };
+document.getElementById('btnRestart').onclick = () => startMatch();
+document.getElementById('btnMenu').onclick = () => toMenu();
+document.getElementById('btnAgain').onclick = () => startMatch();
+document.getElementById('btnResultsMenu').onclick = () => toMenu();
+document.getElementById('btnSound').onclick = toggleSound;
+document.getElementById('btnSound2').onclick = toggleSound;
+
+for (const b of document.querySelectorAll('.btn'))
+  b.addEventListener('mouseenter', () => Snd.play('uiHover', 1, 0.25));
+
+/* =========================== 16. MAIN LOOP ========================== */
+function updatePlayers(dt) {
+  for (const p of G.players) {
+    if (p.dieT >= 0) { p.dieT += dt; continue; }
+    if (!p.alive) continue;
+
+    if (p.hop) {
+      p.hop.t += dt / p.hop.dur;
+      const k = clampf(p.hop.t, 0, 1), e = k * k * (3 - 2 * k);
+      p.pos.x = lerp(p.hop.fx, p.hop.tx, e);
+      p.pos.z = lerp(p.hop.fz, p.hop.tz, e);
+      p.pos.y = Math.sin(k * Math.PI) * 1.1;
+      const dx = p.hop.tx - p.hop.fx, dz = p.hop.tz - p.hop.fz;
+      if (dx * dx + dz * dz > 0.001) p.facing = Math.atan2(dx, dz);
+      p.bob += dt * 6;
+      if (k >= 1) { p.pos.y = 0; p.hop = null; }
+      continue;
+    }
+
+    let next = null;
+    if (p.isHuman) {
+      if (G.phase === 'prep') {
+        let h = 0, v = 0;
+        if (keys.KeyA || keys.ArrowLeft) h -= 1;
+        if (keys.KeyD || keys.ArrowRight) h += 1;
+        if (keys.KeyW || keys.ArrowUp) v += 1;
+        if (keys.KeyS || keys.ArrowDown) v -= 1;
+        if (h || v) {
+          // camera-relative: W is always "up the screen"
+          const m = Math.hypot(h, v);
+          const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
+          const dx = (h / m) * cy + (v / m) * sy;
+          const dz = -(h / m) * sy + (v / m) * cy;
+          next = p.zone.clamp({ x: p.pos.x + dx * 5 * dt, y: 0, z: p.pos.z + dz * 5 * dt });
+        }
+      }
+    } else if (G.phase === 'prep' || G.phase === 'menu') {
+      const bot = G.bots.find(b => b.me === p);
+      if (bot) next = bot.tickPrep(dt, p.pos);
+    }
+
+    if (next) {
+      const dx = next.x - p.pos.x, dz = next.z - p.pos.z;
+      const m = Math.hypot(dx, dz);
+      if (m > 0.0005) { p.facing = Math.atan2(dx, dz); p.bob += m * 6; }
+      p.pos.x = next.x; p.pos.z = next.z;
+    } else {
+      p.bob += dt * 1.4;
+    }
+  }
+}
+
+function updateTileAnims(dt) {
+  for (const p of G.players)
+    for (const c of p.zone.grid)
+      if (c.dying && c.drop < 6) c.drop = Math.min(6, c.drop + dt * 7);
+}
+
+/** Applies the current selection/hover highlighting to tiles. */
+function refreshLooks() {
+  resetLooks();
+  if (G.lavaThisRound && (G.phase === 'prep' || G.phase === 'decision')) previewLava();
+  if (G.phase !== 'decision' || !G.human || !G.human.alive) return;
+
+  const z = G.human.zone;
+  for (const c of z.active) c.look = 'owned';
+  const hide = z.tile(In.hideTile);
+  if (hide) hide.look = 'standing';
+
+  if (In.targetPlayer >= 0 && G.players[In.targetPlayer].alive) {
+    const tc = G.players[In.targetPlayer].zone.tile(In.targetTile);
+    if (tc) tc.look = 'aimed';
+  }
+  if (In.hoverPlayer >= 0 && In.hoverTile >= 0) {
+    const hc = G.players[In.hoverPlayer].zone.tile(In.hoverTile);
+    if (hc && hc !== hide) hc.look = In.hoverPlayer === G.human.index ? 'standing' : 'aimed';
+  }
+}
+
+/** Projects every tile once: top face, bottom face and depth, for both
+    picking and drawing. Rebuilt after the camera is final for the frame. */
+function cacheTilePolys() {
+  tileScreenCache = [];
+  for (const p of G.players) {
+    for (let i = 0; i < p.zone.active.length; i++) {
+      const c = p.zone.active[i];
+      const world = tilePoly(c, -c.drop);
+      const pts = [], bot = [];
+      let ok = true;
+      for (const w of world) {
+        const s = project(w);
+        if (!s) { ok = false; break; }
+        pts.push(s);
+        const b = project({ x: w.x, y: -c.drop - Cfg.TILE_H, z: w.z });
+        if (!b) { ok = false; break; }
+        bot.push(b);
+      }
+      if (!ok) continue;
+      const cen = project({ x: c.center.x, y: -c.drop, z: c.center.z });
+      if (!cen) continue;
+      tileScreenCache.push({ player: p.index, index: i, cell: c, pts, bot, world, d: cen.d });
+    }
+  }
+}
+
+let bgGrad = null, bgGradKey = "";
+let last = performance.now();
+function frame(now) {
+  const raw = Math.min((now - last) / 1000, 0.05);
+  last = now;
+  const dt = G.paused ? 0 : raw;
+  G.time += dt;
+
+  if (G.phase === 'prep' || G.phase === 'decision') G.phaseTimer = Math.max(0, G.phaseTimer - dt);
+
+  if (G.phase === 'decision' && G.human && G.human.alive && !In.locked) {
+    const sec = Math.ceil(G.phaseTimer);
+    if (sec !== G.tickSec && sec <= 3 && sec > 0) { G.tickSec = sec; Snd.play('tick', 1 + (4 - sec) * 0.12, 0.5); }
+    Snd.setIntensity(lerp(0.45, 1, 1 - clampf(G.phaseTimer / Math.max(G.phaseLength, 0.01), 0, 1)));
+  }
+
+  if (cam.orbit) cam.yaw += dt * 0.09;
+  else {
+    cam.yaw = Math.sin(G.time * 0.28) * 0.012;
+    // lean a little toward whoever you are aiming at, never losing the arena
+    const want = (G.phase === 'decision' && In.targetPlayer >= 0) ? In.targetPlayer : -1;
+    cam.focusT = want;
+  }
+
+  updatePlayers(dt);
+  updateTileAnims(dt);
+  updateFx(dt);
+  Snd.update(raw);
+  updateCamera();
+
+  // hover test (after the camera is final for this frame)
+  cacheTilePolys();
+  if (G.phase === 'decision' && G.human && G.human.alive && !In.locked && !G.paused) {
+    const hit = pickTile(In.mouseX, In.mouseY);
+    const hp = hit ? hit.player : -1, ht = hit ? hit.index : -1;
+    if (hp !== In.hoverPlayer || ht !== In.hoverTile) {
+      In.hoverPlayer = hp; In.hoverTile = ht;
+      if (hp >= 0) Snd.play('uiHover', 1, 0.22);
+    }
+    In.hoverGadget = null;
+    for (const gr of In.gadgetRects)
+      if (In.mouseX >= gr.x && In.mouseX <= gr.x + gr.w && In.mouseY >= gr.y && In.mouseY <= gr.y + gr.h)
+        In.hoverGadget = gr.g;
+  } else { In.hoverPlayer = In.hoverTile = -1; }
+
+  refreshLooks();
+
+  // ---- draw --------------------------------------------------------
+  if (!bgGrad || bgGradKey !== W + 'x' + H) {
+    bgGradKey = W + 'x' + H;
+    bgGrad = ctx.createRadialGradient(W / 2, H * 0.42, 0, W / 2, H * 0.42, Math.max(W, H) * 0.75);
+    bgGrad.addColorStop(0, '#0d1420');
+    bgGrad.addColorStop(1, '#05070c');
+  }
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, W, H);
+
+  drawArena();
+  drawFx();
+  if (G.phase !== 'menu') drawHud();
+
+  pumpWaiters();
+  requestAnimationFrame(frame);
+}
+
+/* Console handle. Everything above is block-scoped, so this is the only way in.
+   Try: TPBR.G.players[0].zone.tileCount, or TPBR.Cfg.PREP = 3 */
+window.TPBR = {
+  G, In, Snd, Cfg, cam, fx,
+  get tiles() { return tileScreenCache; },
+  pickAt: (x, y) => pickTile(x, y),
+};
+
+/* ============================== BOOT =============================== */
+resize();
+srand((Date.now() ^ 0x9e3779b9) >>> 0);
+newMatch();
+cam.orbit = true;
+refreshSoundLabels();
+show('title');
+requestAnimationFrame(frame);
+
+} /* end browser-only */
+</script>
+</body>
+</html>
