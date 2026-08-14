@@ -2328,7 +2328,35 @@ function redo(){ if(HIST.i<HIST.stack.length-1){HIST.i++;applyState(JSON.parse(H
 /* =====================================================================
    19. EXPORT
    ===================================================================== */
-function dl(name,url){const a=el('a',{href:url,download:name});document.body.append(a);a.click();a.remove();}
+/* Sandboxed frames (embedded previews) block page-initiated downloads, so
+   there we surface the result for the viewer to save by hand instead. */
+const IN_FRAME=(()=>{try{return window.self!==window.top;}catch(e){return true;}})();
+function dl(name,url){
+  if(IN_FRAME){ saveModal(name,url); return; }
+  const a=el('a',{href:url,download:name});document.body.append(a);a.click();a.remove();
+}
+function saveModal(name,url){
+  const old=$('#saveWrap'); if(old) old.remove();
+  const isText=url.startsWith('data:text/');
+  const body=isText
+    ? el('pre',{class:'sv-text'},decodeURIComponent(url.split(',').slice(1).join(',')))
+    : el('img',{src:url,alt:name});
+  const actions=el('div',{class:'sv-foot'},
+    el('span',{class:'sv-tip'},isText
+      ? 'This preview runs in a sandboxed frame, so saving is blocked. Copy the text, or open the file locally for one-click export.'
+      : 'This preview runs in a sandboxed frame, so saving is blocked. Right-click the image → Save image as…, or open the file locally for one-click export.'),
+    isText? el('button',{class:'btn sm',onclick:async e=>{
+        try{ await navigator.clipboard.writeText(body.textContent); e.target.textContent='Copied'; }
+        catch(err){ e.target.textContent='Select it manually'; }
+      }},'Copy text') : null,
+    el('button',{class:'btn sm primary',onclick:()=>wrap.remove()},'Done'));
+  const card=el('div',{class:'sv-card'},
+    el('div',{class:'sv-head'},el('b',null,name),
+      el('button',{class:'mini',title:'Close',onclick:()=>wrap.remove()},'✕')),
+    el('div',{class:'sv-body'},body), actions);
+  const wrap=el('div',{id:'saveWrap',class:'sv-wrap',onclick:e=>{if(e.target===wrap)wrap.remove();}},card);
+  document.body.append(wrap);
+}
 function shot3D(){
   draw3D();
   dl('shirt-3d-'+ST.styleId+'.png',$('#view3d').toDataURL('image/png'));
@@ -2564,7 +2592,20 @@ function injectExtraCSS(){
   .menu .mi{padding:8px 10px;border-radius:8px;cursor:pointer}
   .menu .mi:hover{background:#26314a}
   .menu .mi b{display:block;font-size:12.5px;font-weight:600}
-  .menu .mi em{display:block;font-style:normal;font-size:10.5px;color:#8c97ad;margin-top:1px}`;
+  .menu .mi em{display:block;font-style:normal;font-size:10.5px;color:#8c97ad;margin-top:1px}
+  .sv-wrap{position:fixed;inset:0;z-index:300;background:rgba(6,8,12,.72);backdrop-filter:blur(3px);
+    display:grid;place-items:center;padding:26px}
+  .sv-card{display:flex;flex-direction:column;gap:0;max-width:min(760px,92vw);max-height:88vh;
+    background:#151a23;border:1px solid #38455c;border-radius:13px;box-shadow:0 24px 60px rgba(0,0,0,.65);overflow:hidden}
+  .sv-head{display:flex;align-items:center;gap:10px;padding:11px 13px;border-bottom:1px solid #2a3446}
+  .sv-head b{flex:1;font-size:13px}
+  .sv-body{padding:14px;overflow:auto;background:
+    repeating-conic-gradient(#191f2a 0% 25%,#141922 0% 50%) 50%/18px 18px;display:grid;place-items:center}
+  .sv-body img{max-width:100%;max-height:56vh;display:block;border-radius:5px}
+  .sv-text{margin:0;font:11.5px/1.6 ui-monospace,monospace;color:#c7d0e0;white-space:pre-wrap;
+    max-height:56vh;text-align:left;justify-self:stretch}
+  .sv-foot{display:flex;align-items:center;gap:10px;padding:11px 13px;border-top:1px solid #2a3446}
+  .sv-tip{flex:1;font-size:11px;color:#8c97ad;line-height:1.45}`;
   document.head.append(s);
 }
 function loop(){
