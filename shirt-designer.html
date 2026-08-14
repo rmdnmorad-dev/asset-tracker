@@ -1,0 +1,2597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shirt Studio — 3D Apparel Designer</title>
+<style>
+:root{
+  --bg:#0b0d12; --bg2:#0f131b; --panel:#151a23; --panel2:#1b2230; --panel3:#232c3d;
+  --line:#2a3446; --line2:#38455c;
+  --text:#e7ecf5; --muted:#8c97ad; --dim:#5f6b80;
+  --accent:#6c8cff; --accent2:#22d3ee; --good:#34d399; --warn:#fbbf24; --bad:#fb7185;
+  --shadow:0 10px 30px rgba(0,0,0,.45);
+  --r:10px;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font:13px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  overflow:hidden; -webkit-font-smoothing:antialiased;
+}
+button,input,select,textarea{font:inherit;color:inherit}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:#2c3648;border-radius:8px;border:2px solid var(--panel)}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ---------- shell ---------- */
+.app{display:grid;grid-template-rows:52px 1fr;height:100vh}
+.top{
+  display:flex;align-items:center;gap:10px;padding:0 12px;
+  background:linear-gradient(180deg,#171d28,#121720);
+  border-bottom:1px solid var(--line);z-index:20
+}
+.brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:.2px;margin-right:6px}
+.brand .mark{
+  width:26px;height:26px;border-radius:8px;display:grid;place-items:center;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));color:#08121f;font-size:15px
+}
+.brand small{display:block;font-weight:500;font-size:10px;color:var(--muted);letter-spacing:.5px;text-transform:uppercase}
+.spacer{flex:1}
+
+.btn{
+  display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px;border-radius:8px;
+  background:var(--panel2);border:1px solid var(--line);cursor:pointer;white-space:nowrap;
+  transition:background .12s,border-color .12s,transform .06s
+}
+.btn:hover{background:var(--panel3);border-color:var(--line2)}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:linear-gradient(180deg,#6c8cff,#5474f0);border-color:#7e9aff;color:#08101f;font-weight:600}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.ghost{background:transparent}
+.btn.sm{height:26px;padding:0 8px;font-size:12px}
+.btn.icon{width:30px;padding:0;justify-content:center}
+.btn[disabled]{opacity:.4;pointer-events:none}
+.btn.on{background:linear-gradient(180deg,#2a3d78,#243468);border-color:var(--accent);color:#cfdaff}
+
+.main{display:grid;grid-template-columns:248px 1fr 296px;min-height:0}
+.panel{background:var(--panel);border-right:1px solid var(--line);overflow:auto;min-height:0}
+.panel.right{border-right:0;border-left:1px solid var(--line)}
+.sec{border-bottom:1px solid var(--line);padding:12px}
+.sec h3{
+  margin:0 0 10px;font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);
+  display:flex;align-items:center;gap:7px
+}
+.sec h3 .dot{width:5px;height:5px;border-radius:50%;background:var(--accent)}
+.row{display:flex;align-items:center;gap:8px}
+.row+.row{margin-top:8px}
+label.f{display:block;font-size:11px;color:var(--muted);margin-bottom:5px}
+
+/* ---------- stage ---------- */
+.stage{display:grid;grid-template-columns:1fr 1fr;min-height:0;background:var(--bg2)}
+.pane{position:relative;min-height:0;display:flex;flex-direction:column}
+.pane+.pane{border-left:1px solid var(--line)}
+.pane-bar{
+  height:38px;display:flex;align-items:center;gap:6px;padding:0 10px;
+  background:rgba(15,19,27,.75);border-bottom:1px solid var(--line);backdrop-filter:blur(8px);z-index:5
+}
+.pane-bar .title{font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);font-weight:600}
+.pane-body{flex:1;position:relative;min-height:0;overflow:hidden}
+#editor2d,#view3d{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.pane-body.grid-bg{
+  background:
+    radial-gradient(1200px 600px at 50% 0%, rgba(108,140,255,.07), transparent 60%),
+    linear-gradient(0deg,#0c1017,#0c1017)
+}
+.hint{
+  position:absolute;left:10px;bottom:10px;font-size:11px;color:var(--dim);
+  background:rgba(10,13,19,.7);padding:5px 9px;border-radius:7px;border:1px solid var(--line);pointer-events:none
+}
+.overlay-tools{position:absolute;right:10px;top:10px;display:flex;flex-direction:column;gap:6px;z-index:6}
+
+/* ---------- style gallery ---------- */
+.gal{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.gal .it{
+  position:relative;border:1px solid var(--line);border-radius:9px;background:var(--panel2);
+  padding:5px 4px 4px;cursor:pointer;text-align:center;transition:.12s
+}
+.gal .it:hover{border-color:var(--line2);background:var(--panel3)}
+.gal .it.on{border-color:var(--accent);background:#212c4a;box-shadow:0 0 0 1px rgba(108,140,255,.35) inset}
+.gal .it canvas{display:block;width:100%;height:44px}
+.gal .it span{display:block;font-size:9.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gal .it.on span{color:#c9d6ff}
+
+/* ---------- swatches ---------- */
+.sw{display:grid;grid-template-columns:repeat(9,1fr);gap:5px}
+.sw i{
+  display:block;padding-top:100%;border-radius:6px;cursor:pointer;border:1px solid rgba(255,255,255,.12);
+  transition:transform .1s,box-shadow .1s
+}
+.sw i:hover{transform:scale(1.12)}
+.sw i.on{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--accent)}
+input[type=color]{
+  -webkit-appearance:none;appearance:none;width:34px;height:26px;padding:0;border:1px solid var(--line);
+  border-radius:6px;background:var(--panel2);cursor:pointer
+}
+input[type=color]::-webkit-color-swatch-wrapper{padding:2px}
+input[type=color]::-webkit-color-swatch{border:none;border-radius:4px}
+
+input[type=text],input[type=number],select,textarea{
+  width:100%;height:28px;padding:0 8px;background:var(--panel2);border:1px solid var(--line);
+  border-radius:7px;outline:none
+}
+textarea{height:56px;padding:6px 8px;resize:vertical;line-height:1.35}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);background:#1a2130}
+select{cursor:pointer;-webkit-appearance:none;appearance:none;
+  background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
+  background-position:calc(100% - 14px) 12px,calc(100% - 9px) 12px;background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+input[type=range]{
+  -webkit-appearance:none;appearance:none;width:100%;height:20px;background:transparent;cursor:pointer;padding:0
+}
+input[type=range]::-webkit-slider-runnable-track{height:4px;background:var(--panel3);border-radius:3px}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--accent);
+  margin-top:-4.5px;border:2px solid #0e1420;box-shadow:0 1px 4px rgba(0,0,0,.5)
+}
+input[type=range]::-moz-range-track{height:4px;background:var(--panel3);border-radius:3px}
+input[type=range]::-moz-range-thumb{width:13px;height:13px;border:2px solid #0e1420;border-radius:50%;background:var(--accent)}
+.rng{display:grid;grid-template-columns:1fr 44px;gap:8px;align-items:center}
+.rng b{font-weight:600;font-size:11px;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
+
+.seg{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:2px;gap:2px}
+.seg button{
+  flex:1;height:24px;border:0;background:transparent;border-radius:6px;cursor:pointer;color:var(--muted);
+  font-size:11.5px;transition:.12s
+}
+.seg button:hover{color:var(--text)}
+.seg button.on{background:var(--panel3);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.3)}
+
+/* ---------- layers ---------- */
+.layers{display:flex;flex-direction:column;gap:5px}
+.layer{
+  display:flex;align-items:center;gap:8px;padding:6px;border-radius:8px;background:var(--panel2);
+  border:1px solid var(--line);cursor:pointer;transition:.12s
+}
+.layer:hover{border-color:var(--line2)}
+.layer.on{border-color:var(--accent);background:#1f2740}
+.layer .th{
+  width:32px;height:32px;border-radius:6px;background:#0e1420;border:1px solid var(--line);flex:none;
+  display:grid;place-items:center;overflow:hidden
+}
+.layer .th canvas,.layer .th img{width:100%;height:100%;object-fit:contain}
+.layer .nm{flex:1;min-width:0;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.layer .nm em{display:block;font-style:normal;font-size:10px;color:var(--dim)}
+.layer .act{display:flex;gap:2px;opacity:.55}
+.layer:hover .act,.layer.on .act{opacity:1}
+.mini{
+  width:22px;height:22px;border-radius:6px;border:1px solid transparent;background:transparent;cursor:pointer;
+  display:grid;place-items:center;font-size:12px;color:var(--muted)
+}
+.mini:hover{background:var(--panel3);color:var(--text);border-color:var(--line)}
+.empty{padding:18px 10px;text-align:center;color:var(--dim);font-size:11.5px;border:1px dashed var(--line);border-radius:9px}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.chip{
+  padding:5px 8px;border-radius:7px;background:var(--panel2);border:1px solid var(--line);cursor:pointer;
+  font-size:11px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+}
+.chip:hover{border-color:var(--line2);background:var(--panel3)}
+.chip.on{border-color:var(--accent);background:#212c4a;color:#cfdaff}
+
+.stamps{display:grid;grid-template-columns:repeat(8,1fr);gap:4px}
+.stamps button{
+  aspect-ratio:1;border-radius:7px;border:1px solid var(--line);background:var(--panel2);cursor:pointer;font-size:15px;
+  display:grid;place-items:center;padding:0;line-height:1
+}
+.stamps button:hover{background:var(--panel3);transform:scale(1.08)}
+
+.drop{
+  border:1.5px dashed var(--line2);border-radius:10px;padding:14px 10px;text-align:center;color:var(--muted);
+  cursor:pointer;transition:.14s;font-size:11.5px;background:rgba(108,140,255,.03)
+}
+.drop:hover,.drop.hot{border-color:var(--accent);background:rgba(108,140,255,.1);color:#cfdaff}
+.drop b{display:block;color:var(--text);font-size:12.5px;margin-bottom:2px}
+
+.toast{
+  position:fixed;left:50%;bottom:22px;transform:translate(-50%,20px);opacity:0;pointer-events:none;
+  background:#1c2534;border:1px solid var(--line2);padding:9px 15px;border-radius:9px;box-shadow:var(--shadow);
+  transition:.22s;z-index:100;font-size:12.5px
+}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.kbd{
+  display:inline-block;padding:1px 5px;border-radius:4px;background:var(--panel3);border:1px solid var(--line2);
+  font-size:10px;color:var(--muted);font-family:ui-monospace,monospace
+}
+.note{font-size:10.5px;color:var(--dim);line-height:1.5;margin-top:8px}
+.badge{font-size:9.5px;padding:1px 6px;border-radius:20px;background:var(--panel3);color:var(--muted);border:1px solid var(--line)}
+
+@media (max-width:1180px){
+  .main{grid-template-columns:210px 1fr 250px}
+  .stage{grid-template-columns:1fr}
+  .pane+.pane{border-left:0;border-top:1px solid var(--line)}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ===================== TOP BAR ===================== -->
+  <div class="top">
+    <div class="brand">
+      <div class="mark">✦</div>
+      <div>Shirt Studio<small>3D apparel designer</small></div>
+    </div>
+    <div class="seg" style="width:190px" id="sideSeg">
+      <button data-side="front" class="on">Front</button>
+      <button data-side="back">Back</button>
+    </div>
+    <button class="btn icon" id="btnUndo" title="Undo (Ctrl+Z)">↶</button>
+    <button class="btn icon" id="btnRedo" title="Redo (Ctrl+Shift+Z)">↷</button>
+    <div class="spacer"></div>
+    <button class="btn" id="btnRandom" title="Generate a random design">🎲 Surprise me</button>
+    <button class="btn" id="btnSave" title="Save project (.shirt.json)">💾 Save</button>
+    <button class="btn" id="btnLoad" title="Load project">📂 Load</button>
+    <button class="btn primary" id="btnExport" title="Export images">⬇ Export</button>
+  </div>
+
+  <div class="main">
+    <!-- ===================== LEFT PANEL ===================== -->
+    <div class="panel" id="leftPanel">
+      <div class="sec">
+        <h3><span class="dot"></span>Garment</h3>
+        <div class="gal" id="styleGal"></div>
+      </div>
+
+      <div class="sec">
+        <h3><span class="dot"></span>Fabric colour</h3>
+        <div class="sw" id="swBody"></div>
+        <div class="row" style="margin-top:9px">
+          <input type="color" id="colBody" value="#d7d9dd">
+          <input type="text" id="colBodyHex" value="#D7D9DD" spellcheck="false">
+        </div>
+      </div>
+
+      <div class="sec">
+        <h3><span class="dot"></span>Trim &amp; details</h3>
+        <div class="row">
+          <label class="f" style="flex:1;margin:0">Collar / cuffs / hem</label>
+          <input type="color" id="colTrim" value="#d7d9dd">
+        </div>
+        <div class="row">
+          <label class="f" style="flex:1;margin:0">Buttons / drawcord</label>
+          <input type="color" id="colBtn" value="#c9ccd2">
+        </div>
+        <div class="row">
+          <label class="f" style="flex:1;margin:0">Stitching</label>
+          <input type="color" id="colStitch" value="#b9bcc4">
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn sm" id="btnMatchTrim" style="flex:1">Match body colour</button>
+          <button class="btn sm" id="btnContrastTrim" style="flex:1">Contrast trim</button>
+        </div>
+      </div>
+
+      <div class="sec">
+        <h3><span class="dot"></span>Material</h3>
+        <label class="f">Knit / weave</label>
+        <select id="selFabric">
+          <option value="jersey">Cotton jersey — smooth</option>
+          <option value="pique" selected>Pique — polo waffle</option>
+          <option value="heather">Heather — flecked melange</option>
+          <option value="oxford">Oxford — woven shirting</option>
+          <option value="fleece">Fleece — brushed &amp; soft</option>
+          <option value="linen">Linen — slubby &amp; dry</option>
+          <option value="performance">Performance — technical sheen</option>
+        </select>
+        <div style="margin-top:10px">
+          <label class="f">Fabric sheen <span id="vSheen" class="badge">30%</span></label>
+          <input type="range" id="rSheen" min="0" max="100" value="30">
+        </div>
+        <div>
+          <label class="f">Weave depth <span id="vWeave" class="badge">100%</span></label>
+          <input type="range" id="rWeave" min="0" max="200" value="100">
+        </div>
+        <div>
+          <label class="f">Wrinkles &amp; folds <span id="vWrink" class="badge">65%</span></label>
+          <input type="range" id="rWrink" min="0" max="150" value="65">
+        </div>
+      </div>
+
+      <div class="sec">
+        <h3><span class="dot"></span>Studio</h3>
+        <label class="f">Backdrop</label>
+        <div class="grid3" id="bgGal"></div>
+        <div style="margin-top:10px">
+          <label class="f">Key light <span id="vLight" class="badge">100%</span></label>
+          <input type="range" id="rLight" min="20" max="180" value="100">
+        </div>
+        <div class="row" style="margin-top:6px">
+          <button class="btn sm" id="btnSpin" style="flex:1">⟳ Auto-spin</button>
+          <button class="btn sm" id="btnWire" style="flex:1">◫ Mesh</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== STAGE ===================== -->
+    <div class="stage">
+      <div class="pane">
+        <div class="pane-bar">
+          <span class="title">Design — <span id="sideLabel">Front</span></span>
+          <div class="spacer"></div>
+          <button class="btn sm" id="btnGuides" title="Show print area guides">⌗ Guides</button>
+          <button class="btn sm" id="btnFit" title="Fit view">⤢ Fit</button>
+        </div>
+        <div class="pane-body grid-bg" id="editorWrap">
+          <canvas id="editor2d"></canvas>
+          <div class="hint">Drag to move · corner handles scale · top handle rotates · <span class="kbd">Del</span> removes · drop an image anywhere</div>
+        </div>
+      </div>
+      <div class="pane">
+        <div class="pane-bar">
+          <span class="title">3D preview</span>
+          <div class="spacer"></div>
+          <button class="btn sm" id="btnFront">Front</button>
+          <button class="btn sm" id="btnBack">Back</button>
+          <button class="btn sm" id="btnReset3d" title="Reset camera">⟲</button>
+          <button class="btn sm" id="btnShot" title="Save a PNG of this view">📷</button>
+        </div>
+        <div class="pane-body" id="view3dWrap">
+          <canvas id="view3d"></canvas>
+          <div class="hint">Drag to orbit · wheel to zoom · right-drag / two-finger to pan</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== RIGHT PANEL ===================== -->
+    <div class="panel right">
+      <div class="sec">
+        <h3><span class="dot"></span>Add artwork</h3>
+        <div class="drop" id="dropZone">
+          <b>⬆ Upload a logo</b>
+          PNG / JPG / SVG — or drop &amp; paste anywhere
+        </div>
+        <div class="row" style="margin-top:8px">
+          <button class="btn sm" id="btnText" style="flex:1">T  Text</button>
+          <button class="btn sm" id="btnShape" style="flex:1">◆ Shape</button>
+        </div>
+        <label class="f" style="margin-top:12px">Quick stamps</label>
+        <div class="stamps" id="stamps"></div>
+      </div>
+
+      <div class="sec">
+        <h3><span class="dot"></span>Layers <span class="spacer"></span><span class="badge" id="layerCount">0</span></h3>
+        <div class="layers" id="layerList"></div>
+      </div>
+
+      <div class="sec" id="propSec">
+        <h3><span class="dot"></span>Properties</h3>
+        <div id="props"><div class="empty">Select a layer to edit it</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<input type="file" id="fileImg" accept="image/*" multiple hidden>
+<input type="file" id="fileProj" accept=".json,application/json" hidden>
+<script>
+/* =====================================================================
+   SHIRT STUDIO — single file, zero dependencies.
+   Everything (garment geometry, fabric, lighting, 3D renderer) is
+   generated procedurally at runtime. No CDN, no assets, works offline.
+   ===================================================================== */
+"use strict";
+
+const $  = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const clamp = (v,a,b) => v<a?a:v>b?b:v;
+const lerp  = (a,b,t) => a+(b-a)*t;
+const rad   = d => d*Math.PI/180;
+const uid   = () => Math.random().toString(36).slice(2,9);
+const smoothstep = (e0,e1,x)=>{const t=clamp((x-e0)/(e1-e0),0,1);return t*t*(3-2*t);};
+
+/* ---------- colour helpers ---------- */
+function hex2rgb(h){h=h.replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');
+  return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];}
+function rgb2hex(r,g,b){return '#'+[r,g,b].map(v=>clamp(Math.round(v),0,255).toString(16).padStart(2,'0')).join('');}
+function shade(hex,amt){const [r,g,b]=hex2rgb(hex);
+  return amt>=0 ? rgb2hex(lerp(r,255,amt),lerp(g,255,amt),lerp(b,255,amt))
+                : rgb2hex(r*(1+amt),g*(1+amt),b*(1+amt));}
+function lum(hex){const [r,g,b]=hex2rgb(hex);return (0.2126*r+0.7152*g+0.0722*b)/255;}
+
+/* ---------- deterministic noise ---------- */
+function mulberry(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;
+  let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;
+  return ((t^t>>>14)>>>0)/4294967296;};}
+const permTable=(()=>{const r=mulberry(1337),p=new Uint8Array(512);
+  const a=[...Array(256).keys()];for(let i=255;i>0;i--){const j=(r()*(i+1))|0;[a[i],a[j]]=[a[j],a[i]];}
+  for(let i=0;i<512;i++)p[i]=a[i&255];return p;})();
+function vnoise(x,y){
+  const xi=Math.floor(x)&255, yi=Math.floor(y)&255, xf=x-Math.floor(x), yf=y-Math.floor(y);
+  const u=xf*xf*(3-2*xf), v=yf*yf*(3-2*yf);
+  const h=(a,b)=>permTable[permTable[a]+b]/255;
+  return lerp(lerp(h(xi,yi),h(xi+1,yi),u), lerp(h(xi,yi+1),h(xi+1,yi+1),u), v);
+}
+function fbm(x,y,oct=4){let s=0,a=.5,f=1;for(let i=0;i<oct;i++){s+=a*vnoise(x*f,y*f);f*=2;a*=.5;}return s;}
+
+/* =====================================================================
+   1. PATH BUILDER — samples curves into a dense polygon
+   ===================================================================== */
+class Path2{
+  constructor(){this.p=[];}
+  move(x,y){this.p.push([x,y]);return this;}
+  line(x,y){this.p.push([x,y]);return this;}
+  quad(cx,cy,x,y,n){
+    const [x0,y0]=this.p[this.p.length-1];
+    n=n||Math.max(6,Math.round(Math.hypot(x-x0,y-y0)*1.4));
+    for(let i=1;i<=n;i++){const t=i/n,mt=1-t;
+      this.p.push([mt*mt*x0+2*mt*t*cx+t*t*x, mt*mt*y0+2*mt*t*cy+t*t*y]);}
+    return this;
+  }
+  cubic(c1x,c1y,c2x,c2y,x,y,n){
+    const [x0,y0]=this.p[this.p.length-1];
+    n=n||Math.max(8,Math.round(Math.hypot(x-x0,y-y0)*1.4));
+    for(let i=1;i<=n;i++){const t=i/n,mt=1-t,a=mt*mt*mt,b=3*mt*mt*t,c=3*mt*t*t,d=t*t*t;
+      this.p.push([a*x0+b*c1x+c*c2x+d*x, a*y0+b*c1y+c*c2y+d*y]);}
+    return this;
+  }
+  /** mirror across x=0 and append reversed — closes a symmetric outline.
+      First and last points are assumed to sit on the centre line. */
+  mirror(){
+    for(let i=this.p.length-2;i>=1;i--){const q=this.p[i];this.p.push([-q[0],q[1]]);}
+    return this;
+  }
+  get pts(){return this.p;}
+}
+function bboxOf(polys){
+  let a=1e9,b=1e9,c=-1e9,d=-1e9;
+  for(const p of polys) for(const [x,y] of p){if(x<a)a=x;if(y<b)b=y;if(x>c)c=x;if(y>d)d=y;}
+  return {x0:a,y0:b,x1:c,y1:d,w:c-a,h:d-b,cx:(a+c)/2,cy:(b+d)/2};
+}
+
+/* =====================================================================
+   2. GARMENT LIBRARY
+   Units are centimetres. x = 0 is the centre front, y grows downward
+   from the shoulder line.
+   ===================================================================== */
+const BASE = {
+  bodyLen:70, neckHalf:8.4, dropF:6.4, dropB:2.0, neckKind:'crew',
+  shoulderHalf:21.5, shoulderDrop:3.2, chestHalf:25.5, waistHalf:24.6, hemHalf:25.4,
+  armDepth:22, sleeveLen:20, sleeveAngle:36, cuffHalf:8.6, hemCurve:1.6,
+  ribCuff:0, ribHem:0, collar:'none', placket:null, pocket:null, hood:false,
+  raglan:false, sideSeam:true, thick:7.4
+};
+const STYLES = [
+  { id:'polo', name:'Polo', bodyLen:70, neckHalf:7.6, dropF:5.4, neckKind:'crew',
+    sleeveLen:20.5, sleeveAngle:38, cuffHalf:8.4, ribCuff:2.6, collar:'polo', raglan:true,
+    placket:{len:15.5, halfW:2.3, buttons:3} },
+  { id:'tee', name:'Classic tee', sleeveLen:19, sleeveAngle:34, cuffHalf:8.8, neckHalf:8.6, dropF:6.6,
+    ribCuff:1.4, collar:'rib' },
+  { id:'vneck', name:'V-neck', neckKind:'v', dropF:13, neckHalf:8.2, sleeveLen:18.5, collar:'ribv' },
+  { id:'long', name:'Long sleeve', sleeveLen:52, sleeveAngle:41, cuffHalf:5.6, ribCuff:4.2,
+    collar:'rib', neckHalf:8.4 },
+  { id:'tank', name:'Tank top', neckKind:'scoop', dropF:12, neckHalf:6.2, shoulderHalf:11.5,
+    sleeveLen:0, armDepth:26, chestHalf:23.5, waistHalf:22.5, hemHalf:23, collar:'bind' },
+  { id:'raglan', name:'Raglan ¾', sleeveLen:34, sleeveAngle:39, cuffHalf:7.2, raglan:true,
+    collar:'rib', neckHalf:8.4 },
+  { id:'hoodie', name:'Hoodie', bodyLen:72, chestHalf:29, waistHalf:28.4, hemHalf:28.6,
+    shoulderHalf:24, sleeveLen:55, sleeveAngle:43, cuffHalf:6.2, ribCuff:6, ribHem:6,
+    armDepth:25, hood:true, collar:'hood', thick:10.5,
+    pocket:{y0:38, y1:56, halfW:17}, neckHalf:9.4, dropF:7 },
+  { id:'sweat', name:'Sweatshirt', bodyLen:69, chestHalf:28, waistHalf:27.4, hemHalf:27.6,
+    shoulderHalf:23.5, sleeveLen:54, sleeveAngle:43, cuffHalf:6.2, ribCuff:6, ribHem:6,
+    armDepth:24.5, collar:'rib', thick:9.4, neckHalf:9.2, dropF:6.4 },
+  { id:'henley', name:'Henley', neckHalf:7.4, dropF:5.2, sleeveLen:20, collar:'band',
+    placket:{len:17, halfW:2.1, buttons:4} },
+  { id:'rugby', name:'Rugby', bodyLen:72, chestHalf:27.5, shoulderHalf:23, sleeveLen:26,
+    sleeveAngle:39, cuffHalf:8, ribCuff:3, collar:'polo', neckHalf:8, dropF:5.6, thick:8.6,
+    placket:{len:16, halfW:2.6, buttons:3} },
+  { id:'crop', name:'Crop tee', bodyLen:48, hemHalf:24.5, waistHalf:24.5, sleeveLen:16,
+    sleeveAngle:30, cuffHalf:9.2, neckHalf:8.8, dropF:7, collar:'rib' },
+  { id:'boxy', name:'Oversized', bodyLen:74, chestHalf:30, waistHalf:30, hemHalf:30,
+    shoulderHalf:27, shoulderDrop:2.2, sleeveLen:22, sleeveAngle:20, cuffHalf:10.5,
+    armDepth:26, neckHalf:9.2, dropF:7, collar:'rib', thick:8.4 }
+].map(s=>Object.assign({},BASE,s));
+
+/* ---------- silhouette ---------- */
+function neckline(p, S, drop){
+  const nh=S.neckHalf;
+  switch(S.neckKind){
+    case 'v':     p.line(nh*0.34,drop*0.62); p.line(nh,0); break;
+    case 'scoop': p.cubic(nh*0.72,drop, nh*1.0,drop*0.62, nh,0); break;
+    case 'boat':  p.quad(nh*0.5,drop*1.05, nh,0); break;
+    default:      p.cubic(nh*0.62,drop*1.02, nh*0.99,drop*0.5, nh,0);
+  }
+}
+function silhouette(S, side){
+  const drop = side==='back' ? S.dropB : S.dropF;
+  const p = new Path2().move(0,drop);
+  neckline(p,S,drop);
+
+  // shoulder
+  p.quad(S.neckHalf+(S.shoulderHalf-S.neckHalf)*0.45, S.shoulderDrop*0.28, S.shoulderHalf, S.shoulderDrop);
+
+  const a=rad(S.sleeveAngle), dx=Math.cos(a), dy=Math.sin(a);
+  const A=[S.chestHalf, S.armDepth];               // armpit
+  if(S.sleeveLen>0.5){
+    const E1=[S.shoulderHalf+dx*S.sleeveLen, S.shoulderDrop+dy*S.sleeveLen];
+    const E2=[E1[0]-dy*2*S.cuffHalf, E1[1]+dx*2*S.cuffHalf];
+    // sleeve top seam (slightly convex)
+    p.quad(S.shoulderHalf+dx*S.sleeveLen*0.5-dy*1.2, S.shoulderDrop+dy*S.sleeveLen*0.5+dx*1.2, E1[0],E1[1]);
+    p.line(E2[0],E2[1]);                            // cuff opening
+    // underarm — concave sweep back to the armpit
+    p.quad(lerp(E2[0],A[0],0.42)-2.2, lerp(E2[1],A[1],0.42)+2.4, A[0],A[1]);
+  }else{
+    // sleeveless armhole — concave scoop from the strap to the armpit
+    p.cubic(S.shoulderHalf+1.7,S.shoulderDrop+7.5, S.chestHalf-6.8,S.armDepth-4, A[0],A[1]);
+  }
+  // side seam
+  const hipY=S.bodyLen*0.66;
+  p.cubic(S.chestHalf+0.5,S.armDepth+6, S.waistHalf-0.4,hipY-6, S.waistHalf,hipY);
+  p.quad(S.hemHalf*0.995, lerp(hipY,S.bodyLen,0.55), S.hemHalf, S.bodyLen);
+  // hem
+  p.quad(S.hemHalf*0.52, S.bodyLen+S.hemCurve*1.05, 0, S.bodyLen+S.hemCurve);
+  return p.mirror().pts;
+}
+
+/* ---------- collar / hood / pocket patches ---------- */
+function collarPoly(S){
+  const k=S.collar, nh=S.neckHalf, d=S.dropF;
+  if(k==='polo'){
+    const cw=3.4;                       // collar fall depth
+    const p=new Path2().move(0,d-0.4);  // notch between the two points
+    p.quad(1.6,d+0.9, 3.4,d+2.7);       // right collar point
+    p.cubic(nh*0.68,d+0.4, nh+cw*0.5,1.7, nh+cw*0.66,0.2);   // outer lower edge
+    p.quad(nh+cw*0.74,-cw*0.5, nh*0.95+cw*0.3,-cw*0.8);      // outer top corner
+    p.quad(nh*0.55,-cw*1.02, 0,-cw*1.02);                    // across the back of the neck
+    return Object.assign(p.mirror().pts,{cw});
+  }
+  if(k==='band'||k==='rugby'){
+    const cw=2.4, p=new Path2().move(0,d-0.4);
+    p.quad(nh*0.62,d*0.4, nh+cw*0.3,0.1);
+    p.quad(nh+cw*0.42,-cw*0.72, nh*0.7,-cw*0.9);
+    p.quad(nh*0.34,-cw*1.05, 0,-cw*1.05);
+    return Object.assign(p.mirror().pts,{cw});
+  }
+  return null;
+}
+function hoodPoly(S){
+  const w=S.neckHalf+12.5, top=-17;
+  const p=new Path2().move(0,S.dropF+2.2);
+  p.cubic(w*0.74,S.dropF+1.5, w*1.0,1.6, w*0.97,-3.4);   // widest just above the shoulder line
+  p.cubic(w*0.9,top*0.7, w*0.6,top*1.0, 0,top*1.06);     // taper up to the crown
+  return p.mirror().pts;
+}
+function pocketPoly(S){
+  const q=S.pocket, p=new Path2().move(-q.halfW,q.y0);
+  p.quad(-q.halfW*0.55,q.y0-1.1, 0,q.y0-1.2).quad(q.halfW*0.55,q.y0-1.1, q.halfW,q.y0);
+  p.quad(q.halfW+0.6,q.y1-6, q.halfW-1.4,q.y1);
+  p.quad(0,q.y1+1.6, -q.halfW+1.4,q.y1);
+  p.quad(-q.halfW-0.6,q.y1-6, -q.halfW,q.y0);
+  return p.pts;
+}
+
+/* =====================================================================
+   3. SIGNED DISTANCE FIELD + MESH BUILDER
+   A grid is stamped over the silhouette; boundary vertices snap onto the
+   outline, interior vertices get a pillow-shaped bulge. Gives a clean
+   edge, smooth normals and interior detail for shading.
+   ===================================================================== */
+function sdPoly(pts,px,py,out){
+  let d=(px-pts[0][0])**2+(py-pts[0][1])**2, s=1, bx=pts[0][0], by=pts[0][1];
+  for(let i=0,j=pts.length-1;i<pts.length;j=i++){
+    const ex=pts[j][0]-pts[i][0], ey=pts[j][1]-pts[i][1];
+    const wx=px-pts[i][0],       wy=py-pts[i][1];
+    const t=clamp((wx*ex+wy*ey)/(ex*ex+ey*ey||1e-9),0,1);
+    const cx=pts[i][0]+ex*t, cy=pts[i][1]+ey*t;
+    const dd=(px-cx)**2+(py-cy)**2;
+    if(dd<d){d=dd;bx=cx;by=cy;}
+    const c1=py>=pts[i][1], c2=py<pts[j][1], c3=ex*wy>ey*wx;
+    if((c1&&c2&&c3)||(!c1&&!c2&&!c3)) s=-s;
+  }
+  if(out){out[0]=bx;out[1]=by;}
+  return s*Math.sqrt(d);
+}
+
+/**
+ * Build a two-sided panel mesh from a polygon.
+ * bulge  – peak thickness at the centre
+ * res    – grid resolution across the longest axis
+ * zBase  – pushes the whole panel forward/back (patches)
+ * folds  – wrinkle displacement amount
+ */
+function buildPanel(poly, opt){
+  const {bulge=6, res=136, zBase=0, sign=1, folds=0, seed=0} = opt||{};
+  const bb=bboxOf([poly]);
+  const pad=Math.max(bb.w,bb.h)/res*1.6;
+  const x0=bb.x0-pad, y0=bb.y0-pad, w=bb.w+pad*2, h=bb.h+pad*2;
+  const nx=Math.max(8,Math.round(res*w/Math.max(w,h))), ny=Math.max(8,Math.round(res*h/Math.max(w,h)));
+  const gx=w/nx, gy=h/ny;
+  const D=new Float32Array((nx+1)*(ny+1));
+  const PX=new Float32Array((nx+1)*(ny+1)), PY=new Float32Array((nx+1)*(ny+1));
+  const near=[0,0];
+  for(let j=0;j<=ny;j++)for(let i=0;i<=nx;i++){
+    const x=x0+i*gx, y=y0+j*gy, k=j*(nx+1)+i;
+    const d=sdPoly(poly,x,y,near);
+    D[k]=d;
+    if(d>0){PX[k]=near[0];PY[k]=near[1];}else{PX[k]=x;PY[k]=y;}
+  }
+  // pillow profile: rounds over near the seam then holds a flat plateau, so
+  // the distance field's medial axis never shows up as a ridge
+  const falloff=Math.min(bb.w,bb.h)*0.16;
+  const zAt=(x,y,d)=>{
+    let t=smoothstep(0,falloff,-d);
+    let z=bulge*Math.pow(t,0.55);
+    if(folds>0){
+      const f=(fbm(x*0.075+seed*3.1, y*0.055+seed*1.7, 4)-0.5);
+      const g=(fbm(x*0.21+seed*7.3, y*0.16+seed*2.9, 3)-0.5);
+      z+=(f*2.1+g*0.75)*folds*t;
+    }
+    return z*sign+zBase*sign;
+  };
+  const pos=[],uv=[],idx=[];
+  const map=new Int32Array((nx+1)*(ny+1)).fill(-1);
+  const push=(k,x,y,d)=>{
+    if(map[k]>=0) return map[k];
+    const id=pos.length/3;
+    pos.push(x,-y,zAt(x,y,d));
+    uv.push(x,y);            // shirt-space, converted to texture uv later
+    map[k]=id; return id;
+  };
+  for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){
+    const ks=[j*(nx+1)+i, j*(nx+1)+i+1, (j+1)*(nx+1)+i+1, (j+1)*(nx+1)+i];
+    let inside=0; for(const k of ks) if(D[k]<=0) inside++;
+    if(!inside) continue;
+    const v=ks.map(k=>{
+      const x=D[k]<=0 ? x0+(k%(nx+1))*gx : PX[k];
+      const y=D[k]<=0 ? y0+Math.floor(k/(nx+1))*gy : PY[k];
+      return push(k,x,y,Math.min(D[k],0));
+    });
+    if(sign>0){idx.push(v[0],v[2],v[1], v[0],v[3],v[2]);}
+    else      {idx.push(v[0],v[1],v[2], v[0],v[2],v[3]);}
+  }
+  // welded normals
+  const nrm=new Float32Array(pos.length);
+  for(let t=0;t<idx.length;t+=3){
+    const a=idx[t]*3,b=idx[t+1]*3,c=idx[t+2]*3;
+    const ux=pos[b]-pos[a],uy=pos[b+1]-pos[a+1],uz=pos[b+2]-pos[a+2];
+    const vx=pos[c]-pos[a],vy=pos[c+1]-pos[a+1],vz=pos[c+2]-pos[a+2];
+    const nx1=uy*vz-uz*vy, ny1=uz*vx-ux*vz, nz1=ux*vy-uy*vx;
+    nrm[a]+=nx1;nrm[a+1]+=ny1;nrm[a+2]+=nz1;
+    nrm[b]+=nx1;nrm[b+1]+=ny1;nrm[b+2]+=nz1;
+    nrm[c]+=nx1;nrm[c+1]+=ny1;nrm[c+2]+=nz1;
+  }
+  for(let i=0;i<nrm.length;i+=3){
+    const l=Math.hypot(nrm[i],nrm[i+1],nrm[i+2])||1;
+    nrm[i]/=l;nrm[i+1]/=l;nrm[i+2]/=l;
+  }
+  return {pos:new Float32Array(pos), nrm, uvRaw:new Float32Array(uv), idx:new Uint32Array(idx)};
+}
+
+
+/* =====================================================================
+   4. STATE
+   ===================================================================== */
+const TEXA = 1024;          // albedo texture
+const TEXM = 512;           // height / roughness texture
+const KM   = TEXM/TEXA;     // scale factor between the two
+
+const ST = {
+  styleId:'polo',
+  body:'#d7d9dd', trim:'#d7d9dd', button:'#c9ccd2', stitch:'#b9bcc4',
+  fabric:'pique', sheen:.30, weave:1, wrinkle:.65,
+  side:'front', bg:'studio', light:1,
+  spin:false, wire:false, guides:true,
+  layers:[], sel:null
+};
+
+const G = {};               // current garment (polys, transform, meshes)
+const TEXT = {};            // canvases
+
+function makeCanvas(w,h){const c=document.createElement('canvas');c.width=w;c.height=h;return c;}
+
+/* shirt-space -> albedo-texture-space */
+const TX = x => (x-G.XF.cx)*G.XF.s + TEXA/2;
+const TY = y => (y-G.XF.cy)*G.XF.s + TEXA/2;
+const IX = t => (t-TEXA/2)/G.XF.s + G.XF.cx;
+const IY = t => (t-TEXA/2)/G.XF.s + G.XF.cy;
+const TS = v => v*G.XF.s;                       // length in cm -> px
+
+function tracePoly(ctx,poly){
+  ctx.beginPath();
+  ctx.moveTo(TX(poly[0][0]),TY(poly[0][1]));
+  for(let i=1;i<poly.length;i++) ctx.lineTo(TX(poly[i][0]),TY(poly[i][1]));
+  ctx.closePath();
+}
+/* draw a smooth curve through shirt-space points */
+function traceCurve(ctx,pts){
+  ctx.beginPath();
+  ctx.moveTo(TX(pts[0][0]),TY(pts[0][1]));
+  for(let i=1;i<pts.length-1;i++){
+    const mx=(pts[i][0]+pts[i+1][0])/2, my=(pts[i][1]+pts[i+1][1])/2;
+    ctx.quadraticCurveTo(TX(pts[i][0]),TY(pts[i][1]),TX(mx),TY(my));
+  }
+  const l=pts[pts.length-1];
+  ctx.lineTo(TX(l[0]),TY(l[1]));
+}
+
+/* =====================================================================
+   5. FABRIC — a seamless tile carrying weave albedo + height
+   ===================================================================== */
+const FABRIC_ROUGH = {jersey:.86,pique:.83,heather:.88,oxford:.78,fleece:.94,linen:.9,performance:.55};
+function makeFabricTiles(){
+  const N=128, kind=ST.fabric;
+  const rough = clamp(FABRIC_ROUGH[kind] - ST.sheen*0.45, .08, .98);
+  const roughByte = Math.round(rough*255);
+  const alb=makeCanvas(N,N), mra=makeCanvas(N,N);
+  const ia=alb.getContext('2d').createImageData(N,N);
+  const im=mra.getContext('2d').createImageData(N,N);
+  const A=ia.data, M=im.data;
+  const rnd=mulberry(99);
+  const flecks=[]; for(let i=0;i<620;i++) flecks.push([rnd()*N,rnd()*N,rnd()*1.3+.5,rnd()*2-1]);
+
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+    const k=(y*N+x)*4;
+    let h=0,a=0;
+    const u=x/N*2*Math.PI, v=y/N*2*Math.PI;
+    switch(kind){
+      case 'jersey':
+        h = Math.cos(u*30)*.34 + Math.cos(v*60)*.1;
+        a = h*.5 + (vnoise(x*.9,y*.9)-.5)*.3; break;
+      case 'pique': {                       // waffle: raised diamonds
+        const c=Math.cos(u*22)*Math.cos(v*22);
+        h = (c>0? Math.pow(c,.6) : -Math.pow(-c,1.4)*.55)*.85;
+        a = h*.55 + (vnoise(x*1.7,y*1.7)-.5)*.22; break; }
+      case 'heather':
+        h = (vnoise(x*1.5,y*1.5)-.5)*.5;
+        a = (vnoise(x*3.1,y*3.1)-.5)*1.2; break;
+      case 'oxford': {                      // basket weave, over-under
+        const cx=Math.floor(x/4)&1, cy=Math.floor(y/4)&1;
+        h = (cx===cy? Math.cos(u*32) : Math.cos(v*32))*.5;
+        a = h*.7; break; }
+      case 'fleece':
+        h = (fbm(x*.22,y*.22,3)-.5)*1.5;
+        a = h*.5 + (vnoise(x*1.4,y*1.4)-.5)*.5; break;
+      case 'linen': {
+        const s1=Math.cos(u*26+vnoise(0,y*.5)*4), s2=Math.cos(v*26+vnoise(x*.5,0)*4);
+        h = (s1*.45+s2*.45)*(0.7+vnoise(x*.3,y*.3)*.6);
+        a = h*.6; break; }
+      case 'performance':
+        h = Math.cos((u+v)*24)*.4 + Math.cos((u-v)*48)*.12;
+        a = h*.35; break;
+    }
+    if(kind==='heather'){
+      for(const f of flecks){
+        let dx=x-f[0],dy=y-f[1];
+        if(dx>N/2)dx-=N; if(dx<-N/2)dx+=N; if(dy>N/2)dy-=N; if(dy<-N/2)dy+=N;
+        const d=dx*dx+dy*dy, r=f[2]*f[2];
+        if(d<r) a += f[3]*(1-d/r)*.85;
+      }
+    }
+    const hv=clamp(128+h*ST.weave*44,0,255);
+    M[k]=hv; M[k+1]=roughByte; M[k+2]=255; M[k+3]=255;
+    const av=clamp(128+a*16,0,255);
+    A[k]=av;A[k+1]=av;A[k+2]=av;A[k+3]=255;
+  }
+  alb.getContext('2d').putImageData(ia,0,0);
+  mra.getContext('2d').putImageData(im,0,0);
+  return {alb,mra,rough,roughByte};
+}
+
+/* material colour helper for the height/roughness map */
+const mc = (h,r) => 'rgb('+Math.round(clamp(128+h*110,0,255))+','+Math.round(clamp(r,0,1)*255)+',255)';
+
+/* =====================================================================
+   6. AO + WRINKLE SHADING (shared by albedo and height maps)
+   ===================================================================== */
+function buildShade(poly,side){
+  const R=320, c=makeCanvas(R,R), x=c.getContext('2d');
+  const img=x.createImageData(R,R), d=img.data;
+  const amp=ST.wrinkle, seed=side==='back'?31:0;
+  for(let j=0;j<R;j++)for(let i=0;i<R;i++){
+    const sx=IX(i/R*TEXA), sy=IY(j/R*TEXA);
+    // vertical drape + diagonal pull from the shoulders
+    let w = (fbm(sx*.085+seed, sy*.038+seed*.5, 4)-.5)*2;
+    w += (fbm(sx*.026+7+seed, sy*.075+2, 3)-.5)*1.3;
+    w += (fbm(sx*.19+3, sy*.11+5, 2)-.5)*.55;
+    // folds gather at the hem and under the arms
+    const g = .6 + .55*smoothstep(0.45,1.0,sy/70) + .4*smoothstep(14,26,Math.abs(sx));
+    const v = clamp(128 + w*15*amp*g, 0, 255);
+    const k=(j*R+i)*4; d[k]=d[k+1]=d[k+2]=v; d[k+3]=255;
+  }
+  x.putImageData(img,0,0);
+
+  // edge ambient occlusion — soft darkening that hugs the seam line
+  const s=makeCanvas(TEXA,TEXA), sx2=s.getContext('2d');
+  sx2.fillStyle='#808080'; sx2.fillRect(0,0,TEXA,TEXA);
+  sx2.imageSmoothingQuality='high';
+  sx2.drawImage(c,0,0,TEXA,TEXA);
+  sx2.save(); tracePoly(sx2,poly); sx2.clip();
+  sx2.lineJoin='round';
+  sx2.filter='blur(20px)'; sx2.strokeStyle='rgba(0,0,0,.5)'; sx2.lineWidth=TS(8);
+  tracePoly(sx2,poly); sx2.stroke();
+  sx2.filter='blur(5px)';  sx2.strokeStyle='rgba(0,0,0,.5)';  sx2.lineWidth=TS(1.7);
+  tracePoly(sx2,poly); sx2.stroke();
+  sx2.filter='none';
+  sx2.restore();
+  return s;
+}
+
+/* =====================================================================
+   7. GARMENT PAINTING — one routine drives both the colour map and the
+   height/roughness map, so details always line up.
+   ===================================================================== */
+function paintGarment(ctx, mode, side){
+  const S=G.S, A=(mode==='alb'), F=G.fab;
+  const poly = side==='back' ? G.polyB : G.polyF;
+  const rough = F.rough;
+  const dark  = lum(ST.body)<.42;
+
+  ctx.save();
+  if(!A) ctx.setTransform(KM,0,0,KM,0,0);
+  ctx.lineJoin='round'; ctx.lineCap='round';
+
+
+  /* ================= drawing helpers ================= */
+  const fillPoly=(pl,col,h,r)=>{
+    ctx.save(); tracePoly(ctx,pl); ctx.clip();
+    ctx.fillStyle = A ? col : mc(h, r===undefined?rough*.95:r);
+    ctx.fillRect(0,0,TEXA,TEXA);
+    if(A){
+      ctx.globalCompositeOperation='overlay';
+      ctx.fillStyle=ctx.createPattern(F.alb,'repeat'); ctx.fillRect(0,0,TEXA,TEXA);
+      ctx.globalCompositeOperation='source-over';
+    }
+    ctx.restore();
+  };
+  const stitch=(pts,opt)=>{
+    const o=Object.assign({w:.2,gap:[.42,.34],col:ST.stitch,h:.18},opt||{});
+    ctx.save();
+    ctx.setLineDash([TS(o.gap[0]),TS(o.gap[1])]);
+    ctx.lineWidth=Math.max(1,TS(o.w));
+    ctx.strokeStyle = A ? o.col : mc(o.h,.6);
+    ctx.globalAlpha = A ? .85 : 1;
+    traceCurve(ctx,pts); ctx.stroke();
+    ctx.restore();
+  };
+  const seam=(pts,depth=.4)=>{
+    ctx.save();
+    ctx.lineWidth=Math.max(1,TS(.45));
+    ctx.strokeStyle = A ? 'rgba(0,0,0,'+(dark?.3:.16)+')' : mc(-depth,.72);
+    traceCurve(ctx,pts); ctx.stroke();
+    ctx.restore();
+  };
+  /* a knitted band laid along a polyline (neck rib, armhole binding) */
+  const strokeBand=(pts,halfW,col,h)=>{
+    ctx.save(); tracePoly(ctx,poly); ctx.clip();
+    ctx.lineWidth=TS(halfW*2); ctx.lineCap='butt';
+    ctx.strokeStyle = A ? col : mc(h,rough*.94);
+    traceCurve(ctx,pts); ctx.stroke();
+    if(A){
+      ctx.globalCompositeOperation='overlay';
+      ctx.strokeStyle=ctx.createPattern(F.alb,'repeat');
+      traceCurve(ctx,pts); ctx.stroke();
+      ctx.globalCompositeOperation='source-over';
+    }
+    ctx.restore();
+  };
+  /* parallel rib lines: origin + perp*t, running along dir for len */
+  const ribs=(ox,oy,dirx,diry,len,span,step,clipFn)=>{
+    ctx.save(); tracePoly(ctx,poly); ctx.clip();
+    if(clipFn){clipFn();ctx.clip();}
+    ctx.lineWidth=Math.max(1,TS(.16));
+    ctx.strokeStyle = A ? 'rgba(0,0,0,.15)' : mc(-.42,rough);
+    for(let t=-span;t<=span;t+=step){
+      const px=ox-diry*t, py=oy+dirx*t;
+      ctx.beginPath();
+      ctx.moveTo(TX(px),TY(py));
+      ctx.lineTo(TX(px+dirx*len),TY(py+diry*len));
+      ctx.stroke();
+    }
+    ctx.restore();
+  };
+  /* rib ticks laid perpendicular to a band's centre line */
+  const bandRibs=(pts,halfW,step)=>{
+    ctx.save(); tracePoly(ctx,poly); ctx.clip();
+    ctx.lineWidth=Math.max(1,TS(.16));
+    ctx.strokeStyle = A ? 'rgba(0,0,0,.15)' : mc(-.42,rough);
+    let acc=0;
+    for(let i=1;i<pts.length;i++){
+      const dx=pts[i][0]-pts[i-1][0], dy=pts[i][1]-pts[i-1][1];
+      const len=Math.hypot(dx,dy); if(len<1e-6) continue;
+      acc+=len;
+      if(acc<step) continue;
+      acc=0;
+      const nx=-dy/len, ny=dx/len;
+      const px=pts[i][0], py=pts[i][1];
+      ctx.beginPath();
+      ctx.moveTo(TX(px-nx*halfW),TY(py-ny*halfW));
+      ctx.lineTo(TX(px+nx*halfW),TY(py+ny*halfW));
+      ctx.stroke();
+    }
+    ctx.restore();
+  };
+  const quadPath=(q)=>{ctx.beginPath();q.forEach((p,i)=>{const X=TX(p[0]),Y=TY(p[1]);i?ctx.lineTo(X,Y):ctx.moveTo(X,Y);});ctx.closePath();};
+  const softShadow=(pl,dy,blur,alpha)=>{
+    if(!A) return;
+    ctx.save(); tracePoly(ctx,poly); ctx.clip();
+    ctx.translate(0,TS(dy)); ctx.filter='blur('+blur+'px)';
+    ctx.globalCompositeOperation='multiply';
+    ctx.fillStyle='rgba(0,0,0,'+alpha+')';
+    tracePoly(ctx,pl); ctx.fill();
+    ctx.restore();
+  };
+
+  /* ================= hood sits behind the body ================= */
+  if(S.hood && G.hood){
+    fillPoly(G.hood, shade(ST.body,dark?.06:-.07), .1);
+    ctx.save();
+    ctx.lineWidth=Math.max(1,TS(.5));
+    ctx.strokeStyle=A?'rgba(0,0,0,.22)':mc(-.35,.7);
+    tracePoly(ctx,G.hood); ctx.stroke();
+    ctx.restore();
+    // hood opening + drawcord channel
+    const nh=S.neckHalf+12.5;
+    seam([[-nh*.82,-3.6],[0,-12.4],[nh*.82,-3.6]],.5);
+    stitch([[-nh*.75,-2.4],[0,-11],[nh*.75,-2.4]],{w:.24});
+    stitch([[-nh*.7,-1],[0,-9.4],[nh*.7,-1]],{w:.24});
+  }
+
+  /* ================= body cloth ================= */
+  ctx.save(); tracePoly(ctx,poly); ctx.clip();
+  if(A){
+    ctx.fillStyle=ST.body; ctx.fillRect(0,0,TEXA,TEXA);
+    ctx.globalCompositeOperation='overlay';
+    ctx.fillStyle=ctx.createPattern(F.alb,'repeat'); ctx.fillRect(0,0,TEXA,TEXA);
+    ctx.globalCompositeOperation='source-over';
+  }else{
+    ctx.fillStyle=ctx.createPattern(F.mra,'repeat'); ctx.fillRect(0,0,TEXA,TEXA);
+  }
+  ctx.restore();
+
+  /* ================= AO + wrinkles ================= */
+  ctx.save(); tracePoly(ctx,poly); ctx.clip();
+  ctx.globalCompositeOperation='overlay';
+  ctx.globalAlpha = A ? .95 : .55;
+  ctx.drawImage(G.shade[side],0,0);
+  ctx.globalAlpha=1; ctx.globalCompositeOperation='source-over';
+  ctx.restore();
+
+  /* ================= seams, sleeves, hem ================= */
+  const a=rad(S.sleeveAngle), dx=Math.cos(a), dy=Math.sin(a);
+  const E1=[S.shoulderHalf+dx*S.sleeveLen, S.shoulderDrop+dy*S.sleeveLen];
+  const E2=[E1[0]-dy*2*S.cuffHalf, E1[1]+dx*2*S.cuffHalf];
+
+  for(const m of [1,-1]){
+    const mx=p=>[p[0]*m,p[1]];
+    if(S.sleeveLen>.5){
+      if(S.raglan){
+        const r=[mx([S.neckHalf*.9,S.dropF*.45]),mx([S.neckHalf+4.5,S.shoulderDrop+4.2]),
+                 mx([S.chestHalf-3.4,S.armDepth-6.5]),mx([S.chestHalf-.6,S.armDepth-.4])];
+        seam(r); stitch(r.map(q=>[q[0]+m*.75,q[1]+.5]),{w:.24});
+      }else{
+        const r=[mx([S.shoulderHalf-1,S.shoulderDrop+.4]),mx([S.shoulderHalf+.4,S.shoulderDrop+6]),
+                 mx([S.chestHalf-2.8,S.armDepth-6]),mx([S.chestHalf-.6,S.armDepth-.3])];
+        seam(r); stitch(r.map(q=>[q[0]-m*.85,q[1]+.2]),{w:.24});
+      }
+      if(S.ribCuff>0){
+        const q=[[E1[0]*m,E1[1]],[E2[0]*m,E2[1]],
+                 [(E2[0]-dx*S.ribCuff)*m,E2[1]-dy*S.ribCuff],[(E1[0]-dx*S.ribCuff)*m,E1[1]-dy*S.ribCuff]];
+        ctx.save(); tracePoly(ctx,poly); ctx.clip(); quadPath(q); ctx.clip();
+        ctx.fillStyle=A?ST.trim:mc(.3,rough*.94); ctx.fillRect(0,0,TEXA,TEXA);
+        if(A){ctx.globalCompositeOperation='overlay';ctx.fillStyle=ctx.createPattern(F.alb,'repeat');
+              ctx.fillRect(0,0,TEXA,TEXA);ctx.globalCompositeOperation='source-over';}
+        ctx.restore();
+        ribs((E1[0]-dx*S.ribCuff*.5)*m,E1[1]-dy*S.ribCuff*.5, -dy*m, dx, S.cuffHalf*2.4, S.ribCuff*.5, .55,
+             ()=>quadPath(q));
+        seam([[(E1[0]-dx*S.ribCuff)*m,E1[1]-dy*S.ribCuff],[(E2[0]-dx*S.ribCuff)*m,E2[1]-dy*S.ribCuff]],.55);
+      }else{
+        stitch([[(E1[0]-dx*1.6)*m,E1[1]-dy*1.6],[(E2[0]-dx*1.6)*m,E2[1]-dy*1.6]],{w:.26});
+      }
+    }else{
+      strokeBand([mx([S.shoulderHalf-.3,S.shoulderDrop-.2]),mx([S.shoulderHalf+1.4,S.shoulderDrop+7.5]),
+                  mx([S.chestHalf-6.2,S.armDepth-3.4]),mx([S.chestHalf+.3,S.armDepth+.3])],1.1,ST.trim,.26);
+    }
+    seam([mx([S.chestHalf-.6,S.armDepth+.3]),mx([S.waistHalf-.6,S.bodyLen*.66]),mx([S.hemHalf-.6,S.bodyLen])],.3);
+  }
+
+  /* hem */
+  if(S.ribHem>0){
+    const q=[[-40,S.bodyLen-S.ribHem],[40,S.bodyLen-S.ribHem],[40,S.bodyLen+9],[-40,S.bodyLen+9]];
+    ctx.save(); tracePoly(ctx,poly); ctx.clip(); quadPath(q); ctx.clip();
+    ctx.fillStyle=A?ST.trim:mc(.3,rough*.94); ctx.fillRect(0,0,TEXA,TEXA);
+    if(A){ctx.globalCompositeOperation='overlay';ctx.fillStyle=ctx.createPattern(F.alb,'repeat');
+          ctx.fillRect(0,0,TEXA,TEXA);ctx.globalCompositeOperation='source-over';}
+    ctx.restore();
+    ribs(0,S.bodyLen-S.ribHem,0,1,S.ribHem+6,40,.6,()=>quadPath(q));
+    seam([[-S.hemHalf,S.bodyLen-S.ribHem],[0,S.bodyLen-S.ribHem+.4],[S.hemHalf,S.bodyLen-S.ribHem]],.55);
+  }else{
+    stitch([[-S.hemHalf+.7,S.bodyLen-1.9],[0,S.bodyLen-1.4+S.hemCurve*.6],[S.hemHalf-.7,S.bodyLen-1.9]],{w:.28});
+  }
+
+  /* ================= neckline finish ================= */
+  const drop = side==='back' ? S.dropB : S.dropF;
+  const nPts = necklinePts(S,drop);
+  if(S.collar==='rib'||S.collar==='ribv'||S.collar==='bind'||S.collar==='hood'||side==='back'){
+    const hw = S.collar==='bind'?.75 : S.collar==='hood'?1.3 : 1.05;
+    strokeBand(nPts,hw,ST.trim,.32);
+    bandRibs(nPts,hw*0.98,0.5);
+    seam(nPts.map(q=>[q[0],q[1]+hw]),.38);
+    stitch(nPts.map(q=>[q[0],q[1]+hw*1.9]),{w:.24});
+  }
+
+  /* ================= placket + buttons ================= */
+  if(S.placket && side==='front'){
+    const P=S.placket, y0=drop-1.2, y1=drop+P.len;
+    const pp=[[-P.halfW,y0],[P.halfW,y0],[P.halfW,y1-.6],[P.halfW*.55,y1],[-P.halfW*.55,y1],[-P.halfW,y1-.6]];
+    fillPoly(pp, shade(ST.body,dark?.05:-.035), .28);
+    seam([[-P.halfW,y0],[-P.halfW,y1-.4]],.5);
+    seam([[P.halfW,y0],[P.halfW,y1-.4]],.5);
+    stitch([[-P.halfW+.55,y0+.4],[-P.halfW+.55,y1-.9]],{w:.24});
+    stitch([[P.halfW-.55,y0+.4],[P.halfW-.55,y1-.9]],{w:.24});
+    seam([[-P.halfW,y1-.5],[0,y1],[P.halfW,y1-.5]],.5);
+    // buttons
+    const n=P.buttons, first=y0+3.4, span=P.len-5.6;
+    for(let i=0;i<n;i++){
+      const by=first+(n>1? span*i/(n-1):0), r=.72;
+      ctx.save();
+      if(A){
+        const g=ctx.createRadialGradient(TX(-r*.3),TY(by-r*.3),TS(r*.1),TX(0),TY(by),TS(r));
+        g.addColorStop(0,shade(ST.button,.35)); g.addColorStop(.75,ST.button); g.addColorStop(1,shade(ST.button,-.3));
+        ctx.fillStyle=g;
+      }else ctx.fillStyle=mc(.85,.22);
+      ctx.beginPath(); ctx.arc(TX(0),TY(by),TS(r),0,7); ctx.fill();
+      ctx.lineWidth=Math.max(1,TS(.12));
+      ctx.strokeStyle=A?'rgba(0,0,0,.28)':mc(.2,.3); ctx.stroke();
+      ctx.fillStyle=A?'rgba(0,0,0,.4)':mc(.1,.3);
+      for(const [ox,oy] of [[-.19,-.19],[.19,-.19],[-.19,.19],[.19,.19]]){
+        ctx.beginPath(); ctx.arc(TX(ox),TY(by+oy),Math.max(1,TS(.09)),0,7); ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
+  /* ================= collar ================= */
+  if(G.collar && side==='front'){
+    softShadow(G.collar,1.1,7,.34);
+    fillPoly(G.collar, ST.trim, .42);
+    ctx.save();
+    ctx.lineWidth=Math.max(1,TS(.4));
+    ctx.strokeStyle=A?'rgba(0,0,0,.25)':mc(-.3,.7);
+    tracePoly(ctx,G.collar); ctx.stroke();
+    ctx.restore();
+    if(S.collar==='polo'){
+      const cw=G.collar.cw||3.5, nh=S.neckHalf;
+      // roll line where the collar folds over the stand
+      seam([[-nh*.66,-cw*.28],[0,-cw*.4],[nh*.66,-cw*.28]],.5);
+      // top-stitch running parallel to the outer edge
+      let cyc=0; for(const q of G.collar) cyc+=q[1]; cyc/=G.collar.length;
+      const inset=G.collar.map(q=>[q[0]*.87, cyc+(q[1]-cyc)*.83]);
+      ctx.save(); ctx.setLineDash([TS(.8),TS(.6)]);
+      ctx.lineWidth=Math.max(1,TS(.24)); ctx.strokeStyle=A?ST.stitch:mc(.16,.6); ctx.globalAlpha=A?.8:1;
+      tracePoly(ctx,inset); ctx.stroke(); ctx.restore();
+      ribs(0,-cw*1.05,0,1,cw*1.9,nh+3,.5,()=>tracePoly(ctx,G.collar));
+    }
+  }
+  if(G.collar && side==='back'){
+    softShadow(G.collar,1.1,7,.3);
+    fillPoly(G.collar, ST.trim, .42);
+  }
+
+  /* ================= kangaroo pocket ================= */
+  if(S.pocket && side==='front' && G.pocket){
+    softShadow(G.pocket,.9,6,.3);
+    fillPoly(G.pocket, shade(ST.body,dark?.04:-.03), .3);
+    ctx.save();
+    ctx.lineWidth=Math.max(1,TS(.45));
+    ctx.strokeStyle=A?'rgba(0,0,0,.2)':mc(-.3,.7);
+    tracePoly(ctx,G.pocket); ctx.stroke(); ctx.restore();
+    const q=S.pocket;
+    stitch([[-q.halfW+.9,q.y0+.9],[0,q.y0-.2],[q.halfW-.9,q.y0+.9]],{w:.26});
+    stitch([[-q.halfW+1.4,q.y1-1],[0,q.y1+.4],[q.halfW-1.4,q.y1-1]],{w:.26});
+  }
+
+  /* ================= drawcords ================= */
+  if(S.hood && side==='front'){
+    const y=S.dropF+1.5;
+    for(const m of [1,-1]){
+      ctx.save();
+      ctx.lineWidth=Math.max(1.5,TS(.55));
+      ctx.strokeStyle=A?ST.button:mc(.5,.5);
+      ctx.beginPath();
+      ctx.moveTo(TX(m*2.4),TY(y));
+      ctx.quadraticCurveTo(TX(m*4.2),TY(y+7),TX(m*3.2),TY(y+13.5));
+      ctx.stroke();
+      ctx.fillStyle=A?shade(ST.button,-.35):mc(.7,.3);
+      ctx.beginPath(); ctx.arc(TX(m*3.2),TY(y+14),Math.max(1.5,TS(.5)),0,7); ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  /* ================= neck label ================= */
+  if(side==='back'){
+    const w=3.4,h=2.2,y=S.dropB+1.4;
+    ctx.save();
+    ctx.fillStyle=A?shade(ST.body,lum(ST.body)>.5?-.12:.35):mc(.2,.5);
+    ctx.beginPath(); ctx.rect(TX(-w/2),TY(y),TS(w),TS(h)); ctx.fill();
+    if(A){
+      ctx.fillStyle='rgba(0,0,0,.35)';
+      ctx.font='600 '+Math.round(TS(.85))+'px system-ui,sans-serif';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('SHIRT',TX(0),TY(y+h*.38));
+      ctx.font='600 '+Math.round(TS(.6))+'px system-ui,sans-serif';
+      ctx.fillText('STUDIO',TX(0),TY(y+h*.72));
+    }
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
+function necklinePts(S,drop){
+  const p=new Path2().move(0,drop);
+  neckline(p,S,drop);
+  const half=p.pts, full=[];
+  for(let i=half.length-1;i>=0;i--) full.push([-half[i][0],half[i][1]]);
+  for(let i=1;i<half.length;i++) full.push(half[i]);
+  return full;
+}
+
+/* =====================================================================
+   8. ARTWORK LAYERS
+   ===================================================================== */
+const PRINTS = {
+  dtg:     {label:'DTG — soaks into the fabric', h:.05, r:.82, hatch:0},
+  screen:  {label:'Screen print — flat ink',     h:.14, r:.55, hatch:0},
+  vinyl:   {label:'Vinyl / HTV — glossy cut',    h:.34, r:.13, hatch:0},
+  embroid: {label:'Embroidery — stitched thread',h:.62, r:.5,  hatch:1},
+  puff:    {label:'Puff print — raised foam',    h:1,   r:.66, hatch:0}
+};
+const FONTS = ['Impact','Arial Black','Georgia','Times New Roman','Courier New','Trebuchet MS',
+               'Verdana','Palatino Linotype','Comic Sans MS','Brush Script MT','Copperplate','system-ui'];
+const scratch = makeCanvas(8,8).getContext('2d');
+
+function newLayer(o){
+  const L=Object.assign({
+    id:uid(), type:'image', side:ST.side, x:0, y:0, rot:0, op:1,
+    print:'screen', hidden:false, locked:false, name:'Layer'
+  },o);
+  return L;
+}
+function fontOf(L){
+  return (L.italic?'italic ':'')+(L.weight||700)+' '+Math.max(2,TS(L.size))+'px "'+L.font+'", sans-serif';
+}
+function measureLayer(L){
+  if(L.type==='image'||L.type==='shape'){L._w=L.w;L._h=L.h;return;}
+  scratch.font=fontOf(L);
+  if('letterSpacing' in scratch) scratch.letterSpacing=TS(L.spacing||0)+'px';
+  const lines=String(L.text||'').split('\n');
+  let w=0; for(const t of lines) w=Math.max(w,scratch.measureText(t||' ').width);
+  const lh=TS(L.size*1.16);
+  let h=lines.length*lh;
+  if(L.curve&&Math.abs(L.curve)>1){
+    const th=Math.PI*Math.abs(L.curve)/100;              // swept angle
+    const R=Math.max(TS(L.size)*0.6, w/th);
+    const a=Math.min(th/2,Math.PI/2);
+    h+=R*(1-Math.cos(Math.min(th/2,Math.PI)));
+    w=2*R*Math.sin(a)+TS(L.size)*0.6;}
+  L._w=w/G.XF.s; L._h=h/G.XF.s;
+  if('letterSpacing' in scratch) scratch.letterSpacing='0px';
+}
+/* alpha-masked stamp used for the height/roughness pass and thread texture */
+function stampFor(L,color,hatch){
+  const img=L._img; if(!img||!img.width) return null;
+  const S=Math.min(768,Math.max(img.width,img.height));
+  const w=Math.round(img.width/Math.max(img.width,img.height)*S);
+  const h=Math.round(img.height/Math.max(img.width,img.height)*S);
+  const c=makeCanvas(w,h), x=c.getContext('2d');
+  x.drawImage(img,0,0,w,h);
+  x.globalCompositeOperation='source-in';
+  x.fillStyle=color; x.fillRect(0,0,w,h);
+  if(hatch){
+    x.globalCompositeOperation='source-atop';
+    x.strokeStyle='rgba(255,255,255,.5)'; x.lineWidth=Math.max(1,S/150);
+    for(let i=-h;i<w+h;i+=Math.max(3,S/60)){x.beginPath();x.moveTo(i,0);x.lineTo(i+h,h);x.stroke();}
+    x.strokeStyle='rgba(0,0,0,.28)';
+    for(let i=-h;i<w+h;i+=Math.max(3,S/60)){x.beginPath();x.moveTo(i+1.5,0);x.lineTo(i+h+1.5,h);x.stroke();}
+  }
+  return c;
+}
+function shapePath(ctx,kind,w,h){
+  const hw=w/2,hh=h/2;
+  ctx.beginPath();
+  switch(kind){
+    case 'circle': ctx.ellipse(0,0,hw,hh,0,0,7); break;
+    case 'triangle': ctx.moveTo(0,-hh);ctx.lineTo(hw,hh);ctx.lineTo(-hw,hh);ctx.closePath(); break;
+    case 'star': {
+      for(let i=0;i<10;i++){const a=-Math.PI/2+i*Math.PI/5, r=i%2?0.42:1;
+        const X=Math.cos(a)*hw*r, Y=Math.sin(a)*hh*r; i?ctx.lineTo(X,Y):ctx.moveTo(X,Y);}
+      ctx.closePath(); break; }
+    case 'hex': {
+      for(let i=0;i<6;i++){const a=-Math.PI/2+i*Math.PI/3;
+        const X=Math.cos(a)*hw,Y=Math.sin(a)*hh; i?ctx.lineTo(X,Y):ctx.moveTo(X,Y);}
+      ctx.closePath(); break; }
+    case 'heart': {
+      ctx.moveTo(0,hh);
+      ctx.bezierCurveTo(-hw*1.35,hh*.15,-hw*.75,-hh*1.15,0,-hh*.42);
+      ctx.bezierCurveTo(hw*.75,-hh*1.15,hw*1.35,hh*.15,0,hh);
+      ctx.closePath(); break; }
+    case 'ring': {
+      ctx.ellipse(0,0,hw,hh,0,0,7);
+      ctx.ellipse(0,0,hw*.62,hh*.62,0,0,7,true); break; }
+    case 'bar': { const r=Math.min(hh,hw)*.35; roundRect(ctx,-hw,-hh,w,h,r); break; }
+    default: roundRect(ctx,-hw,-hh,w,h,Math.min(hw,hh)*(kind==='round'?.28:0));
+  }
+}
+function roundRect(ctx,x,y,w,h,r){
+  r=Math.min(r,w/2,h/2);
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y); ctx.closePath();
+}
+function drawTextRuns(ctx,L,paint){
+  const lines=String(L.text||'').split('\n');
+  const lh=TS(L.size*1.16);
+  if('letterSpacing' in ctx) ctx.letterSpacing=TS(L.spacing||0)+'px';
+  if(L.curve&&Math.abs(L.curve)>1&&lines.length===1){
+    const t=lines[0], dir=L.curve>0?1:-1;
+    const chars=[...t], ws=chars.map(c=>ctx.measureText(c).width+TS(L.spacing||0));
+    const total=ws.reduce((a,b)=>a+b,0);
+    const R=Math.max(TS(L.size)*0.6, total/(Math.PI*Math.abs(L.curve)/100));
+    ctx.save(); ctx.translate(0,dir*R);
+    let a0=-total/(2*R);
+    for(let i=0;i<chars.length;i++){
+      const a=a0+ws[i]/(2*R);
+      ctx.save(); ctx.rotate(dir*a); ctx.translate(0,-dir*R); paint(chars[i],0,0); ctx.restore();
+      a0+=ws[i]/R;
+    }
+    ctx.restore();
+  }else{
+    lines.forEach((t,i)=>paint(t,0,(i-(lines.length-1)/2)*lh));
+  }
+  if('letterSpacing' in ctx) ctx.letterSpacing='0px';
+}
+function drawLayer(ctx,L,mode){
+  const A=(mode==='alb'), P=PRINTS[L.print]||PRINTS.screen;
+  measureLayer(L);
+  ctx.save();
+  ctx.translate(TX(L.x),TY(L.y));
+  ctx.rotate(rad(L.rot));
+  ctx.globalAlpha = A ? (L.op===undefined?1:L.op) : 1;
+  if(L.flip) ctx.scale(-1,1);
+
+  if(L.type==='image'){
+    const w=TS(L.w), h=TS(L.h);
+    if(A){
+      if(L._img&&L._img.width){
+        ctx.drawImage(L._img,-w/2,-h/2,w,h);
+        if(P.hatch){
+          if(!L._hatch||L._hatchKey!==L.print){L._hatch=stampFor(L,'rgba(255,255,255,0)',1);L._hatchKey=L.print;}
+          if(L._hatch){ctx.globalAlpha=(L.op===undefined?1:L.op)*.5;
+            ctx.drawImage(L._hatch,-w/2,-h/2,w,h);}
+        }
+      }
+    }else{
+      const key=L.print;
+      if(!L._mra||L._mraKey!==key){L._mra=stampFor(L,mc(P.h,P.r),P.hatch);L._mraKey=key;}
+      if(L._mra) ctx.drawImage(L._mra,-w/2,-h/2,w,h);
+    }
+  }
+  else if(L.type==='text'){
+    ctx.font=fontOf(L); ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.lineJoin='round';
+    const sw=TS(L.strokeW||0);
+    if(A){
+      drawTextRuns(ctx,L,(t,x,y)=>{
+        if(sw>0){ctx.lineWidth=sw*2;ctx.strokeStyle=L.stroke||'#000';ctx.strokeText(t,x,y);}
+        ctx.fillStyle=L.color||'#111'; ctx.fillText(t,x,y);
+      });
+    }else{
+      drawTextRuns(ctx,L,(t,x,y)=>{
+        if(sw>0){ctx.lineWidth=sw*2;ctx.strokeStyle=mc(P.h*.9,P.r);ctx.strokeText(t,x,y);}
+        ctx.fillStyle=mc(P.h,P.r); ctx.fillText(t,x,y);
+      });
+    }
+  }
+  else if(L.type==='shape'){
+    const w=TS(L.w), h=TS(L.h);
+    shapePath(ctx,L.kind,w,h);
+    if(A){
+      if(L.fill&&L.fill!=='none'){ctx.fillStyle=L.fill;ctx.fill('evenodd');}
+      if(L.strokeW>0){ctx.lineWidth=TS(L.strokeW);ctx.strokeStyle=L.stroke||'#000';ctx.stroke();}
+    }else{
+      if(L.fill&&L.fill!=='none'){ctx.fillStyle=mc(P.h,P.r);ctx.fill('evenodd');}
+      if(L.strokeW>0){ctx.lineWidth=TS(L.strokeW);ctx.strokeStyle=mc(P.h,P.r);ctx.stroke();}
+    }
+  }
+  ctx.restore();
+}
+
+/* =====================================================================
+   9. TEXTURE PIPELINE
+   ===================================================================== */
+function initTextures(){
+  for(const s of ['front','back']){
+    TEXT['baseAlb_'+s]=makeCanvas(TEXA,TEXA);
+    TEXT['baseMra_'+s]=makeCanvas(TEXM,TEXM);
+    TEXT['alb_'+s]=makeCanvas(TEXA,TEXA);
+    TEXT['mra_'+s]=makeCanvas(TEXM,TEXM);
+  }
+}
+function repaintBase(){
+  for(const s of ['front','back']){
+    const a=TEXT['baseAlb_'+s].getContext('2d');
+    a.setTransform(1,0,0,1,0,0); a.clearRect(0,0,TEXA,TEXA);
+    paintGarment(a,'alb',s);
+    const m=TEXT['baseMra_'+s].getContext('2d');
+    m.setTransform(1,0,0,1,0,0);
+    m.fillStyle=mc(0,.85); m.fillRect(0,0,TEXM,TEXM);
+    paintGarment(m,'mra',s);
+  }
+}
+function composite(){
+  for(const s of ['front','back']){
+    const poly = s==='back'?G.polyB:G.polyF;
+    const a=TEXT['alb_'+s].getContext('2d');
+    a.setTransform(1,0,0,1,0,0); a.clearRect(0,0,TEXA,TEXA);
+    a.drawImage(TEXT['baseAlb_'+s],0,0);
+    a.save(); tracePoly(a,poly); a.clip();
+    for(const L of ST.layers) if(L.side===s&&!L.hidden) drawLayer(a,L,'alb');
+    a.restore();
+
+    const m=TEXT['mra_'+s].getContext('2d');
+    m.setTransform(1,0,0,1,0,0); m.clearRect(0,0,TEXM,TEXM);
+    m.drawImage(TEXT['baseMra_'+s],0,0);
+    m.setTransform(KM,0,0,KM,0,0);
+    m.save(); tracePoly(m,poly); m.clip();
+    for(const L of ST.layers) if(L.side===s&&!L.hidden) drawLayer(m,L,'mra');
+    m.restore();
+  }
+  GL.dirtyTex=true;
+  draw2D();
+}
+
+/* =====================================================================
+   10. GARMENT BUILD
+   ===================================================================== */
+function panelZ(poly,x,y,bulge){
+  const bb=bboxOf([poly]);
+  const d=sdPoly(poly,x,y);
+  const falloff=Math.min(bb.w,bb.h)*.16;
+  return bulge*Math.pow(smoothstep(0,falloff,-d),.55);
+}
+function rebuildGarment(full=true){
+  const S = STYLES.find(s=>s.id===ST.styleId)||STYLES[0];
+  G.S=S;
+  G.polyF=silhouette(S,'front');
+  G.polyB=silhouette(S,'back');
+  G.collar=collarPoly(S);
+  G.hood=S.hood?hoodPoly(S):null;
+  G.pocket=S.pocket?pocketPoly(S):null;
+  const bb=bboxOf([G.polyF,G.polyB,G.collar||[],G.hood||[],G.pocket||[]].filter(p=>p&&p.length));
+  G.bbox=bb;
+  G.XF={cx:bb.cx, cy:bb.cy, s:TEXA*0.94/Math.max(bb.w,bb.h)};
+  G.shade={front:buildShade(G.polyF,'front'), back:buildShade(G.polyB,'back')};
+  G.fab=makeFabricTiles();
+  if(full) buildMeshes();
+  repaintBase();
+  composite();
+}
+function buildMeshes(){
+  const S=G.S, half=S.thick/2, folds=ST.wrinkle*.22;
+  const list=[];
+  const push=(geo,side,extra)=>{list.push(Object.assign({geo,side},extra||{}));};
+
+  if(G.hood){
+    push(buildPanel(G.hood,{bulge:2.2,res:96,sign:1,zBase:-(half+1.1),folds:folds*.5,seed:5}),'front',{name:'hood'});
+  }
+  push(buildPanel(G.polyB,{bulge:half,res:134,sign:-1,folds:folds,seed:3}),'back',{name:'back'});
+  push(buildPanel(G.polyF,{bulge:half,res:134,sign:1,folds:folds,seed:0}),'front',{name:'front'});
+  if(G.collar){
+    const zc=panelZ(G.polyF,0,1,half);
+    push(buildPanel(G.collar,{bulge:.85,res:84,sign:-1,zBase:zc*.7+.45,folds:0,seed:8}),'back',{name:'collarB'});
+    push(buildPanel(G.collar,{bulge:.95,res:84,sign:1,zBase:zc*.72+.5,folds:0,seed:9}),'front',{name:'collar'});
+  }
+  if(G.pocket){
+    const q=S.pocket, zp=panelZ(G.polyF,0,(q.y0+q.y1)/2,half);
+    push(buildPanel(G.pocket,{bulge:1.1,res:80,sign:1,zBase:zp*.55+.35,folds:0,seed:11}),'front',{name:'pocket'});
+  }
+  G.meshes=list;
+  GL.rebuild=true;
+}
+
+/* =====================================================================
+   11. TINY MATRIX MATH
+   ===================================================================== */
+const M4={
+  ident:()=>new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]),
+  mul:(a,b,o)=>{o=o||new Float32Array(16);
+    for(let i=0;i<4;i++)for(let j=0;j<4;j++){let s=0;
+      for(let k=0;k<4;k++)s+=a[k*4+j]*b[i*4+k];o[i*4+j]=s;}
+    return o;},
+  persp:(fov,asp,n,f)=>{const t=1/Math.tan(fov/2);
+    return new Float32Array([t/asp,0,0,0, 0,t,0,0, 0,0,(f+n)/(n-f),-1, 0,0,2*f*n/(n-f),0]);},
+  look:(e,c,u)=>{
+    const z=[e[0]-c[0],e[1]-c[1],e[2]-c[2]];
+    let l=Math.hypot(z[0],z[1],z[2])||1; z[0]/=l;z[1]/=l;z[2]/=l;
+    const x=[u[1]*z[2]-u[2]*z[1], u[2]*z[0]-u[0]*z[2], u[0]*z[1]-u[1]*z[0]];
+    l=Math.hypot(x[0],x[1],x[2])||1; x[0]/=l;x[1]/=l;x[2]/=l;
+    const y=[z[1]*x[2]-z[2]*x[1], z[2]*x[0]-z[0]*x[2], z[0]*x[1]-z[1]*x[0]];
+    return new Float32Array([x[0],y[0],z[0],0, x[1],y[1],z[1],0, x[2],y[2],z[2],0,
+      -(x[0]*e[0]+x[1]*e[1]+x[2]*e[2]), -(y[0]*e[0]+y[1]*e[1]+y[2]*e[2]), -(z[0]*e[0]+z[1]*e[1]+z[2]*e[2]), 1]);},
+  trans:(x,y,z)=>new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, x,y,z,1])
+};
+
+/* =====================================================================
+   12. WEBGL RENDERER
+   ===================================================================== */
+const BGS={
+  studio :{name:'Studio',   a:'#39435a', b:'#0b0e14', amb:[.30,.33,.40], key:[1,.98,.94], tint:1},
+  white  :{name:'Softbox',  a:'#f2f5fa', b:'#c9d2e0', amb:[.62,.64,.70], key:[1,1,1],     tint:1.05},
+  charcoal:{name:'Charcoal',a:'#1c2029', b:'#05060a', amb:[.20,.22,.28], key:[1,.96,.9],  tint:1},
+  sunset :{name:'Sunset',   a:'#6b3f52', b:'#17101c', amb:[.34,.26,.30], key:[1,.82,.62], tint:1.05},
+  ocean  :{name:'Teal',     a:'#1d4c56', b:'#07131a', amb:[.24,.34,.38], key:[.9,.99,1],  tint:1},
+  neon   :{name:'Neon',     a:'#2a1b52', b:'#08061a', amb:[.28,.24,.44], key:[.86,.9,1],  tint:1.1}
+};
+
+const GL={dirtyTex:true, rebuild:true, yaw:0, pitch:.06, dist:150, panx:0, pany:0, wire:false};
+
+const VS=`
+attribute vec3 aPos; attribute vec3 aNrm; attribute vec2 aUV;
+uniform mat4 uMVP, uModel;
+varying vec3 vN, vW; varying vec2 vUV;
+void main(){
+  vec4 wp=uModel*vec4(aPos,1.0);
+  vW=wp.xyz; vN=aNrm; vUV=aUV;
+  gl_Position=uMVP*wp;
+}`;
+const FS=`
+precision highp float;
+uniform sampler2D uAlb, uMra;
+uniform vec2 uTexel;
+uniform vec3 uCam, uAmbT, uAmbB;
+uniform vec3 uL1d,uL1c,uL2d,uL2c,uL3d,uL3c;
+uniform float uNStr, uSheen, uExp, uWire;
+varying vec3 vN, vW; varying vec2 vUV;
+
+void main(){
+  vec4 alb=texture2D(uAlb,vUV);
+  if(alb.a<0.03) discard;
+  if(uWire>0.5){ gl_FragColor=vec4(0.42,0.62,1.0,1.0); return; }
+  vec4 mra=texture2D(uMra,vUV);
+  float rough=clamp(mra.g,0.06,1.0);
+
+  vec3 N=normalize(vN);
+  bool front=gl_FrontFacing;
+  if(!front) N=-N;
+  vec3 T=normalize(vec3(1.0,0.0,0.0)-N*N.x);
+  vec3 B=cross(T,N);
+  float hL=texture2D(uMra,vUV-vec2(uTexel.x,0.0)).r;
+  float hR=texture2D(uMra,vUV+vec2(uTexel.x,0.0)).r;
+  float hD=texture2D(uMra,vUV-vec2(0.0,uTexel.y)).r;
+  float hU=texture2D(uMra,vUV+vec2(0.0,uTexel.y)).r;
+  N=normalize(N-(T*(hR-hL)+B*(hU-hD))*uNStr);
+
+  vec3 base=pow(alb.rgb,vec3(2.2));
+  vec3 V=normalize(uCam-vW);
+  float shin=mix(6.0,150.0,pow(1.0-rough,1.6));
+  float sp=(1.0-rough)*(0.13+0.36*(1.0-rough));
+
+  vec3 col=vec3(0.0);
+  vec3 Ld[3]; vec3 Lc[3];
+  Ld[0]=uL1d; Ld[1]=uL2d; Ld[2]=uL3d;
+  Lc[0]=uL1c; Lc[1]=uL2c; Lc[2]=uL3c;
+  for(int i=0;i<3;i++){
+    vec3 L=normalize(Ld[i]);
+    float nl=dot(N,L);
+    float w=clamp((nl+0.55)/1.55,0.0,1.0);
+    w=w*w*0.7+w*0.3;                 // soft cloth falloff, not a hard terminator
+    vec3 H=normalize(L+V);
+    float s=pow(max(dot(N,H),0.0),shin)*sp*step(0.0,nl);
+    col+=Lc[i]*(base*w+vec3(s));
+  }
+  float fres=pow(1.0-clamp(dot(N,V),0.0,1.0),4.0);
+  col+=uSheen*fres*mix(base,vec3(1.0),0.5)*0.42;
+  col+=base*mix(uAmbB,uAmbT,clamp(N.y*0.5+0.5,0.0,1.0));
+  col*=0.62+0.38*smoothstep(0.0,0.55,mra.r);
+  if(!front) col*=0.55;
+  col*=uExp;
+  col=(col*(2.51*col+0.03))/(col*(2.43*col+0.59)+0.14);
+  gl_FragColor=vec4(pow(clamp(col,0.0,1.0),vec3(1.0/2.2)),1.0);
+}`;
+const BGVS=`attribute vec2 aP; varying vec2 vP; void main(){vP=aP*0.5+0.5; gl_Position=vec4(aP,0.0,1.0);}`;
+const BGFS=`precision mediump float; uniform vec3 uA,uB; varying vec2 vP;
+void main(){
+  float t=pow(clamp(vP.y,0.0,1.0),0.85);
+  vec3 c=mix(uB,uA,t);
+  float d=distance(vP,vec2(0.5,0.56));
+  c*=1.0-smoothstep(0.28,0.95,d)*0.55;
+  gl_FragColor=vec4(c,1.0);
+}`;
+const SHVS=`attribute vec2 aP; uniform mat4 uMVP; uniform vec4 uRect; varying vec2 vUV;
+void main(){ vUV=aP*0.5+0.5; vec2 p=uRect.xy+aP*uRect.zw;
+  gl_Position=uMVP*vec4(p, -0.001,1.0); }`;
+const SHFS=`precision mediump float; uniform sampler2D uT; uniform float uFlip; varying vec2 vUV;
+void main(){ vec2 uv=vec2(uFlip>0.5?1.0-vUV.x:vUV.x, 1.0-vUV.y);
+  float a=texture2D(uT,uv).a; gl_FragColor=vec4(0.0,0.0,0.0,a*0.5); }`;
+
+let gl, PROG, BGPROG, SHPROG, quadBuf, shadowTex, texAlb={}, texMra={}, meshBufs=[], anisoExt=null;
+
+function compile(vs,fs){
+  const p=gl.createProgram();
+  for(const [t,src] of [[gl.VERTEX_SHADER,vs],[gl.FRAGMENT_SHADER,fs]]){
+    const s=gl.createShader(t); gl.shaderSource(s,src); gl.compileShader(s);
+    if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(s),src);
+    gl.attachShader(p,s);
+  }
+  gl.linkProgram(p);
+  if(!gl.getProgramParameter(p,gl.LINK_STATUS)) console.error(gl.getProgramInfoLog(p));
+  const o={p, u:{}, a:{}};
+  const nu=gl.getProgramParameter(p,gl.ACTIVE_UNIFORMS);
+  for(let i=0;i<nu;i++){const n=gl.getActiveUniform(p,i).name.replace(/\[0\]$/,'');o.u[n]=gl.getUniformLocation(p,n);}
+  const na=gl.getProgramParameter(p,gl.ACTIVE_ATTRIBUTES);
+  for(let i=0;i<na;i++){const n=gl.getActiveAttrib(p,i).name;o.a[n]=gl.getAttribLocation(p,n);}
+  return o;
+}
+function initGL(){
+  const cv=$('#view3d');
+  gl=cv.getContext('webgl',{antialias:true,alpha:false,preserveDrawingBuffer:true,powerPreference:'high-performance'})
+    || cv.getContext('experimental-webgl',{antialias:true,alpha:false,preserveDrawingBuffer:true});
+  if(!gl){document.getElementById('view3dWrap').innerHTML=
+    '<div style="padding:30px;color:#8c97ad;font-size:13px">WebGL is unavailable in this browser — the 2D designer still works.</div>';return false;}
+  gl.getExtension('OES_element_index_uint');
+  anisoExt=gl.getExtension('EXT_texture_filter_anisotropic')||gl.getExtension('WEBKIT_EXT_texture_filter_anisotropic');
+  PROG=compile(VS,FS); BGPROG=compile(BGVS,BGFS); SHPROG=compile(SHVS,SHFS);
+  quadBuf=gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER,quadBuf);
+  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1, 1,-1, -1,1, 1,1]),gl.STATIC_DRAW);
+  for(const s of ['front','back']){texAlb[s]=gl.createTexture();texMra[s]=gl.createTexture();}
+  shadowTex=gl.createTexture();
+  gl.enable(gl.DEPTH_TEST);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+  return true;
+}
+function upTex(t,canvas,mip){
+  gl.bindTexture(gl.TEXTURE_2D,t);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,false);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,canvas);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  if(mip){gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);
+    if(anisoExt) gl.texParameterf(gl.TEXTURE_2D,anisoExt.TEXTURE_MAX_ANISOTROPY_EXT,
+      Math.min(8,gl.getParameter(anisoExt.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
+  }else gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+}
+function uploadTextures(){
+  if(!gl) return;
+  for(const s of ['front','back']){
+    upTex(texAlb[s],TEXT['alb_'+s],true);
+    upTex(texMra[s],TEXT['mra_'+s],true);
+  }
+  // backdrop shadow = blurred silhouette
+  const R=256, c=makeCanvas(R,R), x=c.getContext('2d');
+  const bb=G.bbox, sc=R/Math.max(bb.w,bb.h)*.82;
+  x.translate(R/2,R/2); x.scale(sc,sc); x.translate(-bb.cx,-bb.cy);
+  x.filter='blur('+Math.round(R*0.035)+'px)';
+  x.fillStyle='#000'; x.beginPath();
+  const p=G.polyF; x.moveTo(p[0][0],p[0][1]);
+  for(let i=1;i<p.length;i++)x.lineTo(p[i][0],p[i][1]);
+  x.closePath(); x.fill();
+  upTex(shadowTex,c,false);
+  GL.dirtyTex=false;
+}
+function uploadMeshes(){
+  if(!gl) return;
+  for(const m of meshBufs){gl.deleteBuffer(m.vb);gl.deleteBuffer(m.ib);if(m.lb)gl.deleteBuffer(m.lb);}
+  meshBufs=[];
+  const bb=G.bbox;
+  for(const M of G.meshes){
+    const g=M.geo, n=g.pos.length/3;
+    const inter=new Float32Array(n*8);
+    for(let i=0;i<n;i++){
+      const sx=g.uvRaw[i*2], sy=g.uvRaw[i*2+1];
+      inter[i*8  ]=g.pos[i*3];
+      inter[i*8+1]=g.pos[i*3+1];
+      inter[i*8+2]=g.pos[i*3+2];
+      inter[i*8+3]=g.nrm[i*3];
+      inter[i*8+4]=g.nrm[i*3+1];
+      inter[i*8+5]=g.nrm[i*3+2];
+      inter[i*8+6]=(M.side==='back'? TX(-sx):TX(sx))/TEXA;
+      inter[i*8+7]=TY(sy)/TEXA;
+    }
+    const vb=gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER,vb); gl.bufferData(gl.ARRAY_BUFFER,inter,gl.STATIC_DRAW);
+    const use32 = n>65535;
+    const idx = use32? g.idx : new Uint16Array(g.idx);
+    const ib=gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,idx,gl.STATIC_DRAW);
+    // wireframe edges
+    const le=new (use32?Uint32Array:Uint16Array)(g.idx.length*2);
+    for(let t=0,k=0;t<g.idx.length;t+=3){
+      const a=g.idx[t],b=g.idx[t+1],c=g.idx[t+2];
+      le[k++]=a;le[k++]=b; le[k++]=b;le[k++]=c; le[k++]=c;le[k++]=a;
+    }
+    const lb=gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,lb); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,le,gl.STATIC_DRAW);
+    meshBufs.push({vb,ib,lb,count:g.idx.length,lcount:le.length,
+      type:use32?gl.UNSIGNED_INT:gl.UNSIGNED_SHORT, side:M.side, name:M.name});
+  }
+  GL.rebuild=false;
+  GL.dist = Math.max(bb.w,bb.h)/2/Math.tan(rad(16))*1.34;
+}
+function resize3D(){
+  const cv=$('#view3d'), r=cv.parentElement.getBoundingClientRect();
+  const dpr=Math.min(2,window.devicePixelRatio||1);
+  const w=Math.max(1,Math.round(r.width*dpr)), h=Math.max(1,Math.round(r.height*dpr));
+  if(cv.width!==w||cv.height!==h){cv.width=w;cv.height=h;}
+}
+function draw3D(){
+  if(!gl) return;
+  if(GL.rebuild) uploadMeshes();
+  if(GL.dirtyTex) uploadTextures();
+  resize3D();
+  const cv=$('#view3d'), W=cv.width, H=cv.height;
+  gl.viewport(0,0,W,H);
+  gl.clearColor(0,0,0,1); gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  const bg=BGS[ST.bg]||BGS.studio;
+
+  // backdrop
+  gl.disable(gl.DEPTH_TEST);
+  gl.useProgram(BGPROG.p);
+  gl.bindBuffer(gl.ARRAY_BUFFER,quadBuf);
+  gl.enableVertexAttribArray(BGPROG.a.aP);
+  gl.vertexAttribPointer(BGPROG.a.aP,2,gl.FLOAT,false,0,0);
+  gl.uniform3fv(BGPROG.u.uA,hex2rgb(bg.a).map(v=>v/255));
+  gl.uniform3fv(BGPROG.u.uB,hex2rgb(bg.b).map(v=>v/255));
+  gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+  gl.enable(gl.DEPTH_TEST);
+
+  const bb=G.bbox;
+  const target=[GL.panx,GL.pany,0];
+  const cy=Math.cos(GL.pitch), sy=Math.sin(GL.pitch);
+  const eye=[target[0]+GL.dist*Math.sin(GL.yaw)*cy, target[1]+GL.dist*sy, target[2]+GL.dist*Math.cos(GL.yaw)*cy];
+  const proj=M4.persp(rad(32),W/H,1,900);
+  const view=M4.look(eye,target,[0,1,0]);
+  const model=M4.trans(-bb.cx,bb.cy,0);
+  const vp=M4.mul(proj,view);
+
+  // backdrop shadow plane
+  const behind = eye[2]>=0 ? -1 : 1;
+  gl.useProgram(SHPROG.p);
+  gl.bindBuffer(gl.ARRAY_BUFFER,quadBuf);
+  gl.enableVertexAttribArray(SHPROG.a.aP);
+  gl.vertexAttribPointer(SHPROG.a.aP,2,gl.FLOAT,false,0,0);
+  const sz=Math.max(bb.w,bb.h)*0.62;
+  const shm=M4.mul(vp,M4.trans(2.5,-2.0,behind*Math.max(bb.w,bb.h)*0.36));
+  gl.uniformMatrix4fv(SHPROG.u.uMVP,false,shm);
+  gl.uniform4f(SHPROG.u.uRect,0,0,sz,sz);
+  gl.uniform1f(SHPROG.u.uFlip,behind>0?1:0);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,shadowTex);
+  gl.uniform1i(SHPROG.u.uT,0);
+  gl.depthMask(false);
+  gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+  gl.depthMask(true);
+
+  // garment
+  gl.useProgram(PROG.p);
+  const mvp=M4.mul(vp,M4.ident());
+  gl.uniformMatrix4fv(PROG.u.uMVP,false,vp);
+  gl.uniformMatrix4fv(PROG.u.uModel,false,model);
+  gl.uniform3fv(PROG.u.uCam,new Float32Array(eye));
+  gl.uniform2f(PROG.u.uTexel,1/TEXM,1/TEXM);
+  const P=ST.light*bg.tint;
+  const rot=(v,a)=>[v[0]*Math.cos(a)+v[2]*Math.sin(a), v[1], -v[0]*Math.sin(a)+v[2]*Math.cos(a)];
+  const ya=GL.yaw*0.8;
+  gl.uniform3fv(PROG.u.uL1d,new Float32Array(rot([-0.42,0.66,0.9],ya)));
+  gl.uniform3fv(PROG.u.uL1c,new Float32Array(bg.key.map(v=>v*0.95*P)));
+  gl.uniform3fv(PROG.u.uL2d,new Float32Array(rot([0.92,0.06,0.5],ya)));
+  gl.uniform3fv(PROG.u.uL2c,new Float32Array([0.3,0.34,0.42].map(v=>v*P)));
+  gl.uniform3fv(PROG.u.uL3d,new Float32Array(rot([-0.1,0.55,-1.0],ya)));
+  gl.uniform3fv(PROG.u.uL3c,new Float32Array([0.42,0.46,0.56].map(v=>v*P)));
+  gl.uniform3fv(PROG.u.uAmbT,new Float32Array(bg.amb));
+  gl.uniform3fv(PROG.u.uAmbB,new Float32Array(bg.amb.map(v=>v*0.45)));
+  gl.uniform1f(PROG.u.uNStr, 2.6*(0.35+ST.weave*0.65));
+  gl.uniform1f(PROG.u.uSheen, 0.2+ST.sheen*0.95);
+  gl.uniform1f(PROG.u.uExp, 1.0);
+  gl.uniform1f(PROG.u.uWire, 0);
+
+  for(const m of meshBufs){
+    gl.bindBuffer(gl.ARRAY_BUFFER,m.vb);
+    const st=32;
+    gl.enableVertexAttribArray(PROG.a.aPos); gl.vertexAttribPointer(PROG.a.aPos,3,gl.FLOAT,false,st,0);
+    gl.enableVertexAttribArray(PROG.a.aNrm); gl.vertexAttribPointer(PROG.a.aNrm,3,gl.FLOAT,false,st,12);
+    gl.enableVertexAttribArray(PROG.a.aUV);  gl.vertexAttribPointer(PROG.a.aUV,2,gl.FLOAT,false,st,24);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,texAlb[m.side]); gl.uniform1i(PROG.u.uAlb,0);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D,texMra[m.side]); gl.uniform1i(PROG.u.uMra,1);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,m.ib);
+    gl.drawElements(gl.TRIANGLES,m.count,m.type,0);
+    if(GL.wire){
+      gl.uniform1f(PROG.u.uWire,1);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,m.lb);
+      gl.drawElements(gl.LINES,m.lcount,m.type,0);
+      gl.uniform1f(PROG.u.uWire,0);
+    }
+  }
+}
+
+/* =====================================================================
+   13. 2D DESIGN CANVAS
+   ===================================================================== */
+const E={scale:1, ox:0, oy:0, drag:null, hover:null, snapX:false, snapY:false};
+
+function printArea(side){
+  const S=G.S;
+  const w=Math.min(30,S.chestHalf*2-9);
+  const top=(side==='back'?S.dropB:S.dropF)+7;
+  const h=Math.min(42,S.bodyLen-top-7);
+  return {x:-w/2,y:top,w,h};
+}
+function fit2D(){
+  const cv=$('#editor2d'), r=cv.parentElement.getBoundingClientRect();
+  E.scale=Math.min(r.width/TEXA,r.height/TEXA)*0.94;
+  E.ox=(r.width-TEXA*E.scale)/2; E.oy=(r.height-TEXA*E.scale)/2;
+  draw2D();
+}
+const S2T = (sx,sy)=>[(sx-E.ox)/E.scale,(sy-E.oy)/E.scale];      // screen -> texture px
+const T2S = (tx,ty)=>[tx*E.scale+E.ox, ty*E.scale+E.oy];
+const S2U = (sx,sy)=>{const t=S2T(sx,sy);return [IX(t[0]),IY(t[1])];};   // screen -> shirt cm
+const U2S = (x,y)=>T2S(TX(x),TY(y));
+
+function layerCorners(L){
+  measureLayer(L);
+  const w=(L.type==='text'?L._w:L.w), h=(L.type==='text'?L._h:L.h);
+  const c=Math.cos(rad(L.rot)), s=Math.sin(rad(L.rot));
+  return [[-w/2,-h/2],[w/2,-h/2],[w/2,h/2],[-w/2,h/2]]
+    .map(([dx,dy])=>U2S(L.x+dx*c-dy*s, L.y+dx*s+dy*c));
+}
+function hitLayer(sx,sy){
+  for(let i=ST.layers.length-1;i>=0;i--){
+    const L=ST.layers[i];
+    if(L.side!==ST.side||L.hidden||L.locked) continue;
+    measureLayer(L);
+    const [ux,uy]=S2U(sx,sy);
+    const c=Math.cos(rad(-L.rot)), s=Math.sin(rad(-L.rot));
+    const dx=ux-L.x, dy=uy-L.y;
+    const lx=dx*c-dy*s, ly=dx*s+dy*c;
+    const w=(L.type==='text'?L._w:L.w), h=(L.type==='text'?L._h:L.h);
+    if(Math.abs(lx)<=w/2+.6&&Math.abs(ly)<=h/2+.6) return L;
+  }
+  return null;
+}
+function draw2D(){
+  const cv=$('#editor2d'); if(!cv) return;
+  const r=cv.parentElement.getBoundingClientRect();
+  const dpr=Math.min(2,window.devicePixelRatio||1);
+  const W=Math.max(1,Math.round(r.width*dpr)), H=Math.max(1,Math.round(r.height*dpr));
+  if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H;}
+  const x=cv.getContext('2d');
+  x.setTransform(dpr,0,0,dpr,0,0);
+  x.clearRect(0,0,r.width,r.height);
+
+  // soft ground shadow behind the flat garment
+  x.save();
+  x.translate(E.ox,E.oy); x.scale(E.scale,E.scale);
+  x.filter='blur(16px)'; x.globalAlpha=.45;
+  x.drawImage(TEXT['alb_'+ST.side],10,16);
+  x.filter='none'; x.globalAlpha=1;
+  x.drawImage(TEXT['alb_'+ST.side],0,0);
+  x.restore();
+
+  // print area guide
+  if(ST.guides){
+    const p=printArea(ST.side);
+    const a=U2S(p.x,p.y), b=U2S(p.x+p.w,p.y+p.h);
+    x.save();
+    x.strokeStyle='rgba(108,140,255,.55)'; x.lineWidth=1; x.setLineDash([5,4]);
+    x.strokeRect(a[0],a[1],b[0]-a[0],b[1]-a[1]);
+    x.setLineDash([]);
+    x.fillStyle='rgba(108,140,255,.75)'; x.font='10px system-ui';
+    x.fillText('print area  '+Math.round(p.w)+'×'+Math.round(p.h)+' cm',a[0],a[1]-5);
+    x.restore();
+  }
+  // centre snap guide
+  if(E.snapX){const c=U2S(0,0);x.save();x.strokeStyle='rgba(34,211,238,.8)';x.lineWidth=1;
+    x.setLineDash([4,4]);x.beginPath();x.moveTo(c[0],0);x.lineTo(c[0],r.height);x.stroke();x.restore();}
+
+  // selection
+  const L=ST.layers.find(l=>l.id===ST.sel);
+  if(L&&L.side===ST.side&&!L.hidden){
+    const c=layerCorners(L);
+    x.save();
+    x.strokeStyle='#6c8cff'; x.lineWidth=1.4;
+    x.beginPath(); c.forEach((p,i)=>i?x.lineTo(p[0],p[1]):x.moveTo(p[0],p[1])); x.closePath(); x.stroke();
+    const mid=[(c[0][0]+c[1][0])/2,(c[0][1]+c[1][1])/2];
+    const nrm=[c[0][1]-c[3][1],c[3][0]-c[0][0]];
+    const nl=Math.hypot(nrm[0],nrm[1])||1;
+    const rot=[mid[0]+nrm[0]/nl*26, mid[1]+nrm[1]/nl*26];
+    x.beginPath(); x.moveTo(mid[0],mid[1]); x.lineTo(rot[0],rot[1]); x.stroke();
+    x.fillStyle='#0e1420';
+    for(const p of c){x.beginPath();x.rect(p[0]-4,p[1]-4,8,8);x.fill();x.stroke();}
+    x.beginPath(); x.arc(rot[0],rot[1],5,0,7); x.fill(); x.stroke();
+    x.restore();
+    L._handles={corners:c,rot};
+  }
+}
+function nearest(pts,sx,sy,rad){
+  let bi=-1,bd=rad*rad;
+  pts.forEach((p,i)=>{const d=(p[0]-sx)**2+(p[1]-sy)**2; if(d<bd){bd=d;bi=i;}});
+  return bi;
+}
+function bindEditor(){
+  const cv=$('#editor2d');
+  let panning=null;
+  cv.addEventListener('pointerdown',ev=>{
+    cv.setPointerCapture(ev.pointerId);
+    const r=cv.getBoundingClientRect(), sx=ev.clientX-r.left, sy=ev.clientY-r.top;
+    if(ev.button===1||ev.button===2||ev.shiftKey&&ev.button===0&&!hitLayer(sx,sy)){
+      panning={sx,sy,ox:E.ox,oy:E.oy}; return;
+    }
+    const L=ST.layers.find(l=>l.id===ST.sel);
+    if(L&&L._handles&&L.side===ST.side){
+      const rp=L._handles.rot;
+      if((rp[0]-sx)**2+(rp[1]-sy)**2<10*10){
+        E.drag={mode:'rot',L,start:Math.atan2(sy-U2S(L.x,L.y)[1],sx-U2S(L.x,L.y)[0]),rot0:L.rot};
+        return;
+      }
+      const ci=nearest(L._handles.corners,sx,sy,9);
+      if(ci>=0){
+        const c=U2S(L.x,L.y);
+        E.drag={mode:'scale',L,d0:Math.hypot(sx-c[0],sy-c[1]),
+                w0:L.w,h0:L.h,size0:L.size,sw0:L.strokeW};
+        return;
+      }
+    }
+    const hit=hitLayer(sx,sy);
+    if(hit){
+      select(hit.id);
+      const [ux,uy]=S2U(sx,sy);
+      E.drag={mode:'move',L:hit,dx:hit.x-ux,dy:hit.y-uy,x0:hit.x,y0:hit.y};
+    }else{ select(null); }
+    draw2D();
+  });
+  cv.addEventListener('pointermove',ev=>{
+    const r=cv.getBoundingClientRect(), sx=ev.clientX-r.left, sy=ev.clientY-r.top;
+    if(panning){E.ox=panning.ox+(sx-panning.sx);E.oy=panning.oy+(sy-panning.sy);draw2D();return;}
+    const d=E.drag; if(!d) return;
+    const L=d.L;
+    if(d.mode==='move'){
+      const [ux,uy]=S2U(sx,sy);
+      L.x=ux+d.dx; L.y=uy+d.dy;
+      if(ev.shiftKey){                       // constrain to the dominant axis
+        if(Math.abs(L.x-d.x0)>Math.abs(L.y-d.y0)) L.y=d.y0; else L.x=d.x0;
+      }
+      E.snapX=Math.abs(L.x)<1.1; if(E.snapX) L.x=0;
+    }else if(d.mode==='scale'){
+      const c=U2S(L.x,L.y);
+      const f=clamp(Math.hypot(sx-c[0],sy-c[1])/Math.max(6,d.d0),.06,14);
+      if(L.type==='text'){ L.size=clamp(d.size0*f,.4,40); if(d.sw0) L.strokeW=d.sw0*f; }
+      else { L.w=clamp(d.w0*f,.4,90); L.h=clamp(d.h0*f,.4,90); if(d.sw0) L.strokeW=d.sw0*f; }
+    }else if(d.mode==='rot'){
+      const c=U2S(L.x,L.y);
+      let a=(Math.atan2(sy-c[1],sx-c[0])-d.start)*180/Math.PI+d.rot0;
+      if(ev.shiftKey) a=Math.round(a/15)*15;
+      L.rot=((a+180)%360+360)%360-180;
+    }
+    composite(); syncProps();
+  });
+  const end=()=>{
+    if(panning){panning=null;return;}
+    if(E.drag){E.drag=null;E.snapX=false;pushHistory();composite();}
+  };
+  cv.addEventListener('pointerup',end);
+  cv.addEventListener('pointercancel',end);
+  cv.addEventListener('contextmenu',e=>e.preventDefault());
+  cv.addEventListener('wheel',ev=>{
+    ev.preventDefault();
+    const r=cv.getBoundingClientRect(), sx=ev.clientX-r.left, sy=ev.clientY-r.top;
+    const t=S2T(sx,sy);
+    E.scale=clamp(E.scale*(ev.deltaY<0?1.12:1/1.12),.08,6);
+    E.ox=sx-t[0]*E.scale; E.oy=sy-t[1]*E.scale;
+    draw2D();
+  },{passive:false});
+  cv.addEventListener('dblclick',()=>{
+    const L=ST.layers.find(l=>l.id===ST.sel);
+    if(L&&L.type==='text'){const t=$('#pText'); if(t){t.focus();t.select();}}
+  });
+}
+
+/* =====================================================================
+   14. 3D ORBIT
+   ===================================================================== */
+function bind3D(){
+  const cv=$('#view3d'); if(!cv) return;
+  let drag=null;
+  cv.addEventListener('pointerdown',ev=>{
+    cv.setPointerCapture(ev.pointerId);
+    drag={x:ev.clientX,y:ev.clientY,yaw:GL.yaw,pitch:GL.pitch,px:GL.panx,py:GL.pany,
+          pan:(ev.button===2||ev.button===1||ev.shiftKey)};
+    ST.spin=false; $('#btnSpin').classList.remove('on');
+  });
+  cv.addEventListener('pointermove',ev=>{
+    if(!drag) return;
+    const dx=ev.clientX-drag.x, dy=ev.clientY-drag.y;
+    if(drag.pan){
+      GL.panx=drag.px-dx*GL.dist*0.0016;
+      GL.pany=drag.py+dy*GL.dist*0.0016;
+    }else{
+      GL.yaw=drag.yaw+dx*0.0072;
+      GL.pitch=clamp(drag.pitch-dy*0.006,-0.95,0.95);
+    }
+  });
+  const up=()=>drag=null;
+  cv.addEventListener('pointerup',up); cv.addEventListener('pointercancel',up);
+  cv.addEventListener('contextmenu',e=>e.preventDefault());
+  cv.addEventListener('wheel',ev=>{ev.preventDefault();
+    GL.dist=clamp(GL.dist*(ev.deltaY<0?0.9:1.111),18,600);},{passive:false});
+}
+function spinTo(yaw){
+  const from=GL.yaw, to=yaw, t0=performance.now();
+  const step=()=>{
+    const t=clamp((performance.now()-t0)/420,0,1), e=t<.5?2*t*t:1-2*(1-t)*(1-t);
+    GL.yaw=lerp(from,to,e);
+    if(t<1) requestAnimationFrame(step);
+  };
+  step();
+}
+
+/* =====================================================================
+   15. UI
+   ===================================================================== */
+function el(t,a,...kids){
+  const e=document.createElement(t);
+  if(a) for(const k in a){
+    if(k==='class')e.className=a[k];
+    else if(k==='html')e.innerHTML=a[k];
+    else if(k.startsWith('on'))e.addEventListener(k.slice(2),a[k]);
+    else if(a[k]!==null&&a[k]!==undefined)e.setAttribute(k,a[k]);
+  }
+  for(const c of kids.flat()) if(c!=null) e.append(c.nodeType?c:document.createTextNode(c));
+  return e;
+}
+let toastT;
+function toast(msg){
+  const t=$('#toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),1900);
+}
+const PALETTE=['#ffffff','#d7d9dd','#a8adb6','#6b7280','#3b4149','#1b1e24','#0b0d10',
+  '#0f3f8f','#2563eb','#38bdf8','#0e7490','#065f46','#16a34a','#84cc16',
+  '#facc15','#f59e0b','#ea580c','#dc2626','#9f1239','#f472b6','#a855f7',
+  '#4c1d95','#7c3aed','#f5e6cf','#c8a97e','#6b4423','#14532d'];
+
+function styleThumb(S,c){
+  const x=c.getContext('2d'), W=c.width, H=c.height;
+  const poly=silhouette(S,'front'), bb=bboxOf([poly]);
+  const s=Math.min(W/bb.w,H/bb.h)*0.88;
+  x.clearRect(0,0,W,H); x.save();
+  x.translate(W/2,H/2); x.scale(s,s); x.translate(-bb.cx,-bb.cy);
+  const trace=p=>{x.beginPath();x.moveTo(p[0][0],p[0][1]);
+    for(let i=1;i<p.length;i++)x.lineTo(p[i][0],p[i][1]);x.closePath();};
+  if(S.hood){const h=hoodPoly(S);trace(h);x.fillStyle='#79839a';x.fill();}
+  trace(poly);
+  const g=x.createLinearGradient(0,bb.y0,0,bb.y1);
+  g.addColorStop(0,'#c3cad8'); g.addColorStop(1,'#8f98a9');
+  x.fillStyle=g; x.fill();
+  x.lineWidth=1.1/s; x.strokeStyle='rgba(255,255,255,.5)'; x.stroke();
+  const col=collarPoly(S);
+  if(col){trace(col);x.fillStyle='#dfe4ee';x.fill();x.stroke();}
+  if(S.placket){x.fillStyle='rgba(0,0,0,.14)';
+    x.fillRect(-S.placket.halfW,S.dropF-1,S.placket.halfW*2,S.placket.len);}
+  if(S.pocket){const p=pocketPoly(S);trace(p);x.fillStyle='rgba(0,0,0,.12)';x.fill();}
+  x.restore();
+}
+function buildStyleGallery(){
+  const g=$('#styleGal'); g.innerHTML='';
+  for(const S of STYLES){
+    const c=el('canvas',{width:84,height:62});
+    styleThumb(S,c);
+    const it=el('div',{class:'it'+(S.id===ST.styleId?' on':''),title:S.name,
+      onclick:()=>{ST.styleId=S.id;buildStyleGallery();rebuildAll();pushHistory();toast(S.name+' selected');}},
+      c, el('span',null,S.name));
+    g.append(it);
+  }
+}
+function buildSwatches(){
+  const w=$('#swBody'); w.innerHTML='';
+  for(const c of PALETTE){
+    w.append(el('i',{style:'background:'+c, class:(c.toLowerCase()===ST.body.toLowerCase()?'on':''),
+      title:c, onclick:()=>setBody(c)}));
+  }
+}
+function setBody(c){
+  ST.body=c; $('#colBody').value=c; $('#colBodyHex').value=c.toUpperCase();
+  if(G._trimLinked){ST.trim=c;$('#colTrim').value=c;}
+  buildSwatches(); refreshBase(); pushHistory();
+}
+function buildBgGallery(){
+  const g=$('#bgGal'); g.innerHTML='';
+  for(const k in BGS){
+    g.append(el('div',{class:'chip'+(k===ST.bg?' on':''),
+      style:'background:linear-gradient(160deg,'+BGS[k].a+','+BGS[k].b+');color:'+(lum(BGS[k].a)>.6?'#111':'#fff'),
+      onclick:()=>{ST.bg=k;buildBgGallery();}},BGS[k].name));
+  }
+}
+const STAMPS=['⭐','🔥','💀','🌊','🌴','⚡','🖤','🎧','🚀','🐉','🌵','☕','🎸','🏔️','🍕','👾',
+              '🦋','🌙','☀️','🎯','🏆','🧊','🍄','🛹'];
+function buildStamps(){
+  const s=$('#stamps'); s.innerHTML='';
+  for(const e of STAMPS) s.append(el('button',{title:'Add '+e,onclick:()=>addText(e,{size:11,font:'system-ui'})},e));
+}
+
+/* ---------- layer list ---------- */
+function renderLayers(){
+  const box=$('#layerList'); box.innerHTML='';
+  const list=ST.layers.filter(L=>L.side===ST.side);
+  $('#layerCount').textContent=list.length;
+  if(!list.length){box.append(el('div',{class:'empty'},'No artwork on the '+ST.side+' yet'));return;}
+  for(let i=list.length-1;i>=0;i--){
+    const L=list[i];
+    const th=el('div',{class:'th'});
+    if(L.type==='image'&&L._img){th.append(el('img',{src:L.src}));}
+    else if(L.type==='text'){th.append(el('span',{style:'font:700 15px '+(L.font||'system-ui')+';color:'+(L.color||'#ccc')},
+      ([...String(L.text||'?')][0]||'T')));}
+    else {const c=el('canvas',{width:32,height:32}); const x=c.getContext('2d');
+      x.translate(16,16); shapePath(x,L.kind,22,22); x.fillStyle=L.fill&&L.fill!=='none'?L.fill:'#556';
+      x.fill('evenodd'); th.append(c);}
+    const row=el('div',{class:'layer'+(L.id===ST.sel?' on':''), onclick:()=>{select(L.id);draw2D();}},
+      th,
+      el('div',{class:'nm'},L.name||L.type, el('em',null,(PRINTS[L.print]||PRINTS.screen).label.split('—')[0].trim())),
+      el('div',{class:'act'},
+        el('button',{class:'mini',title:L.hidden?'Show':'Hide',
+          onclick:e=>{e.stopPropagation();L.hidden=!L.hidden;composite();renderLayers();pushHistory();}},L.hidden?'○':'◉'),
+        el('button',{class:'mini',title:L.locked?'Unlock':'Lock',
+          onclick:e=>{e.stopPropagation();L.locked=!L.locked;renderLayers();}},L.locked?'🔒':'🔓'),
+        el('button',{class:'mini',title:'Duplicate',
+          onclick:e=>{e.stopPropagation();dupLayer(L);}},'⧉'),
+        el('button',{class:'mini',title:'Delete',
+          onclick:e=>{e.stopPropagation();delLayer(L);}},'✕')
+      ));
+    box.append(row);
+  }
+}
+function select(id){ST.sel=id;renderLayers();syncProps();}
+function dupLayer(L){
+  const c=Object.assign({},L); c.id=uid(); c.x+=2.5; c.y+=2.5; c.name=(L.name||'Layer')+' copy';
+  delete c._handles;
+  ST.layers.push(c); select(c.id); composite(); pushHistory();
+}
+function delLayer(L){
+  ST.layers=ST.layers.filter(l=>l!==L);
+  if(ST.sel===L.id) ST.sel=null;
+  composite(); renderLayers(); syncProps(); pushHistory();
+}
+
+/* ---------- properties ---------- */
+function field(label,node){return el('div',{style:'margin-bottom:9px'},el('label',{class:'f'},label),node);}
+function num(v,min,max,step,on){
+  return el('input',{type:'number',value:(+v).toFixed(step<1?1:0),min,max,step,
+    oninput:e=>{on(parseFloat(e.target.value)||0);}});
+}
+function slider(v,min,max,step,on,fmt){
+  const b=el('b',null,fmt?fmt(v):v);
+  const r=el('input',{type:'range',min,max,step,value:v,
+    oninput:e=>{const val=parseFloat(e.target.value);b.textContent=fmt?fmt(val):val;on(val,false);},
+    onchange:e=>on(parseFloat(e.target.value),true)});
+  return el('div',{class:'rng'},r,b);
+}
+function syncProps(){
+  const box=$('#props'); box.innerHTML='';
+  const L=ST.layers.find(l=>l.id===ST.sel);
+  if(!L){box.append(el('div',{class:'empty'},'Select a layer to edit it'));return;}
+  const up=(commit)=>{composite();if(commit)pushHistory();};
+
+  box.append(field('Name',el('input',{type:'text',value:L.name||'',
+    oninput:e=>{L.name=e.target.value;},onchange:()=>{renderLayers();pushHistory();}})));
+
+  if(L.type==='text'){
+    box.append(field('Text',el('textarea',{id:'pText',spellcheck:false,
+      oninput:e=>{L.text=e.target.value;up(false);},onchange:()=>{renderLayers();pushHistory();}},L.text||'')));
+    box.append(field('Font',el('select',{onchange:e=>{L.font=e.target.value;up(true);}},
+      FONTS.map(f=>el('option',{value:f,selected:f===L.font?'':null},f)))));
+    box.append(el('div',{class:'grid2'},
+      field('Weight',el('select',{onchange:e=>{L.weight=+e.target.value;up(true);}},
+        [400,600,700,900].map(w=>el('option',{value:w,selected:w===L.weight?'':null},w)))),
+      field('Colour',el('input',{type:'color',value:L.color||'#111111',
+        oninput:e=>{L.color=e.target.value;up(false);},onchange:()=>pushHistory()}))));
+    box.append(field('Size — '+L.size.toFixed(1)+' cm',
+      slider(L.size,.8,26,.1,(v,c)=>{L.size=v;up(c);},v=>v.toFixed(1))));
+    box.append(field('Letter spacing',
+      slider(L.spacing||0,-.5,3,.05,(v,c)=>{L.spacing=v;up(c);},v=>v.toFixed(2))));
+    box.append(field('Arc',slider(L.curve||0,-100,100,1,(v,c)=>{L.curve=v;up(c);})));
+    box.append(el('div',{class:'grid2'},
+      field('Outline',el('input',{type:'color',value:L.stroke||'#000000',
+        oninput:e=>{L.stroke=e.target.value;up(false);},onchange:()=>pushHistory()})),
+      field('Outline w.',slider(L.strokeW||0,0,1.4,.02,(v,c)=>{L.strokeW=v;up(c);},v=>v.toFixed(2)))));
+  }
+  if(L.type==='shape'){
+    box.append(field('Shape',el('select',{onchange:e=>{L.kind=e.target.value;up(true);renderLayers();}},
+      [['rect','Rectangle'],['round','Rounded'],['circle','Circle / ellipse'],['triangle','Triangle'],
+       ['star','Star'],['hex','Hexagon'],['heart','Heart'],['ring','Ring'],['bar','Bar']]
+        .map(([v,n])=>el('option',{value:v,selected:v===L.kind?'':null},n)))));
+    box.append(el('div',{class:'grid2'},
+      field('Fill',el('input',{type:'color',value:L.fill==='none'?'#000000':(L.fill||'#111111'),
+        oninput:e=>{L.fill=e.target.value;up(false);},onchange:()=>pushHistory()})),
+      field('Outline',el('input',{type:'color',value:L.stroke||'#ffffff',
+        oninput:e=>{L.stroke=e.target.value;up(false);},onchange:()=>pushHistory()}))));
+    box.append(el('div',{class:'row'},
+      el('button',{class:'btn sm',style:'flex:1',onclick:()=>{L.fill=L.fill==='none'?'#111111':'none';up(true);syncProps();}},
+        L.fill==='none'?'Fill on':'Fill off')));
+    box.append(field('Outline width',slider(L.strokeW||0,0,2,.05,(v,c)=>{L.strokeW=v;up(c);},v=>v.toFixed(2))));
+    box.append(el('div',{class:'grid2'},
+      field('Width cm',num(L.w,.5,80,.5,v=>{L.w=v;up(true);})),
+      field('Height cm',num(L.h,.5,80,.5,v=>{L.h=v;up(true);}))));
+  }
+  if(L.type==='image'){
+    box.append(el('div',{class:'grid2'},
+      field('Width cm',num(L.w,.5,80,.5,v=>{const a=L.h/L.w;L.w=v;L.h=v*a;up(true);})),
+      field('Height cm',num(L.h,.5,80,.5,v=>{L.h=v;up(true);}))));
+    const cb=el('input',{type:'checkbox',style:'width:auto;height:auto',
+      onchange:e=>{L.removeBg=e.target.checked;prepImage(L);up(true);}});
+    if(L.removeBg) cb.checked=true;
+    box.append(el('div',{class:'row',style:'margin-bottom:8px'},cb,
+      el('label',{class:'f',style:'margin:0;flex:1'},'Knock out background')));
+    if(L.removeBg) box.append(field('Tolerance',
+      slider(L.bgTol||60,10,180,2,(v,c)=>{L.bgTol=v;prepImage(L);up(c);})));
+    const tb=el('input',{type:'checkbox',style:'width:auto;height:auto',
+      onchange:e=>{L.tinted=e.target.checked;prepImage(L);up(true);syncProps();}});
+    if(L.tinted) tb.checked=true;
+    box.append(el('div',{class:'row',style:'margin-bottom:8px'},tb,
+      el('label',{class:'f',style:'margin:0;flex:1'},'Recolour to one ink'),
+      L.tinted?el('input',{type:'color',value:L.tint||'#111111',
+        oninput:e=>{L.tint=e.target.value;prepImage(L);up(false);},onchange:()=>pushHistory()}):null));
+  }
+
+  box.append(field('Rotation — '+Math.round(L.rot)+'°',
+    slider(L.rot,-180,180,1,(v,c)=>{L.rot=v;up(c);},v=>Math.round(v)+'°')));
+  box.append(field('Opacity',slider(L.op===undefined?1:L.op,.05,1,.01,(v,c)=>{L.op=v;up(c);},v=>Math.round(v*100)+'%')));
+  box.append(field('Print method',el('select',{onchange:e=>{L.print=e.target.value;L._mraKey=null;up(true);renderLayers();}},
+    Object.keys(PRINTS).map(k=>el('option',{value:k,selected:k===L.print?'':null},PRINTS[k].label)))));
+
+  box.append(el('div',{class:'grid3',style:'margin-top:10px'},
+    el('button',{class:'chip',title:'Centre horizontally',onclick:()=>{L.x=0;up(true);}},'⇔ Centre'),
+    el('button',{class:'chip',title:'Centre in print area',onclick:()=>{
+      const p=printArea(L.side);L.x=0;L.y=p.y+p.h/2;up(true);}},'⊹ Middle'),
+    el('button',{class:'chip',title:'Fit to print area',onclick:()=>{
+      const p=printArea(L.side);measureLayer(L);
+      const w=(L.type==='text'?L._w:L.w),h=(L.type==='text'?L._h:L.h);
+      const f=Math.min(p.w/w,p.h/h);
+      if(L.type==='text')L.size*=f; else {L.w*=f;L.h*=f;}
+      L.x=0;L.y=p.y+p.h/2;L.rot=0;up(true);}},'⤢ Fit')));
+  box.append(el('div',{class:'grid3',style:'margin-top:6px'},
+    el('button',{class:'chip',onclick:()=>{
+      const i=ST.layers.indexOf(L); if(i<ST.layers.length-1){ST.layers.splice(i,1);ST.layers.push(L);up(true);renderLayers();}}},'↑ Front'),
+    el('button',{class:'chip',onclick:()=>{
+      const i=ST.layers.indexOf(L); if(i>0){ST.layers.splice(i,1);ST.layers.unshift(L);up(true);renderLayers();}}},'↓ Back'),
+    el('button',{class:'chip',onclick:()=>{
+      L.side=L.side==='front'?'back':'front'; ST.side=L.side; setSide(L.side); up(true);}},'⇄ Flip side')));
+  box.append(el('div',{class:'row',style:'margin-top:8px'},
+    el('button',{class:'btn sm',style:'flex:1',onclick:()=>dupLayer(L)},'⧉ Duplicate'),
+    el('button',{class:'btn sm',style:'flex:1',onclick:()=>delLayer(L)},'✕ Delete')));
+}
+
+/* =====================================================================
+   16. ADDING ARTWORK
+   ===================================================================== */
+const IMGCACHE=new Map();
+function loadImage(src){
+  if(IMGCACHE.has(src)) return Promise.resolve(IMGCACHE.get(src));
+  return new Promise((res,rej)=>{
+    const i=new Image();
+    i.onload=()=>{IMGCACHE.set(src,i);res(i);};
+    i.onerror=rej;
+    i.src=src;
+  });
+}
+function prepImage(L){
+  const raw=L._raw; if(!raw||!raw.width){L._img=raw;return;}
+  L._mraKey=null; L._hatchKey=null;
+  if(!L.removeBg&&!L.tinted){L._img=raw;return;}
+  const c=makeCanvas(raw.width,raw.height), x=c.getContext('2d');
+  x.drawImage(raw,0,0);
+  if(L.removeBg){
+    const d=x.getImageData(0,0,c.width,c.height), a=d.data, W=c.width,H=c.height;
+    const pick=(px,py)=>{const k=(py*W+px)*4;return [a[k],a[k+1],a[k+2],a[k+3]];};
+    const cs=[pick(0,0),pick(W-1,0),pick(0,H-1),pick(W-1,H-1)].filter(p=>p[3]>8);
+    const key=cs.length?cs.reduce((s,p)=>[s[0]+p[0]/cs.length,s[1]+p[1]/cs.length,s[2]+p[2]/cs.length],[0,0,0]):[255,255,255];
+    const tol=L.bgTol||60, soft=tol*0.55;
+    for(let i=0;i<a.length;i+=4){
+      const d2=Math.hypot(a[i]-key[0],a[i+1]-key[1],a[i+2]-key[2]);
+      if(d2<soft) a[i+3]=0;
+      else if(d2<tol) a[i+3]=Math.round(a[i+3]*(d2-soft)/(tol-soft));
+    }
+    x.putImageData(d,0,0);
+  }
+  if(L.tinted){
+    x.globalCompositeOperation='source-in';
+    x.fillStyle=L.tint||'#111111';
+    x.fillRect(0,0,c.width,c.height);
+    x.globalCompositeOperation='source-over';
+  }
+  L._img=c;
+}
+async function addImage(src,name){
+  let img;
+  try{ img=await loadImage(src); }catch(e){ toast('That file could not be read'); return; }
+  const p=printArea(ST.side), ar=img.width/Math.max(1,img.height);
+  let w=Math.min(p.w*.66,22), h=w/ar;
+  if(h>p.h*.6){h=p.h*.6;w=h*ar;}
+  const L=newLayer({type:'image',src,_raw:img,_img:img,w,h,x:0,y:p.y+p.h*.36,
+    name:name||'Logo',print:'screen',op:1});
+  ST.layers.push(L); select(L.id); composite(); pushHistory();
+  toast('Logo added — drag it on the shirt');
+}
+function addText(text,extra){
+  const p=printArea(ST.side);
+  const L=newLayer(Object.assign({type:'text',text:text||'YOUR TEXT',font:'Impact',weight:700,
+    size:6.5,spacing:.06,curve:0,color:'#16181d',stroke:'#ffffff',strokeW:0,
+    x:0,y:p.y+p.h*.4,name:(text||'Text').slice(0,14),print:'screen',op:1},extra||{}));
+  if(lum(ST.body)<.45) L.color='#f3f5f8';
+  ST.layers.push(L); select(L.id); composite(); pushHistory(); draw2D();
+}
+function addShape(){
+  const p=printArea(ST.side);
+  const L=newLayer({type:'shape',kind:'star',w:12,h:12,fill:'#16181d',stroke:'#ffffff',strokeW:0,
+    x:0,y:p.y+p.h*.4,name:'Shape',print:'screen',op:1});
+  if(lum(ST.body)<.45) L.fill='#f3f5f8';
+  ST.layers.push(L); select(L.id); composite(); pushHistory();
+}
+function handleFiles(files){
+  for(const f of files){
+    if(!f.type.startsWith('image/')) continue;
+    const r=new FileReader();
+    r.onload=()=>addImage(r.result,f.name.replace(/\.[^.]+$/,''));
+    r.readAsDataURL(f);
+  }
+}
+
+/* =====================================================================
+   17. REFRESH LEVELS
+   ===================================================================== */
+function rebuildAll(){ rebuildGarment(true); renderLayers(); fit2D(); }
+function refreshShade(){
+  G.shade={front:buildShade(G.polyF,'front'),back:buildShade(G.polyB,'back')};
+  G.fab=makeFabricTiles(); repaintBase(); composite();
+}
+function refreshBase(){ G.fab=makeFabricTiles(); repaintBase(); composite(); }
+function setSide(s){
+  ST.side=s;
+  $$('#sideSeg button').forEach(b=>b.classList.toggle('on',b.dataset.side===s));
+  $('#sideLabel').textContent=s==='front'?'Front':'Back';
+  const sel=ST.layers.find(l=>l.id===ST.sel);
+  if(sel&&sel.side!==s) ST.sel=null;
+  renderLayers(); syncProps(); draw2D();
+  spinTo(s==='front'?0:Math.PI);
+}
+
+/* =====================================================================
+   18. HISTORY
+   ===================================================================== */
+const HIST={stack:[],i:-1,busy:false};
+function serialize(){
+  return {v:1, style:ST.styleId, body:ST.body, trim:ST.trim, button:ST.button, stitch:ST.stitch,
+    fabric:ST.fabric, sheen:ST.sheen, weave:ST.weave, wrinkle:ST.wrinkle, bg:ST.bg, light:ST.light,
+    side:ST.side, sel:ST.sel,
+    layers:ST.layers.map(L=>{const o={};for(const k in L) if(!k.startsWith('_')) o[k]=L[k];return o;})};
+}
+function pushHistory(){
+  if(HIST.busy) return;
+  const s=JSON.stringify(serialize());
+  if(HIST.stack[HIST.i]===s) return;
+  HIST.stack=HIST.stack.slice(0,HIST.i+1);
+  HIST.stack.push(s);
+  if(HIST.stack.length>80) HIST.stack.shift();
+  HIST.i=HIST.stack.length-1;
+  updateHistBtns();
+}
+function updateHistBtns(){
+  $('#btnUndo').disabled=HIST.i<=0;
+  $('#btnRedo').disabled=HIST.i>=HIST.stack.length-1;
+}
+async function applyState(o,keepHist){
+  HIST.busy=true;
+  const geoChanged = o.style!==ST.styleId;
+  const shadeChanged = geoChanged || o.wrinkle!==ST.wrinkle;
+  const baseChanged = shadeChanged || o.body!==ST.body||o.trim!==ST.trim||o.button!==ST.button||
+    o.stitch!==ST.stitch||o.fabric!==ST.fabric||o.sheen!==ST.sheen||o.weave!==ST.weave;
+  Object.assign(ST,{styleId:o.style,body:o.body,trim:o.trim,button:o.button,stitch:o.stitch,
+    fabric:o.fabric,sheen:o.sheen,weave:o.weave,wrinkle:o.wrinkle,bg:o.bg||ST.bg,
+    light:o.light===undefined?ST.light:o.light,sel:o.sel||null});
+  ST.layers=[];
+  for(const raw of (o.layers||[])){
+    const L=newLayer(Object.assign({},raw));
+    if(L.type==='image'&&L.src){
+      try{ L._raw=await loadImage(L.src); prepImage(L); }catch(e){}
+    }
+    ST.layers.push(L);
+  }
+  if(geoChanged) rebuildGarment(true);
+  else if(shadeChanged) refreshShade();
+  else if(baseChanged) refreshBase();
+  else composite();
+  if(o.side&&o.side!==ST.side){ST.side=o.side;
+    $$('#sideSeg button').forEach(b=>b.classList.toggle('on',b.dataset.side===ST.side));
+    $('#sideLabel').textContent=ST.side==='front'?'Front':'Back';}
+  syncControls(); buildStyleGallery(); buildSwatches(); renderLayers(); syncProps(); draw2D();
+  HIST.busy=false;
+  if(!keepHist) pushHistory();
+}
+function undo(){ if(HIST.i>0){HIST.i--;applyState(JSON.parse(HIST.stack[HIST.i]),true);updateHistBtns();toast('Undo');} }
+function redo(){ if(HIST.i<HIST.stack.length-1){HIST.i++;applyState(JSON.parse(HIST.stack[HIST.i]),true);updateHistBtns();toast('Redo');} }
+
+/* =====================================================================
+   19. EXPORT
+   ===================================================================== */
+function dl(name,url){const a=el('a',{href:url,download:name});document.body.append(a);a.click();a.remove();}
+function shot3D(){
+  draw3D();
+  dl('shirt-3d-'+ST.styleId+'.png',$('#view3d').toDataURL('image/png'));
+  toast('3D view saved');
+}
+function flatMockup(side,withBg){
+  const bb=G.bbox, pad=2;
+  const x0=Math.floor(TX(bb.x0-pad)), y0=Math.floor(TY(bb.y0-pad));
+  const w=Math.ceil(TS(bb.w+pad*2)), h=Math.ceil(TS(bb.h+pad*2));
+  const c=makeCanvas(w,h), x=c.getContext('2d');
+  if(withBg){const g=x.createLinearGradient(0,0,0,h);
+    g.addColorStop(0,'#f7f8fa');g.addColorStop(1,'#dfe3ea');x.fillStyle=g;x.fillRect(0,0,w,h);
+    x.save();x.filter='blur(14px)';x.globalAlpha=.35;
+    x.drawImage(TEXT['alb_'+side],-x0+9,-y0+13);x.restore();}
+  x.drawImage(TEXT['alb_'+side],-x0,-y0);
+  return c;
+}
+function artworkOnly(side){
+  const bb=G.bbox;
+  const c=makeCanvas(TEXA,TEXA), x=c.getContext('2d');
+  for(const L of ST.layers) if(L.side===side&&!L.hidden) drawLayer(x,L,'alb');
+  // crop to used pixels
+  const d=x.getImageData(0,0,TEXA,TEXA).data;
+  let a=TEXA,b=TEXA,cc=0,dd=0,any=false;
+  for(let j=0;j<TEXA;j++)for(let i=0;i<TEXA;i++){
+    if(d[(j*TEXA+i)*4+3]>4){any=true;if(i<a)a=i;if(j<b)b=j;if(i>cc)cc=i;if(j>dd)dd=j;}}
+  if(!any) return null;
+  const out=makeCanvas(cc-a+9,dd-b+9), ox=out.getContext('2d');
+  ox.drawImage(c,-a+4,-b+4);
+  return out;
+}
+function exportMenu(anchor){
+  const old=$('#expMenu'); if(old){old.remove();return;}
+  const m=el('div',{id:'expMenu',class:'menu'});
+  const item=(t,sub,fn)=>m.append(el('div',{class:'mi',onclick:()=>{m.remove();fn();}},
+    el('b',null,t),el('em',null,sub)));
+  item('3D preview','PNG of the current camera angle',shot3D);
+  item('Flat mockup — front','Studio backdrop, print ready',()=>{
+    dl('mockup-front.png',flatMockup('front',true).toDataURL('image/png'));toast('Front mockup saved');});
+  item('Flat mockup — back','Studio backdrop, print ready',()=>{
+    dl('mockup-back.png',flatMockup('back',true).toDataURL('image/png'));toast('Back mockup saved');});
+  item('Transparent garment','Flat shirt on transparency',()=>{
+    dl('shirt-'+ST.side+'.png',flatMockup(ST.side,false).toDataURL('image/png'));toast('Garment PNG saved');});
+  item('Artwork only','Just your design, transparent — send to a printer',()=>{
+    const c=artworkOnly(ST.side);
+    if(!c){toast('No artwork on this side');return;}
+    dl('artwork-'+ST.side+'.png',c.toDataURL('image/png'));toast('Artwork saved');});
+  item('Spec sheet','Colours, fabric and layers as a text file',()=>{
+    const S=G.S;
+    const lines=['SHIRT STUDIO — SPEC SHEET','','Garment: '+S.name,'Fabric: '+ST.fabric,
+      'Body colour: '+ST.body.toUpperCase(),'Trim colour: '+ST.trim.toUpperCase(),
+      'Buttons: '+ST.button.toUpperCase(),'Stitching: '+ST.stitch.toUpperCase(),'','ARTWORK'];
+    for(const L of ST.layers){
+      measureLayer(L);
+      const w=(L.type==='text'?L._w:L.w),h=(L.type==='text'?L._h:L.h);
+      lines.push('  ['+L.side+'] '+(L.name||L.type)+' — '+L.type+
+        (L.type==='text'?' "'+String(L.text).replace(/\n/g,' / ')+'" '+L.font:'')+
+        ' · '+w.toFixed(1)+'×'+h.toFixed(1)+' cm · '+(PRINTS[L.print]||PRINTS.screen).label+
+        ' · rot '+Math.round(L.rot)+'°');
+    }
+    dl('spec-sheet.txt','data:text/plain;charset=utf-8,'+encodeURIComponent(lines.join('\n')));
+    toast('Spec sheet saved');});
+  document.body.append(m);
+  const r=anchor.getBoundingClientRect();
+  m.style.top=(r.bottom+6)+'px';
+  m.style.right=(window.innerWidth-r.right)+'px';
+  setTimeout(()=>document.addEventListener('pointerdown',function h(e){
+    if(!m.contains(e.target)){m.remove();document.removeEventListener('pointerdown',h);}},{once:false}),10);
+}
+
+/* =====================================================================
+   20. WIRING
+   ===================================================================== */
+function syncControls(){
+  $('#colBody').value=ST.body; $('#colBodyHex').value=ST.body.toUpperCase();
+  $('#colTrim').value=ST.trim; $('#colBtn').value=ST.button; $('#colStitch').value=ST.stitch;
+  $('#selFabric').value=ST.fabric;
+  $('#rSheen').value=Math.round(ST.sheen*100); $('#vSheen').textContent=Math.round(ST.sheen*100)+'%';
+  $('#rWeave').value=Math.round(ST.weave*100); $('#vWeave').textContent=Math.round(ST.weave*100)+'%';
+  $('#rWrink').value=Math.round(ST.wrinkle*100);$('#vWrink').textContent=Math.round(ST.wrinkle*100)+'%';
+  $('#rLight').value=Math.round(ST.light*100); $('#vLight').textContent=Math.round(ST.light*100)+'%';
+  buildBgGallery();
+}
+let baseTimer;
+function debouncedBase(fn){clearTimeout(baseTimer);baseTimer=setTimeout(fn,110);}
+
+function wire(){
+  $$('#sideSeg button').forEach(b=>b.onclick=()=>setSide(b.dataset.side));
+  $('#btnUndo').onclick=undo;
+  $('#btnRedo').onclick=redo;
+
+  $('#colBody').oninput=e=>{ST.body=e.target.value;$('#colBodyHex').value=e.target.value.toUpperCase();
+    if(G._trimLinked){ST.trim=ST.body;$('#colTrim').value=ST.body;}
+    buildSwatches();debouncedBase(refreshBase);};
+  $('#colBody').onchange=()=>pushHistory();
+  $('#colBodyHex').onchange=e=>{
+    let v=e.target.value.trim(); if(!v.startsWith('#'))v='#'+v;
+    if(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v)) setBody(v); else e.target.value=ST.body.toUpperCase();};
+  $('#colTrim').oninput=e=>{ST.trim=e.target.value;G._trimLinked=false;debouncedBase(refreshBase);};
+  $('#colTrim').onchange=()=>pushHistory();
+  $('#colBtn').oninput=e=>{ST.button=e.target.value;debouncedBase(refreshBase);};
+  $('#colBtn').onchange=()=>pushHistory();
+  $('#colStitch').oninput=e=>{ST.stitch=e.target.value;debouncedBase(refreshBase);};
+  $('#colStitch').onchange=()=>pushHistory();
+  $('#btnMatchTrim').onclick=()=>{ST.trim=ST.body;G._trimLinked=true;$('#colTrim').value=ST.trim;
+    refreshBase();pushHistory();toast('Trim matched to the body');};
+  $('#btnContrastTrim').onclick=()=>{
+    ST.trim=lum(ST.body)>.5?shade(ST.body,-.72):shade(ST.body,.78);
+    G._trimLinked=false;$('#colTrim').value=ST.trim;refreshBase();pushHistory();toast('Contrast trim');};
+
+  $('#selFabric').onchange=e=>{ST.fabric=e.target.value;refreshBase();pushHistory();};
+  $('#rSheen').oninput=e=>{ST.sheen=+e.target.value/100;$('#vSheen').textContent=e.target.value+'%';
+    debouncedBase(refreshBase);};
+  $('#rSheen').onchange=()=>pushHistory();
+  $('#rWeave').oninput=e=>{ST.weave=+e.target.value/100;$('#vWeave').textContent=e.target.value+'%';
+    debouncedBase(refreshBase);};
+  $('#rWeave').onchange=()=>pushHistory();
+  $('#rWrink').oninput=e=>{ST.wrinkle=+e.target.value/100;$('#vWrink').textContent=e.target.value+'%';
+    debouncedBase(refreshShade);};
+  $('#rWrink').onchange=()=>pushHistory();
+  $('#rLight').oninput=e=>{ST.light=+e.target.value/100;$('#vLight').textContent=e.target.value+'%';};
+
+  $('#btnSpin').onclick=e=>{ST.spin=!ST.spin;e.currentTarget.classList.toggle('on',ST.spin);};
+  $('#btnWire').onclick=e=>{GL.wire=!GL.wire;e.currentTarget.classList.toggle('on',GL.wire);};
+  $('#btnGuides').onclick=e=>{ST.guides=!ST.guides;e.currentTarget.classList.toggle('on',ST.guides);draw2D();};
+  $('#btnGuides').classList.add('on');
+  $('#btnFit').onclick=fit2D;
+  $('#btnFront').onclick=()=>{spinTo(0);GL.pitch=.06;};
+  $('#btnBack').onclick=()=>{spinTo(Math.PI);GL.pitch=.06;};
+  $('#btnReset3d').onclick=()=>{GL.yaw=0;GL.pitch=.06;GL.panx=0;GL.pany=0;
+    GL.dist=Math.max(G.bbox.w,G.bbox.h)/2/Math.tan(rad(16))*1.34;};
+  $('#btnShot').onclick=shot3D;
+  $('#btnExport').onclick=e=>exportMenu(e.currentTarget);
+
+  $('#btnText').onclick=()=>addText();
+  $('#btnShape').onclick=addShape;
+  $('#dropZone').onclick=()=>$('#fileImg').click();
+  $('#fileImg').onchange=e=>{handleFiles(e.target.files);e.target.value='';};
+
+  $('#btnSave').onclick=()=>{
+    const blob=JSON.stringify(serialize(),null,1);
+    dl('design-'+ST.styleId+'.shirt.json','data:application/json;charset=utf-8,'+encodeURIComponent(blob));
+    toast('Project saved');
+  };
+  $('#btnLoad').onclick=()=>$('#fileProj').click();
+  $('#fileProj').onchange=e=>{
+    const f=e.target.files[0]; if(!f) return;
+    const r=new FileReader();
+    r.onload=async()=>{
+      try{ await applyState(JSON.parse(r.result)); toast('Project loaded'); }
+      catch(err){ toast('That file is not a Shirt Studio project'); }
+    };
+    r.readAsText(f); e.target.value='';
+  };
+  $('#btnRandom').onclick=surprise;
+
+  // drag & drop + paste anywhere
+  const dz=$('#dropZone');
+  window.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('hot');});
+  window.addEventListener('dragleave',()=>dz.classList.remove('hot'));
+  window.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('hot');
+    if(e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);});
+  window.addEventListener('paste',e=>{
+    const items=[...(e.clipboardData?.items||[])];
+    const f=items.find(i=>i.type.startsWith('image/'));
+    if(f){handleFiles([f.getAsFile()]);return;}
+    const t=e.clipboardData?.getData('text');
+    if(t&&t.trim()&&document.activeElement===document.body){addText(t.trim().slice(0,80));}
+  });
+
+  window.addEventListener('resize',()=>{fit2D();});
+  window.addEventListener('keydown',ev=>{
+    const tag=(document.activeElement||{}).tagName;
+    if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT') return;
+    const L=ST.layers.find(l=>l.id===ST.sel);
+    const k=ev.key.toLowerCase();
+    if((ev.ctrlKey||ev.metaKey)&&k==='z'){ev.preventDefault();ev.shiftKey?redo():undo();return;}
+    if((ev.ctrlKey||ev.metaKey)&&k==='y'){ev.preventDefault();redo();return;}
+    if((ev.ctrlKey||ev.metaKey)&&k==='d'&&L){ev.preventDefault();dupLayer(L);return;}
+    if(!L) return;
+    const step=ev.shiftKey?2.5:0.4;
+    if(k==='delete'||k==='backspace'){ev.preventDefault();delLayer(L);}
+    else if(k==='arrowleft'){ev.preventDefault();L.x-=step;composite();syncProps();}
+    else if(k==='arrowright'){ev.preventDefault();L.x+=step;composite();syncProps();}
+    else if(k==='arrowup'){ev.preventDefault();L.y-=step;composite();syncProps();}
+    else if(k==='arrowdown'){ev.preventDefault();L.y+=step;composite();syncProps();}
+    else if(k==='escape'){select(null);draw2D();}
+  });
+  window.addEventListener('keyup',ev=>{
+    if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(ev.key)) pushHistory();
+  });
+}
+
+function surprise(){
+  const rnd=a=>a[Math.floor(Math.random()*a.length)];
+  ST.styleId=rnd(STYLES).id;
+  ST.body=rnd(PALETTE);
+  const dark=lum(ST.body)<.45;
+  ST.trim=Math.random()<.55?ST.body:(dark?shade(ST.body,.7):shade(ST.body,-.65));
+  G._trimLinked=ST.trim===ST.body;
+  ST.button=shade(ST.trim,dark?.4:-.15);
+  ST.stitch=dark?shade(ST.body,.35):shade(ST.body,-.3);
+  ST.fabric=rnd(['jersey','pique','heather','oxford','fleece','linen','performance']);
+  ST.layers=[];
+  rebuildGarment(true);
+  const p=printArea('front');
+  const words=['WILDSIDE','NORTH','1998','APEX','RUN FREE','MIDNIGHT','SUNSET CLUB','GOOD DAYS',
+               'ATLAS','NO RULES','ECHO','VOLTAGE'];
+  const ink=dark?'#f4f6fa':'#15181e';
+  ST.layers.push(newLayer({type:'shape',kind:rnd(['circle','ring','star','hex']),side:'front',
+    w:15,h:15,x:0,y:p.y+p.h*.42,fill:'none',stroke:ink,strokeW:.5,rot:0,print:rnd(['screen','vinyl']),
+    name:'Emblem',op:1}));
+  ST.layers.push(newLayer({type:'text',side:'front',text:rnd(words),font:rnd(FONTS),weight:rnd([700,900]),
+    size:4.2,spacing:.15,curve:0,color:ink,stroke:'#000',strokeW:0,x:0,y:p.y+p.h*.42,
+    name:'Headline',print:rnd(['screen','embroid','vinyl']),op:1}));
+  ST.layers.push(newLayer({type:'text',side:'back',text:rnd(STAMPS),font:'system-ui',weight:700,
+    size:16,spacing:0,curve:0,color:ink,strokeW:0,x:0,y:printArea('back').y+10,
+    name:'Back stamp',print:'screen',op:1}));
+  ST.sel=null;
+  buildStyleGallery(); buildSwatches(); syncControls();
+  composite(); renderLayers(); syncProps(); fit2D(); pushHistory();
+  toast('Random design — '+G.S.name);
+}
+
+/* =====================================================================
+   21. BOOT
+   ===================================================================== */
+function injectExtraCSS(){
+  const s=document.createElement('style');
+  s.textContent=`
+  .menu{position:fixed;z-index:200;background:#1a2130;border:1px solid #38455c;border-radius:11px;
+    box-shadow:0 18px 46px rgba(0,0,0,.6);padding:5px;min-width:250px;overflow:hidden}
+  .menu .mi{padding:8px 10px;border-radius:8px;cursor:pointer}
+  .menu .mi:hover{background:#26314a}
+  .menu .mi b{display:block;font-size:12.5px;font-weight:600}
+  .menu .mi em{display:block;font-style:normal;font-size:10.5px;color:#8c97ad;margin-top:1px}`;
+  document.head.append(s);
+}
+function loop(){
+  if(ST.spin) GL.yaw+=0.006;
+  draw3D();
+  requestAnimationFrame(loop);
+}
+function boot(){
+  injectExtraCSS();
+  initTextures();
+  rebuildGarment(true);
+  buildStyleGallery(); buildSwatches(); buildStamps(); buildBgGallery(); syncControls();
+  wire(); bindEditor();
+  const ok=initGL();
+  if(ok) bind3D();
+  // a starter design so the tool shows what it can do
+  const p=printArea('front');
+  ST.layers.push(newLayer({type:'text',side:'front',text:'SHIRT STUDIO',font:'Impact',weight:700,
+    size:3.4,spacing:.28,curve:0,color:'#20242c',stroke:'#000',strokeW:0,
+    x:0,y:p.y+p.h*.34,name:'Headline',print:'embroid',op:1}));
+  composite(); renderLayers(); syncProps(); fit2D();
+  GL.dist=Math.max(G.bbox.w,G.bbox.h)/2/Math.tan(rad(16))*1.34;
+  pushHistory(); updateHistBtns();
+  if(ok) loop();
+}
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot);
+else boot();
+</script>
+</body>
+</html>
