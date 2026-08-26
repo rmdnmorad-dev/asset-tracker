@@ -486,6 +486,18 @@
   .duprow{position:absolute;right:1px;top:1px;width:17px;height:17px;border:0;background:transparent;cursor:pointer;
     font-size:12px;line-height:1;padding:0;opacity:0;z-index:5;color:#2563eb}
   .taskrow:hover .duprow{opacity:.5} .duprow:hover{opacity:1 !important;transform:scale(1.3)}
+  /* 🚀 push this row's hours into Nexus */
+  .rocket{position:absolute;right:1px;bottom:1px;width:17px;height:17px;border:0;background:transparent;cursor:pointer;
+    font-size:11px;line-height:1;padding:0;opacity:0;z-index:5}
+  .taskrow:hover .rocket{opacity:.55} .rocket:hover{opacity:1 !important;transform:scale(1.35)}
+  .rocket.set{opacity:.8}                       /* a milestone has been chosen for this task */
+  .msmenu{position:fixed;z-index:130;background:#fff;color:#111;border:1px solid #cbd5e1;border-radius:8px;
+    box-shadow:0 10px 30px rgba(0,0,0,.3);padding:6px;min-width:250px;font-family:Arial;font-size:12.5px}
+  .msmenu h5{margin:2px 4px 6px;font-size:11px;color:#555;font-weight:bold}
+  .msmenu button.ms{display:block;width:100%;text-align:left;border:1px solid #e2e8f0;background:#fff;color:#111;
+    border-radius:6px;padding:5px 8px;margin:2px 0;cursor:pointer;font-size:12px}
+  .msmenu button.ms:hover{background:#eef3fb}
+  .msmenu button.ms.cur{background:#dbeafe;border-color:#93c5fd;font-weight:bold}
   #toolbar.lightbar .hoursind{color:#111;background:rgba(0,0,0,.08);border-color:rgba(0,0,0,.2)}
   @media (max-width:1200px){ .hoursind{display:none !important} }
   /* click a box to SELECT it (highlight); double-click to EDIT it — Excel-style */
@@ -546,7 +558,7 @@
   <div class="grp">
     <button class="btn" id="btnSearch" title="Search every timecard (Ctrl+F)">🔍 Search</button>
     <button class="btn" id="btnSettings">⚙ Settings</button>
-    <span style="font-size:10px;color:#9aa4b2;align-self:center;margin-left:1px" title="Version 3.3">v3.3</span>
+    <span style="font-size:10px;color:#9aa4b2;align-self:center;margin-left:1px" title="Version 3.4">v3.4</span>
   </div>
   <div id="hoursInd" class="hoursind" title="Total hours this week on whatever box you click / hover"></div>
   <div class="grp right">
@@ -671,6 +683,16 @@
         ⚠ <b>Save backup</b> writes a one-time <code>.json</code> snapshot to your Downloads. It does <u>not</u> stay linked — anything you change afterwards is <b>not</b> saved into it. Use it to move the tool to another computer (link it there), or as a safety copy.
       </div>
       <input type="file" id="importFile" accept=".json,application/json" style="display:none">
+    </div>
+  </div>
+  <div class="row" style="margin-top:6px">
+    <div class="fld" style="flex:1 1 100%">
+      <span>NEXUS 🚀 — the rocket on each task row opens Nexus and fills the Add-Hours form (milestone, hours, date, notes). It never presses Submit.</span>
+      <input type="text" id="nexusUrl" placeholder="http://nexus.tcs.local/protected.php">
+      <div style="font-size:11px;color:#8a5a00;background:#fff8e6;border:1px solid #f0d98a;border-radius:6px;padding:6px 8px;margin:2px 0;line-height:1.45">
+        ⚠ Needs the <b>Timecard → Nexus</b> userscript installed in Tampermonkey — a web page cannot fill another site's page on its own.
+        Right-click a 🚀 (or Alt+click) to choose that task's <b>milestone</b>; it is remembered per task number.
+      </div>
     </div>
   </div>
   <div class="row" style="margin-top:6px">
@@ -1189,7 +1211,8 @@ function defaultState(){
       subject:'{type} Timecard-{date}',
       subjectV2:true, subjectMode:'auto', sendFormat:'eml',
       customDay:false, customDayIdx:null,      // custom single day for a Daily send
-      includeProjects:true, creditOn:true,     // projects-worked-on summary in the message · credit logo on the sheet
+      includeProjects:true, creditOn:true,
+      nexusUrl:'http://nexus.tcs.local/protected.php',   // where the 🚀 rocket opens     // projects-worked-on summary in the message · credit logo on the sheet
       taskLegend: TASK_LEGEND.map(t=>[t[0],t[1]]),
       jobLegend: JOB_LEGEND.map(t=>[t[0],t[1]]),
       employee:'Morad Ramadan', manager:'C. Hattar',
@@ -1232,6 +1255,7 @@ if(state.settings.customDay===undefined) state.settings.customDay = false;
 if(state.settings.customDayIdx===undefined) state.settings.customDayIdx = null;
 if(state.settings.includeProjects===undefined) state.settings.includeProjects = true;
 if(state.settings.creditOn===undefined) state.settings.creditOn = true;
+if(!state.settings.nexusUrl) state.settings.nexusUrl = 'http://nexus.tcs.local/protected.php';
 if(!Array.isArray(state.settings.hiddenSections)) state.settings.hiddenSections = SECTIONS.map((s,i)=>i>=3);
 while(state.settings.hiddenSections.length < SECTIONS.length) state.settings.hiddenSections.push(true);   // new sections hidden by default
 if(!Array.isArray(state.settings.sectionNames)) state.settings.sectionNames = SECTIONS.map(s=>s.name);
@@ -1589,7 +1613,8 @@ function buildTable(){
       h += '<tr class="taskrow'+(SECTIONS[si].tall?' tall':'')+'">';
       for(const f of ['task','notes','project','contractor','job']){
         if(f==='task'){          // Task #: type anything (remembered) or pick from the TASKS legend
-          h += '<td class="b tinfo taskcell"><input class="cell task redtx taskpick" title="Type a task # or pick one" data-row="'+ri+'" data-f="task" spellcheck="false" autocomplete="off"><button type="button" class="duprow" data-row="'+ri+'" tabindex="-1" title="Duplicate this row (Ctrl+D)">⧉</button></td>';
+          h += '<td class="b tinfo taskcell"><input class="cell task redtx taskpick" title="Type a task # or pick one" data-row="'+ri+'" data-f="task" spellcheck="false" autocomplete="off"><button type="button" class="duprow" data-row="'+ri+'" tabindex="-1" title="Duplicate this row (Ctrl+D)">⧉</button>'+
+                 '<button type="button" class="rocket" data-row="'+ri+'" tabindex="-1" title="Send this row to Nexus">🚀</button></td>';
         }else{                   // NOTES / PROJECT / CONTRACTOR / JOB TYPE grow taller as you type
           h += '<td class="b tinfo"><textarea class="cell task redtx grow" rows="1" data-row="'+ri+'" data-f="'+f+'" spellcheck="false" autocomplete="off"></textarea></td>';
         }
@@ -1629,6 +1654,7 @@ function buildTable(){
   h += '</table>';
   document.getElementById('tblhost').innerHTML = h;
   applyColWidths();
+  markRockets();
 }
 
 /* ---------------- adjustable column widths ---------------- */
@@ -2047,11 +2073,20 @@ function bindSheetInputs(){
       e.preventDefault(); t.blur();         // legends & section names too
     }
   });
-  // duplicate-row button (⧉) on each task row
-  host.addEventListener('mousedown', e=>{ if(e.target.closest && e.target.closest('.duprow')) e.stopPropagation(); }, true);
+  // duplicate-row button (⧉) and Nexus rocket (🚀) on each task row
+  host.addEventListener('mousedown', e=>{ if(e.target.closest && e.target.closest('.duprow,.rocket')) e.stopPropagation(); }, true);
   host.addEventListener('click', e=>{
     const dup = e.target.closest && e.target.closest('.duprow');
     if(dup){ e.preventDefault(); e.stopPropagation(); duplicateRow(+dup.dataset.row); return; }
+    const rk = e.target.closest && e.target.closest('.rocket');
+    if(rk){ e.preventDefault(); e.stopPropagation();
+      // plain click = go (using the milestone remembered for this task); Alt/right-click = change the milestone
+      rocketGo(+rk.dataset.row, rk, e.altKey || e.shiftKey); return; }
+  });
+  // right-click the rocket = pick the milestone for this task
+  host.addEventListener('contextmenu', e=>{
+    const rk = e.target.closest && e.target.closest('.rocket');
+    if(rk){ e.preventDefault(); rocketGo(+rk.dataset.row, rk, true); }
   });
   // + / − row buttons in the section headers and legends
   host.addEventListener('click', e=>{
@@ -2160,6 +2195,7 @@ function commitValue(inp, finalize){
       }
     }
   }
+  if(inp.dataset.f==='task') markRockets();
   if(inp.dataset.f==='ha') applyColWidths();   // a job code was entered → re-fit the code column so it shows in full
   recalc(); save();
 }
@@ -2194,6 +2230,72 @@ function setWeek(key){
   renderWeek();
   save();
 }
+/* ---------------- 🚀 push a row's hours into Nexus ----------------
+   The Timecard can't click inside the Nexus tab (different origin — browsers forbid it), so the
+   rocket opens Nexus with the values in the URL hash and the Tampermonkey userscript, which runs
+   INSIDE the Nexus page, does the steps: pick the milestone, then Hours, Date, Description.
+   It never presses Submit — you check the form and submit it yourself. */
+const NEXUS_MILESTONES = ['DRAFT PACKAGE','QC-DESIGN REVIEW','CUSTOMER APPROVAL - DESIGN INTENT',
+  'FINAL SUBMITTAL','QC - FINAL SUBMITTAL REVIEW','WET STAMP','SUBMITTAL SENT TO CUSTOMER','BILLING REQUESTED'];
+const NEXUS_URL_DEFAULT = 'http://nexus.tcs.local/protected.php';
+function pad2(n){ return (n<10?'0':'')+n; }
+function usDatePad(d){ return pad2(d.getMonth()+1)+'/'+pad2(d.getDate())+'/'+d.getFullYear(); }   // 08/26/2026
+function taskMilestone(task){ return ((state.taskInfo||{})[task]||{}).milestone || ''; }
+function setTaskMilestone(task, ms){
+  state.taskInfo = state.taskInfo || {};
+  (state.taskInfo[task] = state.taskInfo[task] || {}).milestone = ms;
+  save(); markRockets();
+}
+// show which rows already have a milestone chosen
+function markRockets(){
+  document.querySelectorAll('#tblhost .rocket').forEach(b=>{
+    const r = week().rows[+b.dataset.row] || {}, t = String(r.task||'').trim();
+    const ms = t ? taskMilestone(t) : '';
+    b.classList.toggle('set', !!ms);
+    b.title = t ? ('Send to Nexus — task '+t+(ms?' · '+ms:' · pick a milestone first')+
+                   '\nRight-click (or Alt+click) to change the milestone') : 'Enter a task # first';
+  });
+}
+// what this row would send for the day the timecard is set to
+function rocketPayload(ri){
+  const w = week(), r = w.rows[ri], d = dailyCol(), dates = weekDates();
+  const task = String(r.task||'').trim();
+  const hrs = num(r.h[d]) || num(r.ha[d]) || 0;
+  return { task, milestone: taskMilestone(task), hours: hrs ? String(fmtNum(hrs)) : '',
+           date: usDatePad(dates[d]), desc: String(r.notes||'').trim(), day: DAYS[d] };
+}
+function rocketGo(ri, btn, forcePick){
+  const p = rocketPayload(ri);
+  if(!/^\d{3,}$/.test(p.task)){ toast('🚀 Put a task number in this row first.'); return; }
+  if(forcePick || !p.milestone){ milestoneMenu(btn, p.task, ()=>rocketGo(ri, btn, false)); return; }
+  if(!p.hours) toast('🚀 No hours logged for <b>'+p.day+'</b> on this row — sending the note only.', 6000);
+  const base = (state.settings.nexusUrl || NEXUS_URL_DEFAULT).trim();
+  const url = base + '#tcpush=' + encodeURIComponent(JSON.stringify(
+                {task:p.task, milestone:p.milestone, hours:p.hours, date:p.date, desc:p.desc}));
+  window.open(url, '_blank');
+  toast('🚀 Nexus opening — <b>'+p.task+'</b> · '+p.milestone+' · '+(p.hours||'0')+' h · '+p.date+
+        '<br><span style="opacity:.85">The form fills itself; check it and press <b>Submit</b>.</span>', 9000);
+}
+// small popup to choose this task's milestone (remembered per task number)
+function milestoneMenu(anchor, task, done){
+  document.querySelectorAll('.msmenu').forEach(m=>m.remove());
+  const cur = taskMilestone(task);
+  const m = document.createElement('div');
+  m.className = 'msmenu';
+  m.innerHTML = '<h5>Milestone for task '+escHtml(task)+'</h5>' +
+    NEXUS_MILESTONES.map(x=>'<button type="button" class="ms'+(x===cur?' cur':'')+'" data-ms="'+escHtml(x)+'">'+escHtml(x)+'</button>').join('');
+  document.body.appendChild(m);
+  const r = anchor.getBoundingClientRect();
+  m.style.left = Math.min(r.left, innerWidth - m.offsetWidth - 10) + 'px';
+  m.style.top  = Math.min(r.bottom + 4, innerHeight - m.offsetHeight - 10) + 'px';
+  m.addEventListener('click', e=>{
+    const b = e.target.closest('button.ms'); if(!b) return;
+    setTaskMilestone(task, b.dataset.ms); m.remove(); if(done) done();
+  });
+  setTimeout(()=>document.addEventListener('mousedown', function off(ev){
+    if(!m.contains(ev.target)){ m.remove(); document.removeEventListener('mousedown', off); }
+  }), 0);
+}
 function buildShortcutHelp(){
   const host = document.getElementById('shortcutHelp'); if(!host) return;
   const rows = [
@@ -2217,7 +2319,9 @@ function buildShortcutHelp(){
     ['Ctrl/⌘ + Z','undo'],
     ['Ctrl/⌘ + Y  or  Ctrl/⌘ + Shift + Z','redo'],
     ['Ctrl/⌘ + D','duplicate the current row'],
-    ['Ctrl/⌘ + F','find / search the sheet']
+    ['Ctrl/⌘ + F','find / search the sheet'],
+    ['🚀 on a task row','send that row\'s hours to Nexus'],
+    ['Right-click / Alt+click 🚀','choose that task\'s milestone']
   ];
   host.innerHTML = rows.map(r=>'<div style="break-inside:avoid"><kbd style="background:#fff;border:1px solid #cfd4dc;border-bottom-width:2px;border-radius:4px;padding:1px 5px;font-family:monospace;font-size:10.5px;color:#111">'+r[0]+'</kbd> — '+r[1]+'</div>').join('');
 }
@@ -2369,6 +2473,10 @@ function bindSettings(){
   if(cr){ cr.checked = state.settings.creditOn!==false;
     cr.addEventListener('change', ()=>{ state.settings.creditOn = cr.checked; save(); applyCredit(); }); }
   applyCredit();
+  // where the 🚀 rocket opens Nexus
+  const nu = document.getElementById('nexusUrl');
+  if(nu){ nu.value = state.settings.nexusUrl || NEXUS_URL_DEFAULT;
+    nu.addEventListener('input', ()=>{ state.settings.nexusUrl = nu.value.trim() || NEXUS_URL_DEFAULT; save(); }); }
   // draft file format (.eml / .msg) — behave like a radio pair, one is always on
   const fe = document.getElementById('fmtEml'), fm = document.getElementById('fmtMsg');
   const reflectFmt = ()=>{ const msg = state.settings.sendFormat==='msg'; fe.checked = !msg; fm.checked = msg; };
