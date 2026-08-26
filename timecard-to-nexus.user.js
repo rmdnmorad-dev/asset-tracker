@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Timecard → Nexus (Add Hours autofill)
 // @namespace    jordan-isat-timecard
-// @version      1.4
+// @version      1.5
 // @description  Opens the Nexus task window straight from the Timecard rocket (🚀) and fills the Hours tab: milestone, Hours, Date, Description. Never presses Submit.
 // @match        *://nexus.tcs.local/*
 // @include      http*://nexus.tcs.local/*
@@ -59,11 +59,18 @@
   function fail(t) {
     say(t + '<br><span style="opacity:.85">Finish by hand — nothing was submitted.</span>', 'err');
     var d = diagnostics();
+    try { console.log('[Timecard->Nexus]\n' + d + '\n' + LOG.join('\n')); } catch (e) {}
+    // print it on screen too, so a screenshot is enough to diagnose
+    var pre = document.createElement('pre');
+    pre.textContent = d;
+    pre.style.cssText = 'text-align:left;margin:8px 0 0;padding:8px;background:rgba(0,0,0,.35);' +
+      'border-radius:6px;font:11px/1.35 Consolas,monospace;white-space:pre-wrap;max-height:38vh;overflow:auto';
+    if (bar) bar.appendChild(pre);
     var btn = document.createElement('button');
     btn.textContent = '⧉ Copy details for Claude';
     btn.style.cssText = 'margin-top:8px;padding:5px 10px;border:0;border-radius:6px;cursor:pointer;font:12px Segoe UI,Arial';
     btn.onclick = function () {
-      var txt = 'Timecard→Nexus v1.4 FAILED\n' + t.replace(/<[^>]*>/g, '') + '\n\n' + d + '\n\nLOG:\n' + LOG.join('\n');
+      var txt = 'Timecard→Nexus v1.5 FAILED\n' + t.replace(/<[^>]*>/g, '') + '\n\n' + d + '\n\nLOG:\n' + LOG.join('\n');
       try { navigator.clipboard.writeText(txt); btn.textContent = '✓ copied — paste it to Claude'; }
       catch (e) { window.prompt('Copy this:', txt); }
     };
@@ -243,6 +250,24 @@
   function run() {
     var how = '';
     return Promise.resolve()
+      .then(function () {
+        // The site is in the US: scripts and data arrive late. Dispatching the
+        // click before Nexus has bound its delegated body handler would do
+        // nothing at all, so wait for the handler to exist first.
+        say('Step 1/3 — waiting for Nexus to finish loading…');
+        return waitFor(function () {
+          if (!window.jQuery) return null;
+          if (!document.querySelector('input.task_search')) return null;
+          try {
+            var ev = window.jQuery._data(document.body, 'events');
+            if (ev && ev.click && ev.click.length) return true;
+          } catch (e) { return true; }        // old jQuery: cannot check, assume ready
+          return null;
+        }, 'Nexus never finished loading its scripts', 60000, function (w) {
+          if (w > 3000) say('Step 1/3 — waiting for Nexus to finish loading…  <span style="opacity:.75">' +
+                            Math.round(w / 1000) + 's</span>');
+        });
+      })
       .then(function () {
         say('Step 1/3 — opening task <b>' + P.task + '</b>…');
         how = triggerEdit();
