@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Timecard → Nexus (Add Hours autofill)
 // @namespace    jordan-isat-timecard
-// @version      1.3
-// @description  Fills the Nexus Hours tab from the Timecard rocket (🚀): milestone, then Hours, Date and Description. Never presses Submit.
+// @version      1.4
+// @description  Opens the Nexus task window straight from the Timecard rocket (🚀) and fills the Hours tab: milestone, Hours, Date, Description. Never presses Submit.
 // @match        *://nexus.tcs.local/*
 // @include      http*://nexus.tcs.local/*
 // @run-at       document-start
@@ -13,8 +13,10 @@
   'use strict';
 
   var KEY = 'tcpush_pending';
+  var LOG = [];
+  function log(m) { LOG.push(new Date().toISOString().slice(11, 19) + '  ' + m); }
 
-  /* ---------- payload, captured as early as possible ---------- */
+  /* ---------------- payload ---------------- */
   function grabPayload() {
     var raw = null;
     var m = /[#&?]tcpush=([^&]+)/.exec(location.hash || '');
@@ -33,61 +35,85 @@
   var consumed = false;
   function clearPending() { consumed = true; try { sessionStorage.removeItem(KEY); } catch (e) {} }
 
-  /* ---------- banner (always shown, so you can see it is alive) ---------- */
-  var bar = null;
+  /* ---------------- banner ---------------- */
+  var bar = null, msg = null;
   function ensureBar() {
     if (bar || !document.body) return bar;
     bar = document.createElement('div');
     bar.style.cssText = 'position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:2147483647;' +
       'background:#0b3d91;color:#fff;font:13px/1.45 Segoe UI,Arial;padding:10px 16px;border-radius:8px;' +
       'box-shadow:0 8px 26px rgba(0,0,0,.35);max-width:72vw;text-align:center';
+    msg = document.createElement('div');
+    bar.appendChild(msg);
     document.body.appendChild(bar);
     return bar;
   }
   function say(t, kind) {
-    var b = ensureBar(); if (!b) return;
-    b.innerHTML = (kind === 'err' ? '⚠ ' : '🚀 ') + t;
-    b.style.background = kind === 'err' ? '#b91c1c' : kind === 'ok' ? '#166534' : '#0b3d91';
+    ensureBar(); if (!msg) return;
+    msg.innerHTML = (kind === 'err' ? '⚠ ' : '🚀 ') + t;
+    bar.style.background = kind === 'err' ? '#b91c1c' : kind === 'ok' ? '#166534' : '#0b3d91';
   }
-  function hideBarIn(ms) { setTimeout(function () { if (bar) { bar.remove(); bar = null; } }, ms); }
+  function hideBarIn(ms) { setTimeout(function () { if (bar) { bar.remove(); bar = null; msg = null; } }, ms); }
   function done(t) { say(t, 'ok'); hideBarIn(12000); }
-  function fail(t) { say(t + '<br><span style="opacity:.85">Finish by hand — nothing was submitted.</span>', 'err'); }
+  // On failure: show what the page actually looked like, and let you copy it in one click.
+  function fail(t) {
+    say(t + '<br><span style="opacity:.85">Finish by hand — nothing was submitted.</span>', 'err');
+    var d = diagnostics();
+    var btn = document.createElement('button');
+    btn.textContent = '⧉ Copy details for Claude';
+    btn.style.cssText = 'margin-top:8px;padding:5px 10px;border:0;border-radius:6px;cursor:pointer;font:12px Segoe UI,Arial';
+    btn.onclick = function () {
+      var txt = 'Timecard→Nexus v1.4 FAILED\n' + t.replace(/<[^>]*>/g, '') + '\n\n' + d + '\n\nLOG:\n' + LOG.join('\n');
+      try { navigator.clipboard.writeText(txt); btn.textContent = '✓ copied — paste it to Claude'; }
+      catch (e) { window.prompt('Copy this:', txt); }
+    };
+    if (bar) bar.appendChild(btn);
+  }
+  function diagnostics() {
+    function n(sel) { try { return document.querySelectorAll(sel).length; } catch (e) { return 'err'; } }
+    var mo = document.querySelector('#EditProject');
+    return [
+      'url: ' + location.href,
+      'jQuery: ' + (window.jQuery ? window.jQuery.fn.jquery : 'MISSING') + '   jQuery.active: ' + (window.jQuery ? window.jQuery.active : '-'),
+      'task asked for: ' + (P && P.task),
+      'input.task_search: ' + n('input.task_search'),
+      'button.btn-edit total: ' + n('button.btn-edit') + '   with this data-row: ' + n('button.btn-edit[data-row="' + (P && P.task) + '"]'),
+      '#EditProject exists: ' + !!mo + '   innerHTML length: ' + (mo ? mo.innerHTML.length : 0) +
+        '   visible: ' + (mo ? (mo.offsetParent !== null) : false),
+      '.nav-tabs in modal: ' + n('#EditProject .nav-tabs'),
+      'a[data-target="#second"]: ' + n('a[data-target="#second"]'),
+      '#form-input_hours: ' + n('#form-input_hours') + '   visible: ' + !!liveForm(),
+      'visible .modal: ' + n('.modal.in, .modal.show, .modal[style*="display: block"]')
+    ].join('\n');
+  }
   function whenBody(fn) {
     if (document.body) return fn();
     var t = setInterval(function () { if (document.body) { clearInterval(t); fn(); } }, 30);
     document.addEventListener('DOMContentLoaded', function () { clearInterval(t); fn(); });
   }
 
-  /* ---------- helpers ---------- */
-  function waitFor(fn, label, timeout, interval) {
-    timeout = timeout || 45000; interval = interval || 250;
+  /* ---------------- helpers ---------------- */
+  function waitFor(fn, label, timeout, onTick) {
+    timeout = timeout || 60000;
     return new Promise(function (resolve, reject) {
       var t0 = Date.now();
       (function tick() {
         var v = null;
         try { v = fn(); } catch (e) { v = null; }
         if (v) return resolve(v);
-        if (Date.now() - t0 > timeout) return reject(new Error(label));
-        setTimeout(tick, interval);
+        var waited = Date.now() - t0;
+        if (waited > timeout) return reject(new Error(label));
+        if (onTick) { try { onTick(waited); } catch (e) {} }
+        setTimeout(tick, 250);
       })();
     });
   }
   function visible(el) { return !!el && el.offsetParent !== null && el.getBoundingClientRect().height > 0; }
-  function seen(sel, root) { var e = (root || document).querySelector(sel); return visible(e) ? e : null; }
-  function settle(ms) {
-    ms = ms || 400;
-    return new Promise(function (res) {
-      var t0 = Date.now();
-      (function tick() {
-        var busy = (window.jQuery && window.jQuery.active > 0);
-        if (!busy && Date.now() - t0 > ms) return res();
-        if (Date.now() - t0 > 30000) return res();
-        setTimeout(tick, 150);
-      })();
-    });
+  function liveForm() {
+    var fs = document.querySelectorAll('#form-input_hours, #form-inputHours_forQuote');
+    for (var i = 0; i < fs.length; i++) if (visible(fs[i])) return fs[i];
+    return null;
   }
-  // ONE realistic click. Nexus's Edit handler fires an AJAX load, so clicking twice
-  // (native + jQuery.trigger) starts two loads and can leave the modal half-built.
   function clickIt(el) {
     try { el.scrollIntoView({ block: 'center' }); } catch (e) {}
     ['pointerdown', 'mousedown', 'mouseup', 'click'].forEach(function (type) {
@@ -106,20 +132,49 @@
   }
   function norm(s) { return String(s == null ? '' : s).replace(/\s+/g, ' ').trim().toUpperCase(); }
 
-  var FORM_SEL = '#form-input_hours';
-  function liveForm() {
-    var fs = document.querySelectorAll(FORM_SEL + ', #form-inputHours_forQuote');
-    for (var i = 0; i < fs.length; i++) if (visible(fs[i])) return fs[i];
+  /* ----------------------------------------------------------------
+     Open the task window WITHOUT touching the search box or the table.
+     Nexus binds its Edit handler on <body> and reads only data-row:
+         $('body').on('click', '.btn-edit, .open_edit_task_modal', …)
+         let rowID = $(this).data('row');
+     so handing it a button carrying the task number runs Nexus's own
+     code path — no search, no waiting for the list, no stale rows.
+     ---------------------------------------------------------------- */
+  function triggerEdit() {
+    var t = String(P.task);
+    var real = document.querySelector('button.btn-edit[data-row="' + t + '"]');
+    if (visible(real)) { log('clicking the real Edit button for ' + t); clickIt(real); return 'real button'; }
+    var b = document.createElement('button');
+    b.className = 'btn btn-primary btn-sm btn-edit';
+    b.setAttribute('data-row', t);
+    b.setAttribute('data-new_project', '1');
+    b.style.cssText = 'position:fixed;left:-9999px;top:0';
+    document.body.appendChild(b);
+    log('dispatching synthesised .btn-edit[data-row=' + t + ']');
+    // ONE click only: the native event bubbles to the body-delegated jQuery handler.
+    // Adding jQuery(b).trigger('click') would run it a second time and start a
+    // second modal load on top of the first.
+    clickIt(b);
+    setTimeout(function () { if (b.parentNode) b.parentNode.removeChild(b); }, 2000);
+    return 'synthesised button';
+  }
+  function modalReady() {
+    var m = document.querySelector('#EditProject');
+    if (m && m.querySelector('.nav-tabs') && visible(m)) return m;
+    var mods = document.querySelectorAll('.modal.in, .modal.show, .modal[style*="display: block"]');
+    for (var i = 0; i < mods.length; i++) if (visible(mods[i]) && mods[i].querySelector('.nav-tabs')) return mods[i];
+    // content arrived but Bootstrap never showed it — show it ourselves
+    if (m && m.querySelector('.nav-tabs') && !visible(m) && window.jQuery) {
+      try { window.jQuery(m).modal('show'); } catch (e) {}
+    }
     return null;
   }
 
-  /* ---------- fill the Hours form ---------- */
+  /* ---------------- fill ---------------- */
   function fillForm(f) {
     if (!f || !P || P.__bad || consumed) return false;
     var touched = false;
 
-    // 1. Milestone FIRST — value attribute is the milestone name, and the chosen
-    //    option carries data-ms-id which the hidden ts_ms_id field needs.
     if (P.milestone) {
       var sel = f.querySelector('select[name="ms_select"]') || f.querySelector('select');
       if (sel) {
@@ -132,11 +187,11 @@
           sel.value = hit.value;
           sel.dispatchEvent(new Event('change', { bubbles: true }));
           if (window.jQuery) window.jQuery(sel).val(hit.value).trigger('change');
-          // nothing in Nexus copies data-ms-id across, so do it ourselves
           var msId = hit.getAttribute('data-ms-id');
           var msHidden = f.querySelector('input[name="ts_ms_id"]');
-          if (msId && msHidden) msHidden.value = msId;
+          if (msId && msHidden) msHidden.value = msId;          // Nexus never copies this across
           touched = true;
+          log('milestone=' + hit.value + ' ts_ms_id=' + msId);
         }
       }
     }
@@ -150,7 +205,6 @@
     if (dateIn && P.date && !dateIn.value) {
       setVal(dateIn, P.date);
       try { dateIn.blur(); } catch (e) {}
-      // close the jQuery UI datepicker it pops open
       try { if (window.jQuery && window.jQuery(dateIn).datepicker) window.jQuery(dateIn).datepicker('hide'); } catch (e) {}
       var dp = document.getElementById('ui-datepicker-div');
       if (dp) dp.style.display = 'none';
@@ -174,7 +228,7 @@
     return touched;
   }
 
-  // Safety net: fill the form whenever it appears, however you got there.
+  // Fill the Hours form whenever it turns up, however you got there.
   function watchForForm() {
     var tryFill = function () {
       if (consumed || !P || P.__bad) return;
@@ -185,68 +239,38 @@
     setInterval(tryFill, 1000);
   }
 
-  /* ---------- find the row's Edit button ---------- */
-  function findEditButton() {
-    var t = String(P.task);
-    var b = document.querySelector('button.btn-edit[data-row="' + t + '"]');
-    if (visible(b)) return b;
-    // any element carrying the row id
-    var any = document.querySelectorAll('[data-row="' + t + '"]');
-    for (var i = 0; i < any.length; i++) {
-      if (any[i].tagName === 'BUTTON' && visible(any[i])) return any[i];
-      var inner = any[i].querySelector && any[i].querySelector('button.btn-edit, button');
-      if (inner && visible(inner)) return inner;
-    }
-    // the row that shows this task number -> its Edit button
-    var rows = document.querySelectorAll('#table1_body tr, #table2_body tr, tbody tr');
-    for (var r = 0; r < rows.length; r++) {
-      if (norm(rows[r].textContent).indexOf(t) < 0) continue;
-      var eb = rows[r].querySelector('button.btn-edit');
-      if (visible(eb)) return eb;
-      var td3 = rows[r].cells && rows[r].cells[2] ? rows[r].cells[2].querySelector('button') : null;
-      if (visible(td3)) return td3;
-    }
-    // last resort: exactly one Edit button left after filtering
-    var all = [], nodes = document.querySelectorAll('button.btn-edit');
-    for (var k = 0; k < nodes.length; k++) if (visible(nodes[k])) all.push(nodes[k]);
-    return all.length === 1 ? all[0] : null;
-  }
-
-  /* ---------- the flow ---------- */
+  /* ---------------- the flow ---------------- */
   function run() {
+    var how = '';
     return Promise.resolve()
       .then(function () {
-        say('Step 1/4 — searching task <b>' + P.task + '</b>…');
-        return waitFor(function () { return seen('input.task_search'); }, 'the Task search box never appeared');
-      })
-      .then(function (search) {
-        if (norm(search.value) !== norm(P.task)) {
-          setVal(search, P.task);
-          ['keydown', 'keypress', 'keyup', 'search'].forEach(function (t) {
-            search.dispatchEvent(new KeyboardEvent(t, { bubbles: true, key: 'Enter', keyCode: 13, which: 13 }));
-          });
-          if (window.jQuery) window.jQuery(search).trigger('keyup');
-        }
-        return settle(1000);
-      })
-      .then(function () {
-        say('Step 2/4 — opening the task…  <span style="opacity:.8">(Nexus can be slow)</span>');
-        return waitFor(findEditButton, 'the task row / its Edit button was not found — check the task number');
-      })
-      .then(function (btn) { clickIt(btn); return settle(1500); })
-      .then(function () {
-        say('Step 3/4 — opening the <b>Hours</b> tab…');
-        // the Edit window is AJAX-loaded into #EditProject
-        return waitFor(function () {
-          var m = document.querySelector('#EditProject');
-          if (visible(m) && m.querySelector('.nav-tabs')) return m;
-          var mods = document.querySelectorAll('.modal.in, .modal.show, .modal[style*="display: block"]');
-          for (var i = 0; i < mods.length; i++) if (visible(mods[i]) && mods[i].querySelector('.nav-tabs')) return mods[i];
-          return null;
-        }, 'the task window did not open');
+        say('Step 1/3 — opening task <b>' + P.task + '</b>…');
+        how = triggerEdit();
+        log('opened via ' + how);
+        var retried = false;
+        // Nexus is slow, so wait up to 90s. Retry ONCE at 20s, and only if the
+        // modal container is still completely empty — i.e. nothing is loading.
+        // Re-clicking during a slow-but-healthy load would start a second load
+        // on top of the first and leave the window half-built.
+        return waitFor(modalReady, 'the task window never opened (Nexus did not load it)', 90000, function (waited) {
+          if (!retried && waited > 20000) {
+            var m = document.querySelector('#EditProject');
+            var empty = !m || m.innerHTML.trim().length === 0;
+            // jQuery.active > 0 means a request is genuinely in flight — an empty
+            // container then just means the response has not landed yet.
+            var inFlight = !!(window.jQuery && window.jQuery.active > 0);
+            retried = true;
+            if (empty && !inFlight) { log('nothing loading after 20s — retrying the click'); triggerEdit(); }
+            else log('load still in progress (active=' + (window.jQuery ? window.jQuery.active : '?') +
+                     ', ' + (m ? m.innerHTML.length : 0) + ' chars) — waiting, not re-clicking');
+          }
+          if (waited > 3000) say('Step 1/3 — opening task <b>' + P.task + '</b>…  <span style="opacity:.75">waiting ' +
+                                 Math.round(waited / 1000) + 's</span>');
+        });
       })
       .then(function (modal) {
-        // Hours is the 2nd tab: <a data-target="#second" data-toggle="tab">Hours</a>
+        log('modal ready');
+        say('Step 2/3 — opening the <b>Hours</b> tab…');
         return waitFor(function () {
           var a = modal.querySelector('a[data-target="#second"]');
           if (visible(a)) return a;
@@ -254,22 +278,20 @@
           for (var i = 0; i < links.length; i++)
             if (norm(links[i].textContent) === 'HOURS' && visible(links[i])) return links[i];
           return null;
-        }, 'the Hours tab was not found').then(function (tab) {
+        }, 'the Hours tab never appeared in the task window', 60000)
+        .then(function (tab) {
           clickIt(tab);
           if (window.jQuery) { try { window.jQuery(tab).tab('show'); } catch (e) {} }
-          return settle(900);
+          log('clicked Hours tab');
         });
       })
       .then(function () {
-        say('Step 4/4 — filling the form…');
-        // the Hours tab already CONTAINS #form-input_hours — no "Add Hours" click needed
-        return waitFor(liveForm, 'the Hours form did not appear');
+        say('Step 3/3 — filling the form…');
+        // the Hours tab already contains #form-input_hours
+        return waitFor(liveForm, 'the Hours form never became visible', 60000);
       })
       .then(function (form) { if (!consumed) fillForm(form); })
-      .catch(function (err) {
-        fail('Stopped at: ' + (err && err.message ? err.message : err) +
-             '<br><span style="opacity:.85">Open the Hours tab yourself — I will still fill it in.</span>');
-      });
+      .catch(function (err) { fail('Stopped at: ' + (err && err.message ? err.message : err)); });
   }
 
   whenBody(function () {
@@ -281,7 +303,7 @@
     }
     if (P.__bad) { fail('The Timecard sent something I could not read: ' + String(P.__bad).slice(0, 120)); return; }
     say('Timecard → Nexus starting…');
-    if (document.readyState === 'complete') setTimeout(run, 800);
-    else window.addEventListener('load', function () { setTimeout(run, 800); });
+    if (document.readyState === 'complete') setTimeout(run, 1200);
+    else window.addEventListener('load', function () { setTimeout(run, 1200); });
   });
 })();
