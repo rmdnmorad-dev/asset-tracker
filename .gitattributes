@@ -1,0 +1,5 @@
+# Windows batch files must keep CRLF endings. cmd.exe mis-parses multi-line
+# blocks and goto labels in a .bat that only has LF, and the window closes
+# with no message at all.
+*.bat text eol=crlf
+*.cmd text eol=crlf
