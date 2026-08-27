@@ -1,8 +1,10 @@
 /*  Timecard → Nexus helper  (v2 — no dependencies, no npm)
  *
- *  Runs on YOUR PC with nothing installed but Node.js and Chrome.
- *  It launches Chrome with debugging enabled and talks to it over Chrome's own
- *  DevTools Protocol, using only Node built-ins (http, net, crypto).
+ *  Runs on YOUR PC with nothing installed but Node.js and a browser.
+ *  Opera is used first; if Opera refuses to open its debugging port it falls
+ *  back to Chrome, Edge, Brave or Vivaldi — whichever is on the machine.
+ *  It talks to the browser over the DevTools Protocol, using only Node
+ *  built-ins (http, net, crypto).
  *
  *  Press a 🚀 in the Timecard and it opens the task, opens the Hours tab and
  *  fills milestone / hours / date / description.  It never presses Submit.
@@ -33,24 +35,48 @@ const warn = (m) => console.log('  ' + t() + '  \x1b[33m' + m + '\x1b[0m');
 const errl = (m) => console.log('  ' + t() + '  \x1b[31m' + m + '\x1b[0m');
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-// ---------------------------------------------------------------- find Chrome
-function findChrome() {
-  if (process.env.CHROME_PATH && fs.existsSync(process.env.CHROME_PATH)) return process.env.CHROME_PATH;
-  const c = [];
+// ------------------------------------------------------- find a browser
+function browserCandidates() {
+  const out = [];
+  const add = (p) => { try { if (p && fs.existsSync(p) && out.indexOf(p) < 0) out.push(p); } catch (e) {} };
+  // whatever you point us at wins
+  add(process.env.BROWSER_PATH); add(process.env.CHROME_PATH);
+
   if (process.platform === 'win32') {
-    const pf = [process.env['PROGRAMFILES'], process.env['PROGRAMFILES(X86)'], process.env['LOCALAPPDATA']];
-    pf.forEach(p => { if (p) {
-      c.push(path.join(p, 'Google\\Chrome\\Application\\chrome.exe'));
-      c.push(path.join(p, 'Microsoft\\Edge\\Application\\msedge.exe'));
-    }});
+    const LA = process.env['LOCALAPPDATA'], PF = process.env['PROGRAMFILES'], PX = process.env['PROGRAMFILES(X86)'];
+    // Opera keeps opera.exe either directly in the install folder or in a
+    // version-numbered subfolder, so look in both.
+    const operaHomes = [];
+    [LA, PF, PX].forEach(root => { if (!root) return;
+      operaHomes.push(path.join(root, 'Programs\\Opera'), path.join(root, 'Programs\\Opera GX'),
+                      path.join(root, 'Opera'), path.join(root, 'Opera GX'));
+    });
+    const verNum = (s) => s.split('.').reduce((a, n) => a * 1000 + (+n || 0), 0);
+    operaHomes.forEach(home => {
+      add(path.join(home, 'opera.exe'));
+      try {
+        fs.readdirSync(home)
+          .filter(sub => /^[0-9]+(\.[0-9]+)*$/.test(sub))
+          .sort((a, b) => verNum(b) - verNum(a))          // newest Opera first
+          .forEach(sub => add(path.join(home, sub, 'opera.exe')));
+      } catch (e) {}
+    });
+    [LA, PF, PX].forEach(root => { if (!root) return;
+      add(path.join(root, 'Google\\Chrome\\Application\\chrome.exe'));
+      add(path.join(root, 'Microsoft\\Edge\\Application\\msedge.exe'));
+      add(path.join(root, 'BraveSoftware\\Brave-Browser\\Application\\brave.exe'));
+      add(path.join(root, 'Vivaldi\\Application\\vivaldi.exe'));
+    });
   } else {
-    c.push('/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser',
-           '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
-           '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
+    ['/usr/bin/opera', '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser',
+     '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+     '/Applications/Opera.app/Contents/MacOS/Opera',
+     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'].forEach(add);
   }
-  for (const p of c) { try { if (p && fs.existsSync(p)) return p; } catch (e) {} }
-  return null;
+  return out;
 }
+function findChrome() { return browserCandidates()[0] || null; }
+
 
 // ---------------------------------------------------------------- tiny CDP client
 function httpGetJson(url) {
@@ -175,8 +201,20 @@ class CDP {
   }
 }
 
-// ---------------------------------------------------------------- Chrome
+// ---------------------------------------------------------------- browser
 let chromeProc = null, cdp = null;
+
+// Friendly name of whatever browser we ended up driving, for the messages.
+let browserName = 'the browser';
+function prettyName(exe) {
+  const b = path.basename(exe).toLowerCase();
+  if (b.includes('opera'))    return 'Opera';
+  if (b.includes('msedge'))   return 'Edge';
+  if (b.includes('brave'))    return 'Brave';
+  if (b.includes('vivaldi'))  return 'Vivaldi';
+  if (b.includes('chrom'))    return 'Chrome';
+  return path.basename(exe);
+}
 
 async function chromeUp() {
   try { await httpGetJson('http://127.0.0.1:' + CDP_PORT + '/json/version'); return true; }
@@ -184,21 +222,44 @@ async function chromeUp() {
 }
 
 async function startChrome() {
-  if (await chromeUp()) { log('Chrome with debugging is already running — reusing it'); return; }
-  const exe = findChrome();
-  if (!exe) throw new Error('Could not find Chrome. Set CHROME_PATH to chrome.exe and try again.');
-  log('launching ' + path.basename(exe) + '…');
+  if (await chromeUp()) { log('a browser with debugging is already running — reusing it'); return; }
+  const list = browserCandidates();
+  if (!list.length) throw new Error('No Chromium-based browser found. Set BROWSER_PATH to opera.exe (or chrome.exe) and try again.');
   if (!fs.existsSync(PROFILE_DIR)) fs.mkdirSync(PROFILE_DIR, { recursive: true });
-  chromeProc = spawn(exe, [
-    '--remote-debugging-port=' + CDP_PORT,
-    '--user-data-dir=' + PROFILE_DIR,
-    '--no-first-run', '--no-default-browser-check', '--start-maximized',
-    NEXUS_URL
-  ], { detached: false, stdio: 'ignore' });
-  chromeProc.on('exit', () => { chromeProc = null; cdp = null; });
-  const t0 = Date.now();
-  while (Date.now() - t0 < 60000) { if (await chromeUp()) return; await sleep(500); }
-  throw new Error('Chrome did not start with debugging enabled');
+
+  let lastErr = null;
+  for (let i = 0; i < list.length; i++) {
+    const exe = list[i];
+    // A browser that can do this opens the port within seconds. Don't burn the
+    // full wait on every candidate — only the last one gets the long grace.
+    const grace = (i === list.length - 1) ? 30000 : 15000;
+    log('starting ' + prettyName(exe) + ' …');
+    let proc;
+    try {
+      proc = spawn(exe, [
+        '--remote-debugging-port=' + CDP_PORT,
+        '--user-data-dir=' + PROFILE_DIR,
+        '--no-first-run', '--no-default-browser-check', '--start-maximized',
+        NEXUS_URL
+      ], { detached: false, stdio: 'ignore' });
+    } catch (e) { lastErr = e; warn('could not start it: ' + e.message); continue; }
+
+    let died = false;
+    proc.on('exit', () => { died = true; if (chromeProc === proc) { chromeProc = null; cdp = null; } });
+
+    const t0 = Date.now();
+    while (Date.now() - t0 < grace) {
+      if (await chromeUp()) { chromeProc = proc; browserName = prettyName(exe); ok('using ' + exe); return; }
+      if (died) break;
+      await sleep(500);
+    }
+    warn(prettyName(exe) + ' did not open the debugging port — trying the next browser');
+    try { proc.kill(); } catch (e) {}
+    lastErr = new Error(prettyName(exe) + ' would not enable debugging');
+  }
+  throw new Error('No browser would start with debugging enabled. Tried: ' +
+                  list.map(p => prettyName(p)).join(', ') +
+                  (lastErr ? ' — last problem: ' + lastErr.message : ''));
 }
 
 async function attach() {
@@ -214,7 +275,7 @@ async function attach() {
     targets = await httpGetJson('http://127.0.0.1:' + CDP_PORT + '/json');
     page = targets.filter(x => x.type === 'page')[0];
   }
-  if (!page) throw new Error('no Chrome tab to drive');
+  if (!page) throw new Error('no browser tab to drive');
   const ws = await new WS(page.webSocketDebuggerUrl).connect();
   cdp = new CDP(ws);
   await cdp.send('Runtime.enable');
@@ -355,7 +416,7 @@ async function runJob(job) {
   (res && res.log ? res.log : []).forEach(m => log('   · ' + m));
   if (res && res.filled && res.filled.length) log('filled: ' + res.filled.join(', '));
   if (res && res.missing && res.missing.length) warn('could not fill: ' + res.missing.join(', '));
-  ok('READY — check the form in Chrome and press Submit yourself.');
+  ok('READY — check the form in ' + browserName + ' and press Submit yourself.');
   return res;
 }
 
@@ -368,7 +429,7 @@ async function pump() {
   try { await runJob(job); }
   catch (e) {
     errl('stopped: ' + (e && e.message ? String(e.message).split('\n')[0] : e));
-    errl('the Chrome window is still open — finish that one by hand.');
+    errl('the ' + browserName + ' window is still open — finish that one by hand.');
   }
   busy = false;
   if (queue.length) pump();
@@ -396,14 +457,17 @@ http.createServer((req, res) => {
   console.log('  │  Timecard → Nexus helper  (no npm, no extra downloads)   │');
   console.log('  │                                                          │');
   console.log('  │  Leave this window open and minimise it.                 │');
-  console.log('  │  Press a 🚀 in the Timecard and watch Chrome.            │');
+  console.log('  │  Press a 🚀 in the Timecard and watch Opera.             │');
   console.log('  │  It never presses Submit — you do that.                  │');
   console.log('  └──────────────────────────────────────────────────────────┘');
   log('listening on http://127.0.0.1:' + PORT);
   log('Nexus: ' + NEXUS_URL);
-  const exe = findChrome();
-  log('Chrome: ' + (exe || 'NOT FOUND — set CHROME_PATH'));
-  if (!fs.existsSync(PROFILE_DIR)) log('first run: Chrome opens a fresh profile — sign in to Nexus once, it is remembered.');
+  const list = browserCandidates();
+  if (list.length) { log('browser: ' + prettyName(list[0]) + '  (' + list[0] + ')');
+                     const fb = list.slice(1).map(p => prettyName(p)).filter((n, i, a) => a.indexOf(n) === i);
+                     if (fb.length) log('fallbacks if it refuses debugging: ' + fb.join(', ')); }
+  else log('browser: NOT FOUND — set BROWSER_PATH to your opera.exe');
+  if (!fs.existsSync(PROFILE_DIR)) log('first run: a fresh browser profile opens — sign in to Nexus once, it is remembered.');
 });
 
 process.on('unhandledRejection', (e) => errl('background error: ' + (e && e.message ? e.message : e)));
