@@ -79,6 +79,52 @@
     if (window.jQuery) window.jQuery(el).val(v).trigger('input').trigger('change');
   }
 
+  // ------------------------------------------------------- finding the task
+  /* The Edit button must be the real one on the real row, so we search for the
+     task the same way a person does and wait for the row to come back. */
+  function editButton(task) {
+    var b = document.querySelector('#table1_body button.btn-edit[data-row="' + task + '"]') ||
+            document.querySelector('button.btn-edit[data-row="' + task + '"]');
+    // ignore Nexus's hidden template button, which has an empty data-row
+    return (b && b.closest('tr') && vis(b)) ? b : null;
+  }
+
+  function fire(el, types) {
+    types.forEach(function (t) { el.dispatchEvent(new Event(t, { bubbles: true })); });
+    if (window.jQuery) try { window.jQuery(el).trigger('input').trigger('change'); } catch (e) {}
+  }
+
+  function startSearch(task, clearOtherFilters) {
+    var s = document.querySelector('input.task_search');
+    if (!s) return false;
+    if (clearOtherFilters) {
+      var pn = document.querySelector('input.project_name_search');
+      if (pn && pn.value) { pn.value = ''; fire(pn, ['input', 'change']); }
+    }
+    s.value = task;
+    fire(s, ['input', 'change']);
+    // Nexus exposes run_search() globally; calling it skips its own 800ms
+    // debounce and avoids firing the search twice.
+    if (typeof window.run_search === 'function') {
+      try { window.run_search(); return true; } catch (e) {}
+    }
+    // otherwise let the page's own keyup debounce / enter-to-search do it
+    ['keydown', 'keyup'].forEach(function (t) {
+      s.dispatchEvent(new KeyboardEvent(t, { bubbles: true, key: 'Enter', keyCode: 13, which: 13 }));
+    });
+    return true;
+  }
+
+  async function lookUp(task, clearOtherFilters) {
+    if (!startSearch(task, clearOtherFilters)) return null;
+    try {
+      // A search that is going to come back does so well inside this, even on
+      // a slow day. Waiting longer just delays telling you the number is wrong.
+      return await waitFor(function () { return editButton(task); },
+                           'not found', 30000);
+    } catch (e) { return null; }
+  }
+
   // ---------------------------------------------------------------- the run
   (async function () {
     say('waiting for Nexus to finish loading…');
@@ -92,20 +138,30 @@
       return null;
     }, 'Nexus never finished loading its scripts', 180000);
 
-    // 1 - open the task. Nexus's own handler needs only data-row.
-    say('opening task <b>' + J.task + '</b>…');
-    var real = document.querySelector('button.btn-edit[data-row="' + J.task + '"]');
-    if (vis(real)) {
-      click(real);
-    } else {
-      var b = document.createElement('button');
-      b.className = 'btn btn-primary btn-sm btn-edit';
-      b.setAttribute('data-row', J.task);
-      b.style.cssText = 'position:fixed;left:-9999px;top:0';
-      document.body.appendChild(b);
-      b.click();
-      setTimeout(function () { b.remove(); }, 2000);
+    // 1 - find the task's own Edit button, searching for it if need be.
+    //
+    // It has to be the REAL button on the real row. Nexus's Edit handler reads
+    // both the button's data-row and its row's data-milestone:
+    //     let rowID = $(this).data('row');
+    //     let opened_milestone = $(this).closest('tr').attr('data-milestone');
+    // so a button we make ourselves has no row to belong to and opens a
+    // half-built task window. Only a task already listed on screen ever
+    // worked; any other number quietly broke.
+    var btn = editButton(J.task);
+    if (!btn) {
+      say('searching for task <b>' + J.task + '</b>…');
+      btn = await lookUp(J.task, false);
     }
+    if (!btn) {
+      say('not in the list — clearing the other filters and searching again…');
+      btn = await lookUp(J.task, true);
+    }
+    if (!btn) throw new Error(
+      'Task ' + J.task + ' did not come back from the search.<br>' +
+      'Check the number, and that you can see the task in Nexus yourself.');
+
+    say('opening task <b>' + J.task + '</b>…');
+    click(btn);
 
     // 2 - the task window arrives by AJAX
     say('waiting for the task window…');
