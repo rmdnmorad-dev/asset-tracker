@@ -1,14 +1,11 @@
-/*  Timecard → Nexus desktop helper
+/*  Timecard → Nexus helper  (v2 — no dependencies, no npm)
  *
- *  Runs on YOUR PC. It keeps a real Chrome window open and, whenever you press a
- *  rocket (🚀) in the Timecard, it drives that window: opens the task, opens the
- *  Hours tab and fills milestone / hours / date / description.
+ *  Runs on YOUR PC with nothing installed but Node.js and Chrome.
+ *  It launches Chrome with debugging enabled and talks to it over Chrome's own
+ *  DevTools Protocol, using only Node built-ins (http, net, crypto).
  *
- *  It never presses Submit — you check the form and submit it yourself.
- *
- *  Why this works where the in-browser script struggled: Playwright waits for an
- *  element to actually exist, be visible, be enabled and stop moving before it
- *  clicks. A slow, far-away server just means it waits longer.
+ *  Press a 🚀 in the Timecard and it opens the task, opens the Hours tab and
+ *  fills milestone / hours / date / description.  It never presses Submit.
  *
  *  Start it with:  START-HELPER.bat   (or:  node nexus-helper.js)
  */
@@ -16,195 +13,350 @@
 'use strict';
 
 const http = require('http');
+const net = require('net');
+const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
+const { spawn } = require('child_process');
 
 // ---------------------------------------------------------------- settings
 const PORT = 8765;
+const CDP_PORT = 9222;
 const NEXUS_URL = process.env.NEXUS_URL || 'http://nexus.tcs.local/protected.php';
-const PROFILE_DIR = path.join(__dirname, 'chrome-profile');   // keeps you logged in
-const SLOW = {                                                // generous: the server is in the US
-  page: 180000,      // first load / logging in
-  element: 120000    // any single element
-};
+const PROFILE_DIR = process.env.NEXUS_PROFILE || path.join(__dirname, 'chrome-profile');
 
-// ---------------------------------------------------------------- pretty log
 const t = () => new Date().toLocaleTimeString();
 const log  = (m) => console.log('  ' + t() + '  ' + m);
 const ok   = (m) => console.log('  ' + t() + '  \x1b[32m' + m + '\x1b[0m');
 const warn = (m) => console.log('  ' + t() + '  \x1b[33m' + m + '\x1b[0m');
 const errl = (m) => console.log('  ' + t() + '  \x1b[31m' + m + '\x1b[0m');
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-let chromium;
-try {
-  ({ chromium } = require('playwright'));
-} catch (e) {
-  console.error('\n  Playwright is not installed yet.\n' +
-                '  Open a command prompt in this folder and run:   npm install\n');
-  process.exit(1);
+// ---------------------------------------------------------------- find Chrome
+function findChrome() {
+  if (process.env.CHROME_PATH && fs.existsSync(process.env.CHROME_PATH)) return process.env.CHROME_PATH;
+  const c = [];
+  if (process.platform === 'win32') {
+    const pf = [process.env['PROGRAMFILES'], process.env['PROGRAMFILES(X86)'], process.env['LOCALAPPDATA']];
+    pf.forEach(p => { if (p) {
+      c.push(path.join(p, 'Google\\Chrome\\Application\\chrome.exe'));
+      c.push(path.join(p, 'Microsoft\\Edge\\Application\\msedge.exe'));
+    }});
+  } else {
+    c.push('/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser',
+           '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+           '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
+  }
+  for (const p of c) { try { if (p && fs.existsSync(p)) return p; } catch (e) {} }
+  return null;
 }
 
-// ---------------------------------------------------------------- browser
-let ctx = null, page = null;
+// ---------------------------------------------------------------- tiny CDP client
+function httpGetJson(url) {
+  return new Promise((resolve, reject) => {
+    http.get(url, res => {
+      let b = '';
+      res.on('data', d => b += d);
+      res.on('end', () => { try { resolve(JSON.parse(b)); } catch (e) { reject(e); } });
+    }).on('error', reject);
+  });
+}
 
-async function browser() {
-  if (ctx && page && !page.isClosed()) return page;
-  log('opening Chrome…');
-  try {
-    ctx = await chromium.launchPersistentContext(PROFILE_DIR, {
-      headless: false,
-      channel: 'chrome',            // uses the Chrome already installed on this PC
-      viewport: null,
-      args: ['--start-maximized']
+// Minimal WebSocket client (RFC 6455, client → server frames are masked).
+class WS {
+  constructor(url) {
+    const u = new URL(url);
+    this.sock = null; this.buf = Buffer.alloc(0); this.open = false;
+    this.frag = []; this.onmessage = null; this.u = u;
+  }
+  connect() {
+    return new Promise((resolve, reject) => {
+      const key = crypto.randomBytes(16).toString('base64');
+      const s = net.connect(+this.u.port, this.u.hostname, () => {
+        s.write('GET ' + this.u.pathname + this.u.search + ' HTTP/1.1\r\n' +
+                'Host: ' + this.u.host + '\r\n' +
+                'Upgrade: websocket\r\nConnection: Upgrade\r\n' +
+                'Sec-WebSocket-Key: ' + key + '\r\nSec-WebSocket-Version: 13\r\n\r\n');
+      });
+      this.sock = s;
+      let handshake = false, acc = Buffer.alloc(0);
+      s.on('data', d => {
+        if (!handshake) {
+          acc = Buffer.concat([acc, d]);
+          const i = acc.indexOf('\r\n\r\n');
+          if (i < 0) return;
+          const head = acc.slice(0, i).toString();
+          if (!/101/.test(head.split('\r\n')[0])) return reject(new Error('websocket upgrade failed: ' + head.split('\r\n')[0]));
+          handshake = true; this.open = true;
+          this.buf = acc.slice(i + 4);
+          this._drain();
+          return resolve(this);
+        }
+        this.buf = Buffer.concat([this.buf, d]);
+        this._drain();
+      });
+      s.on('error', reject);
+      s.on('close', () => { this.open = false; });
     });
-  } catch (e) {
-    warn('could not use installed Chrome (' + e.message.split('\n')[0] + ') — trying bundled browser');
-    ctx = await chromium.launchPersistentContext(PROFILE_DIR, {
-      headless: false, viewport: null, args: ['--start-maximized']
-    });
   }
-  ctx.setDefaultTimeout(SLOW.element);
-  page = ctx.pages()[0] || await ctx.newPage();
-  ctx.on('close', () => { ctx = null; page = null; });
-  return page;
+  _drain() {
+    for (;;) {
+      const b = this.buf;
+      if (b.length < 2) return;
+      const fin = (b[0] & 0x80) !== 0, opcode = b[0] & 0x0f;
+      let len = b[1] & 0x7f, off = 2;
+      if (len === 126) { if (b.length < 4) return; len = b.readUInt16BE(2); off = 4; }
+      else if (len === 127) { if (b.length < 10) return; len = Number(b.readBigUInt64BE(2)); off = 10; }
+      if (b.length < off + len) return;
+      const payload = b.slice(off, off + len);
+      this.buf = b.slice(off + len);
+      if (opcode === 0x8) { this.close(); return; }
+      if (opcode === 0x9) { this._send(payload, 0xA); continue; }   // ping → pong
+      if (opcode === 0xA) continue;
+      this.frag.push(payload);
+      if (fin) {
+        const msg = Buffer.concat(this.frag).toString('utf8');
+        this.frag = [];
+        if (this.onmessage) { try { this.onmessage(msg); } catch (e) {} }
+      }
+    }
+  }
+  _send(payload, opcode) {
+    if (!this.sock || !this.open) return;
+    const mask = crypto.randomBytes(4);
+    const len = payload.length;
+    let head;
+    if (len < 126) head = Buffer.from([0x80 | opcode, 0x80 | len]);
+    else if (len < 65536) { head = Buffer.alloc(4); head[0] = 0x80 | opcode; head[1] = 0x80 | 126; head.writeUInt16BE(len, 2); }
+    else { head = Buffer.alloc(10); head[0] = 0x80 | opcode; head[1] = 0x80 | 127; head.writeBigUInt64BE(BigInt(len), 2); }
+    const masked = Buffer.alloc(len);
+    for (let i = 0; i < len; i++) masked[i] = payload[i] ^ mask[i & 3];
+    this.sock.write(Buffer.concat([head, mask, masked]));
+  }
+  send(text) { this._send(Buffer.from(text, 'utf8'), 0x1); }
+  close() { this.open = false; try { this.sock.destroy(); } catch (e) {} }
 }
 
-// Make sure we are on protected.php and signed in. If a login is needed this
-// simply waits — you log in once and the profile remembers it afterwards.
-async function ensureNexus(p) {
-  const onNexus = p.url().indexOf('protected.php') !== -1;
-  if (!onNexus) {
-    log('loading Nexus…');
-    await p.goto(NEXUS_URL, { waitUntil: 'domcontentloaded', timeout: SLOW.page });
+class CDP {
+  constructor(ws) {
+    this.ws = ws; this.id = 0; this.pending = new Map();
+    ws.onmessage = (raw) => {
+      let m; try { m = JSON.parse(raw); } catch (e) { return; }
+      if (m.id && this.pending.has(m.id)) {
+        const { resolve, reject } = this.pending.get(m.id);
+        this.pending.delete(m.id);
+        if (m.error) reject(new Error(m.error.message || JSON.stringify(m.error)));
+        else resolve(m.result);
+      }
+    };
   }
-  const search = p.locator('input.task_search');
-  if (!(await search.count()) || !(await search.first().isVisible().catch(() => false))) {
-    warn('waiting for Nexus to be ready (log in if it is asking you to)…');
-    await search.first().waitFor({ state: 'visible', timeout: SLOW.page });
+  send(method, params) {
+    const id = ++this.id;
+    this.ws.send(JSON.stringify({ id, method, params: params || {} }));
+    return new Promise((resolve, reject) => {
+      this.pending.set(id, { resolve, reject });
+      setTimeout(() => {
+        if (this.pending.has(id)) { this.pending.delete(id); reject(new Error(method + ' timed out')); }
+      }, 300000);
+    });
   }
-  return p;
+  // run an async function inside the page and get its value back
+  async evalAsync(fnBody, timeoutMs) {
+    const r = await this.send('Runtime.evaluate', {
+      expression: '(async () => { ' + fnBody + ' })()',
+      awaitPromise: true, returnByValue: true, timeout: timeoutMs || 300000
+    });
+    if (r.exceptionDetails) {
+      const e = r.exceptionDetails;
+      throw new Error((e.exception && (e.exception.description || e.exception.value)) || e.text || 'page error');
+    }
+    return r.result && r.result.value;
+  }
 }
+
+// ---------------------------------------------------------------- Chrome
+let chromeProc = null, cdp = null;
+
+async function chromeUp() {
+  try { await httpGetJson('http://127.0.0.1:' + CDP_PORT + '/json/version'); return true; }
+  catch (e) { return false; }
+}
+
+async function startChrome() {
+  if (await chromeUp()) { log('Chrome with debugging is already running — reusing it'); return; }
+  const exe = findChrome();
+  if (!exe) throw new Error('Could not find Chrome. Set CHROME_PATH to chrome.exe and try again.');
+  log('launching ' + path.basename(exe) + '…');
+  if (!fs.existsSync(PROFILE_DIR)) fs.mkdirSync(PROFILE_DIR, { recursive: true });
+  chromeProc = spawn(exe, [
+    '--remote-debugging-port=' + CDP_PORT,
+    '--user-data-dir=' + PROFILE_DIR,
+    '--no-first-run', '--no-default-browser-check', '--start-maximized',
+    NEXUS_URL
+  ], { detached: false, stdio: 'ignore' });
+  chromeProc.on('exit', () => { chromeProc = null; cdp = null; });
+  const t0 = Date.now();
+  while (Date.now() - t0 < 60000) { if (await chromeUp()) return; await sleep(500); }
+  throw new Error('Chrome did not start with debugging enabled');
+}
+
+async function attach() {
+  if (cdp && cdp.ws.open) return cdp;
+  await startChrome();
+  // pick the Nexus tab if there is one, else any page, else make one
+  let targets = await httpGetJson('http://127.0.0.1:' + CDP_PORT + '/json');
+  let page = targets.filter(x => x.type === 'page' && /nexus/i.test(x.url))[0] ||
+             targets.filter(x => x.type === 'page')[0];
+  if (!page) {
+    await httpGetJson('http://127.0.0.1:' + CDP_PORT + '/json/new?' + encodeURIComponent(NEXUS_URL));
+    await sleep(1500);
+    targets = await httpGetJson('http://127.0.0.1:' + CDP_PORT + '/json');
+    page = targets.filter(x => x.type === 'page')[0];
+  }
+  if (!page) throw new Error('no Chrome tab to drive');
+  const ws = await new WS(page.webSocketDebuggerUrl).connect();
+  cdp = new CDP(ws);
+  await cdp.send('Runtime.enable');
+  await cdp.send('Page.enable');
+  return cdp;
+}
+
+// ---------------------------------------------------------------- in-page work
+/* Everything below runs INSIDE the Nexus tab. It waits for each thing to really
+   be there, so a slow, far-away server only means it waits longer. */
+const PAGE_SCRIPT = `
+  const J = __JOB__;
+  const log = [];
+  const say = (m) => { log.push(m); try { window.__tcSay && window.__tcSay(m); } catch(e){} };
+  const vis = (el) => !!el && el.offsetParent !== null && el.getBoundingClientRect().height > 0;
+  const norm = (s) => String(s==null?'':s).replace(/\\s+/g,' ').trim().toUpperCase();
+  const waitFor = (fn, label, ms) => new Promise((res, rej) => {
+    const t0 = Date.now();
+    (function tick(){
+      let v = null; try { v = fn(); } catch(e){}
+      if (v) return res(v);
+      if (Date.now()-t0 > (ms||120000)) return rej(new Error(label));
+      setTimeout(tick, 250);
+    })();
+  });
+  const click = (el) => { try { el.scrollIntoView({block:'center'}); } catch(e){}
+    ['pointerdown','mousedown','mouseup','click'].forEach(ty =>
+      el.dispatchEvent(new MouseEvent(ty,{bubbles:true,cancelable:true,view:window}))); };
+  const setVal = (el, v) => {
+    const proto = el.tagName==='TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(proto,'value').set.call(el, v);
+    ['input','change','blur'].forEach(t => el.dispatchEvent(new Event(t,{bubbles:true})));
+    if (window.jQuery) window.jQuery(el).val(v).trigger('input').trigger('change');
+  };
+
+  // 0 — Nexus must have finished booting (its click handlers live on <body>)
+  say('waiting for Nexus to finish loading');
+  await waitFor(() => {
+    if (!window.jQuery) return null;
+    if (!document.querySelector('input.task_search')) return null;
+    try { const ev = window.jQuery._data(document.body,'events');
+          if (ev && ev.click && ev.click.length) return true; } catch(e){ return true; }
+    return null;
+  }, 'Nexus never finished loading its scripts', 180000);
+
+  // 1 — open the task. Nexus's own handler needs only data-row.
+  say('opening task ' + J.task);
+  const real = document.querySelector('button.btn-edit[data-row="'+J.task+'"]');
+  if (vis(real)) { click(real); }
+  else {
+    const b = document.createElement('button');
+    b.className = 'btn btn-primary btn-sm btn-edit';
+    b.setAttribute('data-row', J.task);
+    b.style.cssText = 'position:fixed;left:-9999px;top:0';
+    document.body.appendChild(b); b.click();
+    setTimeout(()=>b.remove(), 2000);
+  }
+
+  // 2 — the task window arrives by AJAX
+  say('waiting for the task window');
+  const tab = await waitFor(() => {
+    const a = document.querySelector('#EditProject a[data-target="#second"]');
+    if (vis(a)) return a;
+    const links = document.querySelectorAll('#EditProject .nav-tabs a, .modal.in .nav-tabs a');
+    for (const l of links) if (norm(l.textContent)==='HOURS' && vis(l)) return l;
+    return null;
+  }, 'the task window never opened', 180000);
+
+  // 3 — Hours tab (the form is inside it)
+  say('opening the Hours tab');
+  click(tab);
+  if (window.jQuery) { try { window.jQuery(tab).tab('show'); } catch(e){} }
+  const form = await waitFor(() => {
+    const f = document.querySelector('#form-input_hours');
+    return vis(f) ? f : null;
+  }, 'the Hours form never appeared', 120000);
+
+  // 4 — milestone first, then hours, date, description
+  const out = { filled: [], missing: [] };
+  if (J.milestone) {
+    const sel = form.querySelector('select[name="ms_select"]') || form.querySelector('select');
+    if (sel) {
+      let hit = null;
+      for (const o of sel.options)
+        if (norm(o.value)===norm(J.milestone) || norm(o.textContent)===norm(J.milestone)) { hit = o; break; }
+      if (!hit) for (const o of sel.options)
+        if (norm(o.textContent).indexOf(norm(J.milestone))>=0) { hit = o; break; }
+      if (hit) {
+        sel.value = hit.value;
+        sel.dispatchEvent(new Event('change',{bubbles:true}));
+        if (window.jQuery) window.jQuery(sel).val(hit.value).trigger('change');
+        const id = hit.getAttribute('data-ms-id');
+        const hid = form.querySelector('input[name="ts_ms_id"]');
+        if (id && hid) hid.value = id;                 // Nexus does not copy this itself
+        out.filled.push('milestone=' + hit.value + (id ? ' (ms_id '+id+')' : ''));
+      } else out.missing.push('milestone "'+J.milestone+'" not in the list');
+    } else out.missing.push('milestone dropdown');
+  }
+  const h = form.querySelector('input[name="ts_hours"]');
+  const d = form.querySelector('input[name="ts_date"]');
+  const n = form.querySelector('textarea[name="ts_emp_description"], #ts_emp_description');
+  if (h && J.hours) { setVal(h, String(J.hours)); out.filled.push('hours=' + J.hours); } else if (!h) out.missing.push('Hours box');
+  if (d && J.date)  { setVal(d, String(J.date));
+                      try { d.blur(); if (window.jQuery && window.jQuery(d).datepicker) window.jQuery(d).datepicker('hide'); } catch(e){}
+                      const dp = document.getElementById('ui-datepicker-div'); if (dp) dp.style.display='none';
+                      out.filled.push('date=' + J.date); } else if (!d) out.missing.push('Date box');
+  if (n && J.desc)  { setVal(n, String(J.desc)); out.filled.push('description'); } else if (!n) out.missing.push('Description box');
+
+  form.style.outline = '3px solid #16a34a'; form.style.outlineOffset = '3px';
+  try { form.scrollIntoView({block:'center'}); } catch(e){}
+  out.log = log;
+  out.values = { ms: (form.querySelector('[name=ms_select]')||{}).value,
+                 ms_id: (form.querySelector('[name=ts_ms_id]')||{}).value,
+                 hours: (h||{}).value, date: (d||{}).value, desc: (n||{}).value };
+  return out;
+`;
 
 // ---------------------------------------------------------------- one job
 async function runJob(job) {
-  const task = String(job.task || '').trim();
   console.log('');
-  log('── job: task ' + task + ' · ' + (job.milestone || '?') + ' · ' +
+  log('── job: task ' + job.task + ' · ' + (job.milestone || '?') + ' · ' +
       (job.hours || '0') + ' h · ' + (job.date || '') + ' ──');
 
-  const p = await browser();
-  await ensureNexus(p);
+  const c = await attach();
 
-  // If a task window is already open from a previous job, close it first.
-  const openModal = p.locator('#EditProject .nav-tabs');
-  if (await openModal.count() && await openModal.first().isVisible().catch(() => false)) {
-    log('closing the previous task window');
-    await p.keyboard.press('Escape').catch(() => {});
-    await p.waitForTimeout(800);
+  // make sure the tab is on Nexus
+  const url = await c.evalAsync('return location.href;', 15000).catch(() => '');
+  if (String(url).indexOf('protected.php') === -1) {
+    log('loading Nexus…');
+    await c.send('Page.navigate', { url: NEXUS_URL });
+    await sleep(3000);
   }
+  await c.send('Page.bringToFront').catch(() => {});
 
-  // 1 ── find the task. Type it in the search box; Playwright then waits for the
-  //      row's own Edit button to appear, however long the server takes.
-  log('searching for ' + task + '…');
-  const search = p.locator('input.task_search').first();
-  await search.click();
-  await search.fill('');
-  await search.type(task, { delay: 60 });
-  await search.press('Enter').catch(() => {});
+  log('working in the browser (waiting on the server as long as it needs)…');
+  const res = await c.evalAsync(PAGE_SCRIPT.replace('__JOB__', JSON.stringify(job)), 300000);
 
-  const editBtn = p.locator('button.btn-edit[data-row="' + task + '"]').first();
-  log('waiting for the task row (server is remote, this can take a while)…');
-  try {
-    await editBtn.waitFor({ state: 'visible', timeout: SLOW.element });
-  } catch (e) {
-    // Fall back to Nexus's own handler, which needs only the row id.
-    warn('row did not appear — asking Nexus to open the task directly');
-    await p.evaluate((id) => {
-      const b = document.createElement('button');
-      b.className = 'btn btn-primary btn-sm btn-edit';
-      b.setAttribute('data-row', id);
-      b.style.cssText = 'position:fixed;left:-9999px;top:0';
-      document.body.appendChild(b);
-      b.click();
-      setTimeout(() => b.remove(), 2000);
-    }, task);
-  }
-  if (await editBtn.isVisible().catch(() => false)) {
-    log('opening the task…');
-    await editBtn.click();
-  }
-
-  // 2 ── the task window (loaded by AJAX)
-  log('waiting for the task window…');
-  const hoursTab = p.locator('#EditProject a[data-target="#second"]').first();
-  await hoursTab.waitFor({ state: 'visible', timeout: SLOW.element });
-
-  // 3 ── Hours tab (the form lives inside it)
-  log('opening the Hours tab…');
-  await hoursTab.click();
-
-  const form = p.locator('#form-input_hours').first();
-  await form.waitFor({ state: 'visible', timeout: SLOW.element });
-
-  // 4 ── fill: milestone first, then hours, date, description
-  if (job.milestone) {
-    const sel = form.locator('select[name="ms_select"]').first();
-    await sel.waitFor({ state: 'visible', timeout: SLOW.element });
-    try {
-      await sel.selectOption({ label: job.milestone });
-    } catch (e) {
-      await sel.selectOption(job.milestone).catch(async () => {
-        warn('milestone "' + job.milestone + '" not in the list — leaving it as it is');
-      });
-    }
-    // Nexus does not copy the option's data-ms-id into the hidden field itself
-    await p.evaluate(() => {
-      const f = document.querySelector('#form-input_hours');
-      if (!f) return;
-      const s = f.querySelector('select[name="ms_select"]');
-      const h = f.querySelector('input[name="ts_ms_id"]');
-      if (s && h && s.selectedIndex >= 0) {
-        const id = s.options[s.selectedIndex].getAttribute('data-ms-id');
-        if (id) h.value = id;
-      }
-    });
-    log('milestone set to ' + job.milestone);
-  }
-
-  if (job.hours) {
-    const h = form.locator('input[name="ts_hours"]').first();
-    await h.fill(String(job.hours));
-    log('hours = ' + job.hours);
-  }
-
-  if (job.date) {
-    // the date box carries a jQuery datepicker, so set it directly and close the picker
-    await p.evaluate((d) => {
-      const el = document.querySelector('#form-input_hours input[name="ts_date"]');
-      if (!el) return;
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-      setter.call(el, d);
-      ['input', 'change', 'blur'].forEach(t => el.dispatchEvent(new Event(t, { bubbles: true })));
-      if (window.jQuery) { try { window.jQuery(el).datepicker('hide'); } catch (e) {} }
-      const dp = document.getElementById('ui-datepicker-div');
-      if (dp) dp.style.display = 'none';
-    }, String(job.date));
-    log('date = ' + job.date);
-  }
-
-  if (job.desc) {
-    const d = form.locator('textarea[name="ts_emp_description"]').first();
-    await d.fill(String(job.desc));
-    log('description filled');
-  }
-
-  await form.scrollIntoViewIfNeeded().catch(() => {});
-  await p.evaluate(() => {
-    const f = document.querySelector('#form-input_hours');
-    if (f) { f.style.outline = '3px solid #16a34a'; f.style.outlineOffset = '3px'; }
-  });
-  await p.bringToFront().catch(() => {});
+  (res && res.log ? res.log : []).forEach(m => log('   · ' + m));
+  if (res && res.filled && res.filled.length) log('filled: ' + res.filled.join(', '));
+  if (res && res.missing && res.missing.length) warn('could not fill: ' + res.missing.join(', '));
   ok('READY — check the form in Chrome and press Submit yourself.');
+  return res;
 }
 
 // ---------------------------------------------------------------- queue
@@ -215,7 +367,7 @@ async function pump() {
   const job = queue.shift();
   try { await runJob(job); }
   catch (e) {
-    errl('could not finish: ' + (e && e.message ? e.message.split('\n')[0] : e));
+    errl('stopped: ' + (e && e.message ? String(e.message).split('\n')[0] : e));
     errl('the Chrome window is still open — finish that one by hand.');
   }
   busy = false;
@@ -232,7 +384,7 @@ http.createServer((req, res) => {
     if (raw) {
       let job = null;
       try { job = JSON.parse(raw); } catch (e) { errl('unreadable job from the Timecard'); }
-      if (job && job.task) { queue.push(job); log('got a job from the Timecard — queued'); setImmediate(pump); }
+      if (job && job.task) { queue.push(job); log('got a job from the Timecard'); setImmediate(pump); }
     }
     res.writeHead(200, { 'Content-Type': 'image/gif', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' });
     return res.end(GIF);
@@ -240,16 +392,18 @@ http.createServer((req, res) => {
   res.writeHead(404, { 'Access-Control-Allow-Origin': '*' });
   res.end();
 }).listen(PORT, '127.0.0.1', () => {
-  console.log('\n  ┌────────────────────────────────────────────────────────┐');
-  console.log('  │  Timecard → Nexus helper is running                    │');
-  console.log('  │                                                        │');
-  console.log('  │  Leave this window open.                               │');
-  console.log('  │  Press a 🚀 in the Timecard and watch Chrome.          │');
-  console.log('  │  It never presses Submit — you do that.                │');
-  console.log('  └────────────────────────────────────────────────────────┘');
+  console.log('\n  ┌──────────────────────────────────────────────────────────┐');
+  console.log('  │  Timecard → Nexus helper  (no npm, no extra downloads)   │');
+  console.log('  │                                                          │');
+  console.log('  │  Leave this window open and minimise it.                 │');
+  console.log('  │  Press a 🚀 in the Timecard and watch Chrome.            │');
+  console.log('  │  It never presses Submit — you do that.                  │');
+  console.log('  └──────────────────────────────────────────────────────────┘');
   log('listening on http://127.0.0.1:' + PORT);
   log('Nexus: ' + NEXUS_URL);
-  if (!fs.existsSync(PROFILE_DIR)) log('first run: Chrome will open — sign in to Nexus once and it will be remembered.');
+  const exe = findChrome();
+  log('Chrome: ' + (exe || 'NOT FOUND — set CHROME_PATH'));
+  if (!fs.existsSync(PROFILE_DIR)) log('first run: Chrome opens a fresh profile — sign in to Nexus once, it is remembered.');
 });
 
 process.on('unhandledRejection', (e) => errl('background error: ' + (e && e.message ? e.message : e)));

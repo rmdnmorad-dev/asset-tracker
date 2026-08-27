@@ -12,22 +12,9 @@ if errorlevel 1 (
   exit /b 1
 )
 
-if not exist "node_modules" (
-  echo.
-  echo   First run - installing what the helper needs. This takes a few minutes...
-  echo.
-  call npm install
-  if errorlevel 1 (
-    echo.
-    echo   Install failed. If your company blocks npm, tell Claude and we will
-    echo   use a different approach.
-    echo.
-    pause
-    exit /b 1
-  )
-)
-
+REM Nothing to install - this helper uses only what ships with Node.js.
 node nexus-helper.js
+
 echo.
 echo   The helper stopped. Press any key to close.
 pause >nul
