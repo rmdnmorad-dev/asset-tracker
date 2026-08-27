@@ -16,8 +16,9 @@ if not defined HELPER goto nohelper
 if /i not "%HELPER%"=="nexus-helper.js" echo   using "%HELPER%"
 
 REM Nothing to install - this helper uses only what ships with Node.js.
-REM It drives Opera first. If your Opera refuses to open its debugging port
-REM it falls back to Chrome / Edge / Brave / Vivaldi on its own.
+REM It drives whatever browser Windows has set as your default. If that one
+REM cannot be automated (Firefox) or will not open a debugging port, it
+REM falls back to Chrome / Edge / Opera / Brave / Vivaldi on its own.
 REM To force one browser, un-comment the next line and fix the path:
 REM set "BROWSER_PATH=%LOCALAPPDATA%\Programs\Opera\opera.exe"
 

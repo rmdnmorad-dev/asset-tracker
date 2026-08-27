@@ -1,8 +1,10 @@
 /*  Timecard → Nexus helper  (v2 — no dependencies, no npm)
  *
  *  Runs on YOUR PC with nothing installed but Node.js and a browser.
- *  Opera is used first; if Opera refuses to open its debugging port it falls
- *  back to Chrome, Edge, Brave or Vivaldi — whichever is on the machine.
+ *  It uses whatever browser Windows has set as your default. If that browser
+ *  cannot be driven (Firefox has no DevTools Protocol) or refuses to open a
+ *  debugging port, it falls back to whichever of Chrome, Edge, Opera, Brave
+ *  or Vivaldi is on the machine.
  *  It talks to the browser over the DevTools Protocol, using only Node
  *  built-ins (http, net, crypto).
  *
@@ -20,7 +22,7 @@ const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 
 // ---------------------------------------------------------------- settings
 const PORT = 8765;
@@ -35,12 +37,79 @@ const warn = (m) => console.log('  ' + t() + '  \x1b[33m' + m + '\x1b[0m');
 const errl = (m) => console.log('  ' + t() + '  \x1b[31m' + m + '\x1b[0m');
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-// ------------------------------------------------------- find a browser
+// ------------------------------------------------- your default browser
+/* We drive whatever browser Windows says is your default. Everything else in
+   the list below is only a fallback, for when the default cannot be driven. */
+
+// Browsers that are not Chromium underneath. They have no DevTools Protocol,
+// so there is nothing to drive - don't waste time launching them.
+const NOT_CHROMIUM = /(firefox|waterfox|librewolf|palemoon|seamonkey|iexplore|safari|tor)/i;
+
+let defaultBrowser = null;    // { exe, name, drivable } once looked up
+
+function regQuery(key, args) {
+  try {
+    const r = spawnSync('reg', ['query', key].concat(args), { encoding: 'utf8', windowsHide: true });
+    return (r.status === 0 && r.stdout) ? r.stdout : null;
+  } catch (e) { return null; }
+}
+
+function exeFromCommand(cmd) {
+  if (!cmd) return null;
+  const quoted = cmd.match(/"([^"]+\.exe)"/i);   // "C:\...\opera.exe" -- "%1"
+  if (quoted) return quoted[1];
+  const bare = cmd.match(/^\s*(\S+\.exe)/i);     //  C:\...\chrome.exe -- "%1"
+  return bare ? bare[1] : null;
+}
+
+/* Windows records the default browser as a ProgId (OperaStable, ChromeHTML,
+   MSEdgeHTM, FirefoxURL …); the ProgId then points at the real .exe. */
+function findDefaultBrowser() {
+  if (process.platform === 'win32') {
+    for (const scheme of ['https', 'http']) {
+      const out = regQuery('HKCU\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\' +
+                           scheme + '\\UserChoice', ['/v', 'ProgId']);
+      const m = out && out.match(/ProgId\s+REG_SZ\s+(\S+)/i);
+      if (!m) continue;
+      const progId = m[1];
+      for (const root of ['HKCU\\Software\\Classes\\', 'HKCR\\']) {
+        const c = regQuery(root + progId + '\\shell\\open\\command', ['/ve']);
+        const line = c && c.match(/REG_SZ\s+(.+)/i);
+        const exe = exeFromCommand(line && line[1].trim());
+        if (exe && fs.existsSync(exe)) return { exe, name: progId, drivable: !NOT_CHROMIUM.test(exe) };
+      }
+    }
+    return null;
+  }
+  // Linux: ask xdg, then read the .desktop file it names.
+  try {
+    const r = spawnSync('xdg-settings', ['get', 'default-web-browser'], { encoding: 'utf8' });
+    const desktop = (r.stdout || '').trim();
+    if (desktop) {
+      for (const d of ['/usr/share/applications/', (process.env.HOME || '') + '/.local/share/applications/']) {
+        const f = path.join(d, desktop);
+        if (!fs.existsSync(f)) continue;
+        const ex = fs.readFileSync(f, 'utf8').match(/^Exec=(\S+)/m);
+        if (!ex) continue;
+        let exe = ex[1];
+        if (!exe.includes('/')) { const w = spawnSync('which', [exe], { encoding: 'utf8' });
+                                  exe = (w.stdout || '').trim(); }
+        if (exe && fs.existsSync(exe)) return { exe, name: desktop, drivable: !NOT_CHROMIUM.test(exe) };
+      }
+    }
+  } catch (e) {}
+  return null;
+}
+
 function browserCandidates() {
   const out = [];
   const add = (p) => { try { if (p && fs.existsSync(p) && out.indexOf(p) < 0) out.push(p); } catch (e) {} };
   // whatever you point us at wins
   add(process.env.BROWSER_PATH); add(process.env.CHROME_PATH);
+
+  // then your actual default browser, whatever it happens to be
+  if (!defaultBrowser) defaultBrowser = findDefaultBrowser() || { none: true };
+  if (defaultBrowser.exe && defaultBrowser.drivable) add(defaultBrowser.exe);
 
   if (process.platform === 'win32') {
     const LA = process.env['LOCALAPPDATA'], PF = process.env['PROGRAMFILES'], PX = process.env['PROGRAMFILES(X86)'];
@@ -213,6 +282,7 @@ function prettyName(exe) {
   if (b.includes('brave'))    return 'Brave';
   if (b.includes('vivaldi'))  return 'Vivaldi';
   if (b.includes('chrom'))    return 'Chrome';
+  if (b.includes('firefox'))  return 'Firefox';
   return path.basename(exe);
 }
 
@@ -224,7 +294,7 @@ async function chromeUp() {
 async function startChrome() {
   if (await chromeUp()) { log('a browser with debugging is already running — reusing it'); return; }
   const list = browserCandidates();
-  if (!list.length) throw new Error('No Chromium-based browser found. Set BROWSER_PATH to opera.exe (or chrome.exe) and try again.');
+  if (!list.length) throw new Error('No browser I can drive was found. Set BROWSER_PATH to your browser .exe and try again.');
   if (!fs.existsSync(PROFILE_DIR)) fs.mkdirSync(PROFILE_DIR, { recursive: true });
 
   let lastErr = null;
@@ -457,16 +527,26 @@ http.createServer((req, res) => {
   console.log('  │  Timecard → Nexus helper  (no npm, no extra downloads)   │');
   console.log('  │                                                          │');
   console.log('  │  Leave this window open and minimise it.                 │');
-  console.log('  │  Press a 🚀 in the Timecard and watch Opera.             │');
+  console.log('  │  Press a 🚀 in the Timecard and watch your browser.      │');
   console.log('  │  It never presses Submit — you do that.                  │');
   console.log('  └──────────────────────────────────────────────────────────┘');
   log('listening on http://127.0.0.1:' + PORT);
   log('Nexus: ' + NEXUS_URL);
   const list = browserCandidates();
+  if (process.env.BROWSER_PATH || process.env.CHROME_PATH) {
+    log('browser: forced by BROWSER_PATH/CHROME_PATH');
+  } else if (defaultBrowser && defaultBrowser.exe && defaultBrowser.drivable) {
+    log('your default browser: ' + prettyName(defaultBrowser.exe) + ' — using it');
+  } else if (defaultBrowser && defaultBrowser.exe) {
+    warn('your default browser is ' + prettyName(defaultBrowser.exe) + ', which cannot be automated ' +
+         '(no DevTools Protocol) — using the next best browser instead');
+  } else {
+    warn('could not read your default browser from Windows — using the first browser I can find');
+  }
   if (list.length) { log('browser: ' + prettyName(list[0]) + '  (' + list[0] + ')');
                      const fb = list.slice(1).map(p => prettyName(p)).filter((n, i, a) => a.indexOf(n) === i);
                      if (fb.length) log('fallbacks if it refuses debugging: ' + fb.join(', ')); }
-  else log('browser: NOT FOUND — set BROWSER_PATH to your opera.exe');
+  else log('browser: NOT FOUND — set BROWSER_PATH to your browser .exe');
   if (!fs.existsSync(PROFILE_DIR)) log('first run: a fresh browser profile opens — sign in to Nexus once, it is remembered.');
 });
 
