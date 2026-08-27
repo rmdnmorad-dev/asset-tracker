@@ -148,14 +148,25 @@ function findChrome() { return browserCandidates()[0] || null; }
 
 
 // ---------------------------------------------------------------- tiny CDP client
-function httpGetJson(url) {
+function httpJson(url, method) {
   return new Promise((resolve, reject) => {
-    http.get(url, res => {
+    const u = new URL(url);
+    const req = http.request({ hostname: u.hostname, port: u.port, path: u.pathname + u.search,
+                               method: method || 'GET' }, res => {
       let b = '';
       res.on('data', d => b += d);
-      res.on('end', () => { try { resolve(JSON.parse(b)); } catch (e) { reject(e); } });
-    }).on('error', reject);
+      res.on('end', () => { try { resolve(JSON.parse(b)); } catch (e) { reject(new Error(b.slice(0, 200))); } });
+    });
+    req.on('error', reject);
+    req.end();
   });
+}
+function httpGetJson(url) { return httpJson(url, 'GET'); }
+
+/* Chrome 111+ insists on PUT for /json/new; older builds only accept GET. */
+function cdpNewTab(url) {
+  const ep = 'http://127.0.0.1:' + CDP_PORT + '/json/new?' + encodeURIComponent(url);
+  return httpJson(ep, 'PUT').catch(() => httpJson(ep, 'GET'));
 }
 
 // Minimal WebSocket client (RFC 6455, client → server frames are masked).
@@ -286,6 +297,37 @@ function prettyName(exe) {
   return path.basename(exe);
 }
 
+/* The browser we start is the one the rocket opens its tabs in, so the
+   Timecard wants to live in it too. Find it and use it as the start page. */
+function findTimecard() {
+  if (process.env.TIMECARD) {
+    try { if (fs.statSync(process.env.TIMECARD).isFile()) return process.env.TIMECARD; } catch (e) {}
+  }
+  const dirs = [__dirname, path.dirname(__dirname), path.join(os.homedir(), 'Desktop'),
+                path.join(os.homedir(), 'Downloads'), path.join(os.homedir(), 'Documents')];
+  // If several Timecard files are lying around, the newest one is the one
+  // being worked in - version numbers in the name are not reliable.
+  let best = null, bestAge = -1;
+  dirs.forEach(d => {
+    try {
+      fs.readdirSync(d).filter(f => /^timecard.*\.html?$/i.test(f)).forEach(f => {
+        const p = path.join(d, f);
+        try {
+          const st = fs.statSync(p);
+          if (st.isFile() && st.mtimeMs > bestAge) { bestAge = st.mtimeMs; best = p; }
+        } catch (e) {}
+      });
+    } catch (e) {}
+  });
+  return best;
+}
+
+function startPage() {
+  const tc = findTimecard();
+  if (!tc) return NEXUS_URL;
+  try { return require('url').pathToFileURL(tc).href; } catch (e) { return NEXUS_URL; }
+}
+
 async function chromeUp() {
   try { await httpGetJson('http://127.0.0.1:' + CDP_PORT + '/json/version'); return true; }
   catch (e) { return false; }
@@ -297,6 +339,7 @@ async function startChrome() {
   if (!list.length) throw new Error('No browser I can drive was found. Set BROWSER_PATH to your browser .exe and try again.');
   if (!fs.existsSync(PROFILE_DIR)) fs.mkdirSync(PROFILE_DIR, { recursive: true });
 
+  const home = startPage();
   let lastErr = null;
   for (let i = 0; i < list.length; i++) {
     const exe = list[i];
@@ -310,7 +353,7 @@ async function startChrome() {
         '--remote-debugging-port=' + CDP_PORT,
         '--user-data-dir=' + PROFILE_DIR,
         '--no-first-run', '--no-default-browser-check', '--start-maximized',
-        NEXUS_URL
+        home
       ], { detached: false, stdio: 'ignore' });
     } catch (e) { lastErr = e; warn('could not start it: ' + e.message); continue; }
 
@@ -332,22 +375,47 @@ async function startChrome() {
                   (lastErr ? ' — last problem: ' + lastErr.message : ''));
 }
 
+/* Is this tab a Nexus tab? Anything that is not - your Timecard, your mail -
+   must be left completely alone. We only ever take over a Nexus tab, and
+   otherwise open a brand new one alongside whatever you already have open. */
+let nexusHost = '';
+try { nexusHost = new URL(NEXUS_URL).host; } catch (e) {}
+function looksLikeNexus(u) {
+  if (!u) return false;
+  if (/protected\.php/i.test(u)) return true;
+  try { return !!nexusHost && new URL(u).host === nexusHost; } catch (e) { return false; }
+}
+
+const tabs = () => httpGetJson('http://127.0.0.1:' + CDP_PORT + '/json')
+                     .then(t => t.filter(x => x.type === 'page'))
+                     .catch(() => []);
+
 async function attach() {
-  if (cdp && cdp.ws.open) return cdp;
-  await startChrome();
-  // pick the Nexus tab if there is one, else any page, else make one
-  let targets = await httpGetJson('http://127.0.0.1:' + CDP_PORT + '/json');
-  let page = targets.filter(x => x.type === 'page' && /nexus/i.test(x.url))[0] ||
-             targets.filter(x => x.type === 'page')[0];
-  if (!page) {
-    await httpGetJson('http://127.0.0.1:' + CDP_PORT + '/json/new?' + encodeURIComponent(NEXUS_URL));
-    await sleep(1500);
-    targets = await httpGetJson('http://127.0.0.1:' + CDP_PORT + '/json');
-    page = targets.filter(x => x.type === 'page')[0];
+  // Keep the existing connection only if that tab is still open and still Nexus.
+  if (cdp && cdp.ws.open && cdp.targetId) {
+    const still = (await tabs()).filter(x => x.id === cdp.targetId)[0];
+    if (still && looksLikeNexus(still.url)) return cdp;
+    try { cdp.ws.close(); } catch (e) {}
+    cdp = null;
   }
-  if (!page) throw new Error('no browser tab to drive');
+  await startChrome();
+
+  let page = (await tabs()).filter(x => looksLikeNexus(x.url))[0];
+  if (page) {
+    log('re-using the Nexus tab already open in ' + browserName);
+  } else {
+    log('opening a new Nexus tab in ' + browserName + '…');
+    await cdpNewTab(NEXUS_URL).catch(e => warn('could not open a tab: ' + e.message));
+    for (let i = 0; i < 40 && !page; i++) {         // give a slow server time
+      await sleep(500);
+      page = (await tabs()).filter(x => looksLikeNexus(x.url))[0];
+    }
+  }
+  if (!page) throw new Error('could not open a Nexus tab in ' + browserName);
+
   const ws = await new WS(page.webSocketDebuggerUrl).connect();
   cdp = new CDP(ws);
+  cdp.targetId = page.id;
   await cdp.send('Runtime.enable');
   await cdp.send('Page.enable');
   return cdp;
@@ -471,9 +539,9 @@ async function runJob(job) {
 
   const c = await attach();
 
-  // make sure the tab is on Nexus
+  // attach() only ever hands back a Nexus tab, but if it drifted, reload it
   const url = await c.evalAsync('return location.href;', 15000).catch(() => '');
-  if (String(url).indexOf('protected.php') === -1) {
+  if (!looksLikeNexus(String(url))) {
     log('loading Nexus…');
     await c.send('Page.navigate', { url: NEXUS_URL });
     await sleep(3000);
@@ -547,6 +615,10 @@ http.createServer((req, res) => {
                      const fb = list.slice(1).map(p => prettyName(p)).filter((n, i, a) => a.indexOf(n) === i);
                      if (fb.length) log('fallbacks if it refuses debugging: ' + fb.join(', ')); }
   else log('browser: NOT FOUND — set BROWSER_PATH to your browser .exe');
+  const tc = findTimecard();
+  if (tc) log('opening your Timecard in this browser as the first tab: ' + tc);
+  else    warn('Timecard not found — put Timecard*.html next to this helper, or open it yourself ' +
+               'in the browser window this helper starts, so the rocket opens Nexus beside it.');
   if (!fs.existsSync(PROFILE_DIR)) log('first run: a fresh browser profile opens — sign in to Nexus once, it is remembered.');
 });
 

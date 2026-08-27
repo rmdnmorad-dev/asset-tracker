@@ -22,6 +22,12 @@ REM falls back to Chrome / Edge / Opera / Brave / Vivaldi on its own.
 REM To force one browser, un-comment the next line and fix the path:
 REM set "BROWSER_PATH=%LOCALAPPDATA%\Programs\Opera\opera.exe"
 
+REM The browser this helper starts is the one the rockets open tabs in, so
+REM your Timecard should live in it too. Keep Timecard*.html next to this
+REM .bat (or on your Desktop) and it opens automatically as the first tab.
+REM To point at one exact file, un-comment and fix this:
+REM set "TIMECARD=%USERPROFILE%\Desktop\Timecard_3.0.html"
+
 node "%HELPER%"
 
 echo.
