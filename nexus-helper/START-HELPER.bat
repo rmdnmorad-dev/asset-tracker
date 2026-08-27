@@ -6,12 +6,16 @@ where node >nul 2>nul
 if errorlevel 1 goto nonode
 
 REM ---- find the helper sitting next to this .bat ----------------------
-REM Browsers rename downloads, so accept the usual manglings as well:
-REM   nexus-helper (1).js    nexus-helper.js.txt    nexus-helper.txt
+REM Browsers rename downloads, so take the name loosely: nexus-helper.js,
+REM nexus-helper (1).js, NexusHelper.js, nexus-helper.js.txt - and if there
+REM is only one .js file in the folder at all, that must be it.
 set "HELPER="
 if exist "nexus-helper.js" set "HELPER=nexus-helper.js"
 if not defined HELPER call :pick nexus-helper*.js
-if not defined HELPER call :pick nexus-helper*.txt
+if not defined HELPER call :pick *nexus*.js
+if not defined HELPER call :pick *helper*.js
+if not defined HELPER call :only
+if not defined HELPER call :pick *nexus*.txt
 if not defined HELPER goto nohelper
 if /i not "%HELPER%"=="nexus-helper.js" echo   using "%HELPER%"
 
@@ -37,6 +41,13 @@ exit /b
 
 :pick
 if exist "%~1" for %%F in (%~1) do if not defined HELPER set "HELPER=%%~nxF"
+exit /b
+
+REM If there is exactly one .js file in the folder, it can only be the helper.
+:only
+set /a JSN=0
+for %%F in (*.js) do (set /a JSN+=1 & set "JS1=%%~nxF")
+if %JSN%==1 set "HELPER=%JS1%"
 exit /b
 
 :nonode

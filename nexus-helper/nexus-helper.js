@@ -47,6 +47,21 @@ const NOT_CHROMIUM = /(firefox|waterfox|librewolf|palemoon|seamonkey|iexplore|sa
 
 let defaultBrowser = null;    // { exe, name, drivable } once looked up
 
+/* The rocket reaches us as an HTTP request from the Timecard page, and that
+   request says which browser you pressed it in. That beats guessing. */
+let pressedIn = null;         // e.g. 'opera' - a filename fragment to match
+
+function brandFromUA(ua) {
+  if (!ua) return null;
+  if (/\bOPR\//.test(ua))     return 'opera';     // Opera and Opera GX
+  if (/\bEdg\//.test(ua))     return 'msedge';
+  if (/Vivaldi/i.test(ua))    return 'vivaldi';
+  if (/Firefox\//.test(ua))   return 'firefox';   // not drivable, but worth naming
+  if (/Chrome\//.test(ua))    return 'chrome';    // Brave looks like Chrome too
+  if (/Safari\//.test(ua))    return 'safari';
+  return null;
+}
+
 function regQuery(key, args) {
   try {
     const r = spawnSync('reg', ['query', key].concat(args), { encoding: 'utf8', windowsHide: true });
@@ -141,6 +156,14 @@ function browserCandidates() {
      '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
      '/Applications/Opera.app/Contents/MacOS/Opera',
      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'].forEach(add);
+  }
+
+  /* The browser you actually pressed the rocket in goes to the front - it is
+     the one you are working in, whatever the registry says is "default".
+     An explicit BROWSER_PATH still outranks it. */
+  if (pressedIn && !process.env.BROWSER_PATH && !process.env.CHROME_PATH) {
+    const mine = out.filter(p => path.basename(p).toLowerCase().includes(pressedIn));
+    if (mine.length) return mine.concat(out.filter(p => mine.indexOf(p) < 0));
   }
   return out;
 }
@@ -294,6 +317,7 @@ function prettyName(exe) {
   if (b.includes('vivaldi'))  return 'Vivaldi';
   if (b.includes('chrom'))    return 'Chrome';
   if (b.includes('firefox'))  return 'Firefox';
+  if (b.includes('safari'))   return 'Safari';
   return path.basename(exe);
 }
 
@@ -334,7 +358,18 @@ async function chromeUp() {
 }
 
 async function startChrome() {
-  if (await chromeUp()) { log('a browser with debugging is already running — reusing it'); return; }
+  if (await chromeUp()) {
+    if (pressedIn && browserName !== 'the browser' &&
+        !browserName.toLowerCase().includes(pressedIn.replace('msedge', 'edge'))) {
+      warn('you pressed the rocket in ' + prettyName(pressedIn) + ', but ' + browserName +
+           ' is already open with debugging. Close that ' + browserName +
+           ' window and press the rocket again to switch.');
+    }
+    log('a browser with debugging is already running — reusing it');
+    return;
+  }
+  if (pressedIn && NOT_CHROMIUM.test(pressedIn))
+    warn(prettyName(pressedIn) + ' cannot be automated (no DevTools Protocol) — using another browser instead');
   const list = browserCandidates();
   if (!list.length) throw new Error('No browser I can drive was found. Set BROWSER_PATH to your browser .exe and try again.');
   if (!fs.existsSync(PROFILE_DIR)) fs.mkdirSync(PROFILE_DIR, { recursive: true });
@@ -583,7 +618,14 @@ http.createServer((req, res) => {
     if (raw) {
       let job = null;
       try { job = JSON.parse(raw); } catch (e) { errl('unreadable job from the Timecard'); }
-      if (job && job.task) { queue.push(job); log('got a job from the Timecard'); setImmediate(pump); }
+      if (job && job.task) {
+        const brand = brandFromUA(req.headers['user-agent']);
+        if (brand && brand !== pressedIn) {
+          pressedIn = brand;
+          log('you pressed the rocket in ' + prettyName(brand) + ' — that is the browser I will use');
+        }
+        queue.push(job); log('got a job from the Timecard'); setImmediate(pump);
+      }
     }
     res.writeHead(200, { 'Content-Type': 'image/gif', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' });
     return res.end(GIF);
