@@ -558,7 +558,7 @@
   <div class="grp">
     <button class="btn" id="btnSearch" title="Search every timecard (Ctrl+F)">🔍 Search</button>
     <button class="btn" id="btnSettings">⚙ Settings</button>
-    <span style="font-size:10px;color:#9aa4b2;align-self:center;margin-left:1px" title="Version 3.4">v3.4</span>
+    <span style="font-size:10px;color:#9aa4b2;align-self:center;margin-left:1px" title="Version 3.5">v3.5</span>
   </div>
   <div id="hoursInd" class="hoursind" title="Total hours this week on whatever box you click / hover"></div>
   <div class="grp right">
@@ -687,10 +687,10 @@
   </div>
   <div class="row" style="margin-top:6px">
     <div class="fld" style="flex:1 1 100%">
-      <span>NEXUS 🚀 — the rocket on each task row opens Nexus and fills the Add-Hours form (milestone, hours, date, notes). It never presses Submit.</span>
+      <span>NEXUS 🚀 — the rocket on each task row sends that row to the <b>Nexus helper</b> running on this PC, which drives a real Chrome window: it opens the task, opens the Hours tab and fills milestone, hours, date and notes. It never presses Submit.</span>
       <input type="text" id="nexusUrl" placeholder="http://nexus.tcs.local/protected.php">
       <div style="font-size:11px;color:#8a5a00;background:#fff8e6;border:1px solid #f0d98a;border-radius:6px;padding:6px 8px;margin:2px 0;line-height:1.45">
-        ⚠ Needs the <b>Timecard → Nexus</b> userscript installed in Tampermonkey — a web page cannot fill another site's page on its own.
+        ⚠ Start <b>START-HELPER.bat</b> (in the <code>nexus-helper</code> folder) and leave its window open. A web page cannot drive another site on its own, which is why the helper does it.
         Right-click a 🚀 (or Alt+click) to choose that task's <b>milestone</b>; it is remembered per task number.
       </div>
     </div>
@@ -1212,7 +1212,8 @@ function defaultState(){
       subjectV2:true, subjectMode:'auto', sendFormat:'eml',
       customDay:false, customDayIdx:null,      // custom single day for a Daily send
       includeProjects:true, creditOn:true,
-      nexusUrl:'http://nexus.tcs.local/protected.php',   // where the 🚀 rocket opens     // projects-worked-on summary in the message · credit logo on the sheet
+      nexusUrl:'http://nexus.tcs.local/protected.php',   // where the 🚀 rocket opens
+      helperUrl:'http://127.0.0.1:8765',                 // the desktop Nexus helper on this PC     // projects-worked-on summary in the message · credit logo on the sheet
       taskLegend: TASK_LEGEND.map(t=>[t[0],t[1]]),
       jobLegend: JOB_LEGEND.map(t=>[t[0],t[1]]),
       employee:'Morad Ramadan', manager:'C. Hattar',
@@ -1256,6 +1257,7 @@ if(state.settings.customDayIdx===undefined) state.settings.customDayIdx = null;
 if(state.settings.includeProjects===undefined) state.settings.includeProjects = true;
 if(state.settings.creditOn===undefined) state.settings.creditOn = true;
 if(!state.settings.nexusUrl) state.settings.nexusUrl = 'http://nexus.tcs.local/protected.php';
+if(!state.settings.helperUrl) state.settings.helperUrl = 'http://127.0.0.1:8765';
 if(!Array.isArray(state.settings.hiddenSections)) state.settings.hiddenSections = SECTIONS.map((s,i)=>i>=3);
 while(state.settings.hiddenSections.length < SECTIONS.length) state.settings.hiddenSections.push(true);   // new sections hidden by default
 if(!Array.isArray(state.settings.sectionNames)) state.settings.sectionNames = SECTIONS.map(s=>s.name);
@@ -2238,6 +2240,7 @@ function setWeek(key){
 const NEXUS_MILESTONES = ['DRAFT PACKAGE','QC-DESIGN REVIEW','CUSTOMER APPROVAL - DESIGN INTENT',
   'FINAL SUBMITTAL','QC - FINAL SUBMITTAL REVIEW','WET STAMP','SUBMITTAL SENT TO CUSTOMER','BILLING REQUESTED'];
 const NEXUS_URL_DEFAULT = 'http://nexus.tcs.local/protected.php';
+const HELPER_URL_DEFAULT = 'http://127.0.0.1:8765';
 function pad2(n){ return (n<10?'0':'')+n; }
 function usDatePad(d){ return pad2(d.getMonth()+1)+'/'+pad2(d.getDate())+'/'+d.getFullYear(); }   // 08/26/2026
 function taskMilestone(task){ return ((state.taskInfo||{})[task]||{}).milestone || ''; }
@@ -2269,12 +2272,27 @@ function rocketGo(ri, btn, forcePick){
   if(!/^\d{3,}$/.test(p.task)){ toast('🚀 Put a task number in this row first.'); return; }
   if(forcePick || !p.milestone){ milestoneMenu(btn, p.task, ()=>rocketGo(ri, btn, false)); return; }
   if(!p.hours) toast('🚀 No hours logged for <b>'+p.day+'</b> on this row — sending the note only.', 6000);
-  const base = (state.settings.nexusUrl || NEXUS_URL_DEFAULT).trim();
-  const url = base + '#tcpush=' + encodeURIComponent(JSON.stringify(
-                {task:p.task, milestone:p.milestone, hours:p.hours, date:p.date, desc:p.desc}));
-  window.open(url, '_blank');
-  toast('🚀 Nexus opening — <b>'+p.task+'</b> · '+p.milestone+' · '+(p.hours||'0')+' h · '+p.date+
-        '<br><span style="opacity:.85">The form fills itself; check it and press <b>Submit</b>.</span>', 9000);
+  const job = {task:p.task, milestone:p.milestone, hours:p.hours, date:p.date, desc:p.desc};
+  const what = '<b>'+p.task+'</b> · '+p.milestone+' · '+(p.hours||'0')+' h · '+p.date;
+  // Hand the job to the desktop helper (nexus-helper) if it is running. It drives a real
+  // Chrome window and waits properly for the slow, US-hosted Nexus.
+  sendToHelper(job,
+    ()=> toast('🚀 Sent to the Nexus helper — '+what+
+               '<br><span style="opacity:.85">Watch the Chrome window; check the form and press <b>Submit</b>.</span>', 9000),
+    ()=> toast('🚀 The Nexus helper is not running.<br><span style="opacity:.9">Start <b>START-HELPER.bat</b> '+
+               'and press the rocket again.</span>', 12000));
+}
+/* Ping the helper on this PC. An <img> request is used on purpose: it is not
+   blocked by cross-origin rules, and load/error tells us whether it is running. */
+function sendToHelper(job, onOk, onFail){
+  const img = new Image();
+  let settled = false;
+  const finish = (good)=>{ if(settled) return; settled = true; clearTimeout(timer); (good?onOk:onFail)(); };
+  const timer = setTimeout(()=>finish(false), 3000);
+  img.onload  = ()=>finish(true);
+  img.onerror = ()=>finish(false);
+  img.src = (state.settings.helperUrl || HELPER_URL_DEFAULT) +
+            '/job?d=' + encodeURIComponent(JSON.stringify(job)) + '&t=' + Date.now();
 }
 // small popup to choose this task's milestone (remembered per task number)
 function milestoneMenu(anchor, task, done){

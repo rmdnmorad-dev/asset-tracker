@@ -1,0 +1,9 @@
+{
+  "name": "timecard-nexus-helper",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Drives a real Chrome window to fill the Nexus Hours tab from the Timecard rocket.",
+  "main": "nexus-helper.js",
+  "scripts": { "start": "node nexus-helper.js" },
+  "dependencies": { "playwright": "^1.47.0" }
+}
