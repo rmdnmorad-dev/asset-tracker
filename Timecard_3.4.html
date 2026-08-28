@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Jordan ISAT – Weekly Time Sheet</title>
+<title>Timecard 3.4 – Jordan ISAT Weekly Time Sheet</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🕐</text></svg>">
 <style>
   *{box-sizing:border-box}
@@ -79,9 +79,9 @@
     gap:8px;align-items:center;padding:8px 16px;flex-wrap:wrap;box-shadow:0 2px 6px rgba(0,0,0,.25)}
   #toolbar .grp{display:flex;gap:6px;align-items:center}
   #toolbar .sep{width:1px;height:26px;background:#4b5563;margin:0 4px}
-  .btn{background:#374151;color:#fff;border:1px solid #4b5563;border-radius:6px;
+  .btn{background:var(--btnbg,#374151);color:var(--btnfg,#fff);border:1px solid var(--btnbd,#4b5563);border-radius:6px;
     padding:7px 12px;cursor:pointer;font-size:13px;white-space:nowrap}
-  .btn:hover{background:#4b5563}
+  .btn:hover{background:var(--btnhov,#4b5563)}
   .btn:disabled{opacity:.5;cursor:wait}
   #btnUndo:disabled,#btnRedo:disabled{opacity:.4;cursor:default}
   .btn.send{background:var(--sendbg,#2563eb);border-color:var(--sendbg,#2563eb);color:var(--sendfg,#fff);font-weight:bold}
@@ -405,8 +405,23 @@
   body.hasbg{background:#000}
 
   /* ---------- phones / small screens (iOS + Android) ---------- */
+  /* Only phones lose the sideways scrollbar. Zooming in on a desktop drops the
+     CSS viewport under 860px too, and hiding overflow there left the page with
+     no way to scroll to what the zoom had pushed off-screen. */
+  /* Zooming in shrinks the CSS viewport, so a zoomed desktop looks exactly like
+     a small screen. Default to the desktop reading of that: stop clipping the
+     sheet inside its own box and let the whole page scroll both ways, the way
+     any other page does. */
+  @media (max-width: 1240px){
+    #sheetWrap{overflow:visible}
+  }
+  /* A real touch screen keeps the old behaviour - the sheet scrolls in its own
+     box and the page never jitters sideways. This comes second so it wins. */
+  @media (max-width: 860px) and (pointer: coarse){
+    html,body{overflow-x:hidden}
+    #sheetWrap{overflow:auto}
+  }
   @media (max-width: 860px){
-    html,body{overflow-x:hidden}          /* no sideways page jitter; the sheet scrolls inside its own box */
     #toolbar{padding:6px 8px;gap:5px}
     .btn{padding:9px 11px;font-size:13px}
     #toolbar label{display:none}
@@ -577,7 +592,7 @@
   <div class="grp">
     <button class="btn" id="btnSearch" title="Search every timecard (Ctrl+F)">🔍 Search</button>
     <button class="btn" id="btnSettings">⚙ Settings</button>
-    <span style="font-size:10px;color:#9aa4b2;align-self:center;margin-left:1px" title="Version 3.7">v3.7</span>
+    <span style="font-size:10px;color:#9aa4b2;align-self:center;margin-left:1px" title="Version 3.4">v3.4</span>
   </div>
   <div id="hoursInd" class="hoursind" title="Total hours this week on whatever box you click / hover"></div>
   <div class="grp right">
@@ -618,6 +633,7 @@
         <label><input type="checkbox" id="creditOn"> Show the <b>Created by m0rad</b> logo on the sheet</label>
         <label><input type="checkbox" id="clockLA"> Show the <b>Los Angeles</b> clock beside the sheet</label>
         <label><input type="checkbox" id="clockJO"> Show the <b>Jordan</b> clock, under the LA one</label>
+        <label><input type="checkbox" id="clockOut"> Show the <b>Leaving today</b> clock on the right, from this day's TIME OUT</label>
       </div></div>
     <div class="fld"><span>DRAFT FILE FORMAT — the file each send button creates</span>
       <div class="subchecks">
@@ -642,6 +658,7 @@
         <label style="display:flex;gap:6px;align-items:center;font-weight:normal"><input type="checkbox" id="beamOn"> Beam glow</label>
         <label style="display:flex;gap:6px;align-items:center;font-weight:normal"><input type="color" id="beamColor" style="width:46px;height:30px;padding:0;border:1px solid #94a3b8;border-radius:6px;cursor:pointer"> Beam &amp; send buttons</label>
         <label style="display:flex;gap:6px;align-items:center;font-weight:normal"><input type="color" id="barColor" style="width:46px;height:30px;padding:0;border:1px solid #94a3b8;border-radius:6px;cursor:pointer"> Top bar</label>
+        <label style="display:flex;gap:6px;align-items:center;font-weight:normal"><input type="color" id="btnColor" style="width:46px;height:30px;padding:0;border:1px solid #94a3b8;border-radius:6px;cursor:pointer"> Buttons <span style="color:#888">— all except Send Email</span></label>
       </div></div>
     <div class="fld" style="flex:1;min-width:220px"><span>SECTIONS — untick one to hide it from the sheet &amp; the emails</span>
       <div class="subchecks" id="secToggles"></div></div>
@@ -1242,7 +1259,7 @@ function defaultState(){
       subjectV2:true, subjectMode:'auto', sendFormat:'eml',
       customDay:false, customDayIdx:null,      // custom single day for a Daily send
       includeProjects:true, creditOn:true,
-      clockLA:true, clockJO:true,             // digital clocks beside the sheet
+      clockLA:true, clockJO:true, clockOut:true,   // digital clocks beside the sheet
       rocketMode:'tab',                      // 'tab' = extension · 'helper' = nexus-helper.js
       nexusUrl:'http://nexus.tcs.local/protected.php',   // where the 🚀 rocket opens
       helperUrl:'http://127.0.0.1:8765',                 // the desktop Nexus helper on this PC     // projects-worked-on summary in the message · credit logo on the sheet
@@ -1297,6 +1314,7 @@ while(state.settings.sectionNames.length < SECTIONS.length) state.settings.secti
 if(!state.settings.beamColor) state.settings.beamColor = '#8ab4ff';
 if(state.settings.beamOn===undefined) state.settings.beamOn = true;
 if(!state.settings.barColor) state.settings.barColor = '#1f2937';
+if(!state.settings.btnColor) state.settings.btnColor = '#374151';
 if(!state.settings.games) state.settings.games = {on:false, reaction:true};
 if(!state.taskInfo || typeof state.taskInfo!=='object') state.taskInfo = {};   // 6-digit task # -> {project, contractor}
 // separate SEND-TO / CC lists for the Daily vs the Weekly timecard (seeded from the old single list)
@@ -2410,6 +2428,31 @@ function resolvedWeekly(){
   const m = state.settings.subjectMode||'auto';
   return m==='weekly' || (m!=='daily' && new Date().getDay()===0);
 }
+/* Ticking Daily or Weekly by hand used to stick for ever, so a Sunday could
+   arrive with the box still on Daily. A hand-picked choice now lasts only for
+   the day it was made; after that the calendar decides again. A watcher
+   applies it live, so a tab left open over midnight corrects itself without
+   being reloaded. */
+let subjectDayWatch = null;
+function subjectDayStamp(){ return isoDate(new Date()); }
+function refreshSubjectMode(){
+  const today = subjectDayStamp();
+  if(state.settings.subjectModeDay && state.settings.subjectModeDay !== today &&
+     state.settings.subjectMode && state.settings.subjectMode !== 'auto'){
+    state.settings.subjectMode = 'auto';          // yesterday's choice expires
+    state.settings.subjectModeDay = null;
+    save();
+  }
+  if(subjectDayWatch !== today){                  // the day turned over
+    subjectDayWatch = today;
+    if(typeof reflectSubject === 'function') reflectSubject();
+    else { const cd=document.getElementById('subDaily'), cw=document.getElementById('subWeekly');
+           if(cd&&cw){ const wk=resolvedWeekly(); cd.checked=!wk; cw.checked=wk; } }
+    if(typeof updPreview === 'function') try{ updPreview(); }catch(e){}
+  }
+}
+let reflectSubject = null;
+setInterval(refreshSubjectMode, 20000);
 /* the day-header indicator: blue under today, or a draggable yellow line
    under the chosen custom day when the custom-day option is on */
 function updateDayIndicator(){
@@ -2512,8 +2555,13 @@ function bindSettings(){
   // Daily / Weekly checkboxes: pick one, or untick to follow the calendar again
   const cd = document.getElementById('subDaily'), cw = document.getElementById('subWeekly');
   const reflect = ()=>{ const w = resolvedWeekly(); cd.checked = !w; cw.checked = w; loadRecipFields(); updPreview(); };
-  cd.addEventListener('change', ()=>{ state.settings.subjectMode = cd.checked ? 'daily' : 'auto'; save(); reflect(); });
-  cw.addEventListener('change', ()=>{ state.settings.subjectMode = cw.checked ? 'weekly' : 'auto'; save(); reflect(); });
+  reflectSubject = reflect;                    // so the day watcher can re-tick the boxes
+  const pick = (mode)=>{ state.settings.subjectMode = mode;
+                         state.settings.subjectModeDay = mode==='auto' ? null : subjectDayStamp();
+                         save(); reflect(); };
+  cd.addEventListener('change', ()=>pick(cd.checked ? 'daily' : 'auto'));
+  cw.addEventListener('change', ()=>pick(cw.checked ? 'weekly' : 'auto'));
+  refreshSubjectMode();
   reflect();
   // custom send-day (Daily): checkbox turns the indicator yellow + draggable; the select picks the day
   const cx = document.getElementById('customDay'), csel = document.getElementById('customDaySel');
@@ -2523,6 +2571,7 @@ function bindSettings(){
     // a custom day is a single day -> switch to Daily; unticking follows the calendar again
     // (so a Sunday goes back to ticking Weekly automatically)
     state.settings.subjectMode = cx.checked ? 'daily' : 'auto';
+    state.settings.subjectModeDay = cx.checked ? subjectDayStamp() : null;
     save(); updateDayIndicator(); syncCustomDayUI(); reflect(); updPreview();
   });
   csel.addEventListener('change', ()=>{ setCustomDay(+csel.value, true); updPreview(); });
@@ -2537,7 +2586,7 @@ function bindSettings(){
     cr.addEventListener('change', ()=>{ state.settings.creditOn = cr.checked; save(); applyCredit(); }); }
   applyCredit();
   // digital clocks in the toolbar
-  [['clockLA','clockLA'],['clockJO','clockJO']].forEach(([id,key])=>{
+  [['clockLA','clockLA'],['clockJO','clockJO'],['clockOut','clockOut']].forEach(([id,key])=>{
     const el = document.getElementById(id);
     if(!el) return;
     el.checked = state.settings[key]!==false;
@@ -2600,7 +2649,11 @@ function bindSettings(){
   // top-bar colour
   const barc = document.getElementById('barColor');
   barc.value = state.settings.barColor || '#1f2937';
-  barc.addEventListener('input', ()=>{ state.settings.barColor = barc.value; save(); applyBar(); });
+  barc.addEventListener('input', ()=>{ state.settings.barColor = barc.value; save(); applyBar();
+applyBtnColor(); });
+  const btnc = document.getElementById('btnColor');
+  if(btnc){ btnc.value = state.settings.btnColor || '#374151';
+    btnc.addEventListener('input', ()=>{ state.settings.btnColor = btnc.value; save(); applyBtnColor(); }); }
   // section show / hide
   buildSectionToggles();
   // reaction-time game (single master toggle)
@@ -3605,6 +3658,16 @@ function rfc2822Date(d){
   return dn[d.getDay()]+', '+pad2(d.getDate())+' '+mn[d.getMonth()]+' '+d.getFullYear()+' '+
          pad2(d.getHours())+':'+pad2(d.getMinutes())+':'+pad2(d.getSeconds())+' '+sg+pad2(Math.floor(a/60))+pad2(a%60);
 }
+/* Outlook drops its signature into the body when the draft opens. Handing it a
+   complete document whose first element is the message, and leaving an empty
+   paragraph at the end for the signature to land in, keeps the message on top
+   instead of the signature sometimes being pushed above it. */
+function mailDoc(inner){
+  return '<!DOCTYPE html><html><head><meta charset="utf-8">'+
+         '<meta http-equiv="Content-Type" content="text/html; charset=utf-8"></head>'+
+         '<body style="margin:0"><div id="tcMessage">'+inner+'</div>'+
+         '<p style="margin:0">&nbsp;</p></body></html>';
+}
 function buildEml(opt){
   const nl = '\r\n', b = '=_timecard_'+Date.now();
   // full RFC-5322 headers — new Outlook rejects/re-composes drafts that lack Date/From/Message-ID
@@ -3620,9 +3683,8 @@ function buildEml(opt){
   const msgHtml = opt.msgHtml||'';                 // saved EMAIL MESSAGE, always on top
   if(opt.kind==='image'){
     // message on top, timecard picture auto-placed under it
-    const html = '<html><body>'+msgHtml+
-      '<img src="cid:timecardimg" width="920" style="max-width:100%;border:1px solid #ccc">'+
-      '</body></html>';
+    const html = mailDoc(msgHtml +
+      '<img src="cid:timecardimg" width="920" style="max-width:100%;border:1px solid #ccc">');
     m += 'Content-Type: multipart/related; boundary="'+b+'"'+nl+nl+
       '--'+b+nl+'Content-Type: text/html; charset=utf-8'+nl+'Content-Transfer-Encoding: 8bit'+nl+nl+html+nl+nl+
       '--'+b+nl+'Content-Type: image/png; name="'+opt.name+'"'+nl+
@@ -3633,7 +3695,7 @@ function buildEml(opt){
     // message in the body, searchable PDF attached under it
     m += 'Content-Type: multipart/mixed; boundary="'+b+'"'+nl+nl+
       '--'+b+nl+'Content-Type: text/html; charset=utf-8'+nl+'Content-Transfer-Encoding: 8bit'+nl+nl+
-      '<html><body>'+msgHtml+'</body></html>'+nl+nl+
+      mailDoc(msgHtml)+nl+nl+
       '--'+b+nl+'Content-Type: application/pdf; name="'+opt.name+'"'+nl+
       'Content-Transfer-Encoding: base64'+nl+
       'Content-Disposition: attachment; filename="'+opt.name+'"'+nl+nl+
@@ -3761,7 +3823,8 @@ function buildHtmlEmail(prefixHtml, days){
     return tot - (parseDur(dd.lunch)||0) + (parseDur(dd.meet)||0) + (parseDur(dd.wfh)||0) + (parseDur(dd.leave)||0);
   };
   let weekMinAll = 0; for(const d of ALL) weekMinAll += dayWork(d);
-  let h = '<html><body>'+(prefixHtml||'')+'<div style="font-family:Arial">';
+  let h = '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0">'+
+          '<div id="tcMessage">'+(prefixHtml||'')+'</div><div style="font-family:Arial">';
   // header zone
   h += '<table cellspacing="0" cellpadding="2" style="border-collapse:collapse;width:960px;margin-bottom:4px"><tr>'+
     '<td style="width:290px;vertical-align:top;font-family:Arial"><span style="font-size:20px;font-weight:bold">'+escHtml(s.co1||'')+'</span>'+
@@ -3843,7 +3906,7 @@ function buildHtmlEmail(prefixHtml, days){
        '<table cellspacing="0" cellpadding="1" style="border-collapse:collapse;height:'+targetLegH+'px">';
   for(const t of jLeg) h += legRow(t[0], t[1], 210);
   h += '</table></td></tr></table>';
-  h += '</div></body></html>';
+  h += '</div><p style="margin:0">&nbsp;</p></body></html>';
   return h;
 }
 
@@ -3973,10 +4036,10 @@ function sendDraft(kind, payload, icon, what){
                     cc: recipObjs(sendCcRaw()), bodyText: payload.bodyText||''};
     let m;
     if(kind==='image') m = {...common,
-      bodyHtml:'<html><body>'+(payload.msgHtml||'')+'<img src="cid:timecardimg" width="920" style="max-width:100%;border:1px solid #ccc"></body></html>',
+      bodyHtml: mailDoc((payload.msgHtml||'')+'<img src="cid:timecardimg" width="920" style="max-width:100%;border:1px solid #ccc">'),
       attachments:[{name:payload.name, mime:'image/png', data:payload.bytes, cid:'timecardimg'}]};
     else if(kind==='pdf') m = {...common,
-      bodyHtml:'<html><body>'+(payload.msgHtml||'')+'</body></html>',
+      bodyHtml: mailDoc(payload.msgHtml||''),
       attachments:[{name:payload.name, mime:'application/pdf', data:payload.bytes}]};
     else m = {...common, bodyHtml: payload.bodyHtml, attachments:[]};
     blob = new Blob([buildMsg(m)], {type:'application/vnd.ms-outlook'});
@@ -4612,7 +4675,15 @@ function clockCard(k){
 }
 function tickClocks(){
   document.querySelectorAll('.clockcard').forEach(card=>{
-    const p = clockParts(CLOCK_ZONES[card.dataset.clock]);
+    const k = card.dataset.clock;
+    const p = (k === 'OUT') ? leaveInfo() : clockParts(CLOCK_ZONES[k]);
+    if(k === 'OUT'){
+      card.querySelector('.ledmain').textContent = p.h + ':' + p.m;
+      card.querySelector('.ledap').textContent   = p.ap;
+      card.querySelector('.ledsec').textContent  = '';
+      card.querySelector('.cdate').textContent   = p.note;
+      return;
+    }
     const q = sel => card.querySelector(sel);
     q('.ledmain').textContent = p.h + ':' + p.m;
     q('.ledsec').textContent  = p.s;
@@ -4621,8 +4692,45 @@ function tickClocks(){
   });
 }
 function syncClockChecks(){
-  CLOCK_ORDER.forEach(k=>{ const el = document.getElementById('clock'+k);
-                           if(el) el.checked = state.settings['clock'+k]!==false; });
+  CLOCK_ORDER.concat(['Out']).forEach(k=>{
+    const el = document.getElementById('clock'+k);
+    if(el) el.checked = state.settings['clock'+k]!==false;
+  });
+}
+/* The "leaving today" clock: this day's TIME OUT, and how long is left. */
+function leaveInfo(){
+  try{
+    const w = week(), dd = (w && w.days && w.days[todayCol()]) || {};
+    const mins = parseClock(dd.tout);
+    if(mins == null) return {h:'--', m:'--', ap:'', note:'set TIME OUT for today'};
+    let h12 = Math.floor(mins/60) % 12; if(h12 === 0) h12 = 12;
+    const now = new Date(), left = mins - (now.getHours()*60 + now.getMinutes());
+    let note;
+    if(left > 0)        note = 'in ' + (left>=60 ? Math.floor(left/60)+'h ' : '') + (left%60) + 'm';
+    else if(left > -60) note = 'you can go';
+    else                note = 'you left ' + Math.floor(-left/60) + 'h ' + ((-left)%60) + 'm ago';
+    return { h:(h12<10?' ':'')+h12, m:pad2(mins%60),
+             ap:(Math.floor(mins/60) >= 12 ? 'PM' : 'AM'), note:note };
+  }catch(e){ return {h:'--', m:'--', ap:'', note:''}; }
+}
+function leaveCard(){
+  const card = document.createElement('div');
+  card.className = 'gcard clockcard';
+  card.dataset.clock = 'OUT';
+  card.style.position = 'relative';
+  card.innerHTML =
+    '<div class="czone">Leaving today</div>'+
+    '<div class="leds">'+
+      '<div class="ledwrap"><span class="ledghost">88:88</span><span class="ledmain">--:--</span></div>'+
+      '<div class="ledside"><span class="ledap"></span><span class="ledsec"></span></div>'+
+    '</div>'+
+    '<div class="cdate"></div>';
+  const x = document.createElement('button');
+  x.className = 'gclose'; x.type = 'button'; x.textContent = '✕';
+  x.title = 'Hide this clock (turn it back on in Settings)';
+  x.onclick = ()=>{ state.settings.clockOut = false; save(); syncClockChecks(); applyGames(); };
+  card.appendChild(x);
+  return card;
 }
 function applyClocks(){ applyGames(); }
 setInterval(tickClocks, 1000);
@@ -4637,6 +4745,21 @@ function applyBeam(){
   document.documentElement.style.setProperty('--sendbg', c);
   document.documentElement.style.setProperty('--sendfg', luminance(c) > 0.62 ? '#111' : '#fff');
   document.body.classList.toggle('beam-off', state.settings.beamOn===false);   // beam glow on/off
+}
+/* every button takes this colour except .btn.send, which sets its own */
+function shade(hex, amt){
+  const n = parseInt(String(hex).replace('#',''), 16);
+  const f = v => Math.max(0, Math.min(255, Math.round(v + 255*amt)));
+  return '#' + [f(n>>16 & 255), f(n>>8 & 255), f(n & 255)]
+    .map(v=>v.toString(16).padStart(2,'0')).join('');
+}
+function applyBtnColor(){
+  const c = state.settings.btnColor || '#374151', light = luminance(c) > 0.55;
+  const r = document.documentElement.style;
+  r.setProperty('--btnbg',  c);
+  r.setProperty('--btnfg',  light ? '#111827' : '#ffffff');
+  r.setProperty('--btnbd',  shade(c, light ? -0.22 : 0.16));
+  r.setProperty('--btnhov', shade(c, light ? -0.09 : 0.12));
 }
 function applyBar(){
   const bar = document.getElementById('toolbar'); if(!bar) return;
@@ -4697,6 +4820,7 @@ function applyGames(){
   L.innerHTML=''; R.innerHTML='';
   // the clocks ride in the same side rail, stacked above any games
   CLOCK_ORDER.forEach(k=>{ if(state.settings['clock'+k]!==false) L.appendChild(clockCard(k)); });
+  if(state.settings.clockOut !== false) R.appendChild(leaveCard());
   const enabled = g.on ? GAMES.slice() : [];
   enabled.forEach((name,i)=>{
     const card = GAME_FACTORY[name]();
