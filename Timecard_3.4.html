@@ -506,6 +506,26 @@
   .ledside{display:flex;flex-direction:column;justify-content:space-between;padding:2px 0 3px}
   .ledap{font-size:10.5px;font-weight:800;letter-spacing:.08em;opacity:.9}
   .ledsec{font-size:13px;font-weight:700;opacity:.7;text-align:right;font-variant-numeric:tabular-nums}
+  /* four faces; click a clock to move to the next one */
+  .clockcard{cursor:pointer}
+  .clockcard .ledmain{color:var(--clockfg,#f2f7ff)}
+  .clockcard.st-led  .ledmain{text-shadow:0 0 12px var(--clockglow,rgba(130,180,255,.45))}
+  .clockcard.st-flip .ledghost{display:none}
+  .clockcard.st-flip .ledmain{position:static;background:#05080f;border-radius:6px;
+    padding:5px 9px;border:1px solid rgba(255,255,255,.09);text-shadow:none;
+    box-shadow:inset 0 -1px 0 rgba(255,255,255,.06)}
+  .clockcard.st-flip .leds{align-items:center}
+  .clockcard.st-min  .ledghost{display:none}
+  .clockcard.st-min  .ledmain{position:static;font-weight:400;text-shadow:none;letter-spacing:2px}
+  .clockcard.st-min  {background:transparent;border-color:rgba(255,255,255,.14)}
+  body:not(.dark) .clockcard.st-min{background:transparent;border-color:rgba(0,0,0,.18);color:#0f172a}
+  body:not(.dark) .clockcard.st-min .ledmain{color:var(--clockfg,#0f172a)}
+  .clockcard.st-glow .ledghost{display:none}
+  .clockcard.st-glow .ledmain{position:static;text-shadow:0 0 6px var(--clockglow,rgba(130,180,255,.9)),
+    0 0 22px var(--clockglow,rgba(130,180,255,.55))}
+  .clockcard.st-glow{background:radial-gradient(120% 120% at 50% 0%,#16233d 0%,#080d18 100%)}
+  .clockcard[data-clock="OUT"] .ledghost,
+  .clockcard[data-clock="OUT"] .ledmain{font-size:27px;letter-spacing:0}
   .cdate{margin-top:5px;text-align:center;font-size:9.5px;opacity:.5;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   /* Send Email dropdown */
@@ -521,10 +541,15 @@
     font-size:12px;line-height:1;padding:0;opacity:0;z-index:5;color:#2563eb}
   .taskrow:hover .duprow{opacity:.5} .duprow:hover{opacity:1 !important;transform:scale(1.3)}
   /* 🚀 push this row's hours into Nexus */
-  .rocket{position:absolute;right:1px;bottom:1px;width:17px;height:17px;border:0;background:transparent;cursor:pointer;
-    font-size:11px;line-height:1;padding:0;opacity:0;z-index:5}
-  .taskrow:hover .rocket{opacity:.55} .rocket:hover{opacity:1 !important;transform:scale(1.35)}
-  .rocket.set{opacity:.8}                       /* a milestone has been chosen for this task */
+  .rocket{position:absolute;left:2px;top:50%;transform:translateY(-50%);
+    width:17px;height:17px;border:0;border-radius:4px;cursor:pointer;
+    background:#1e3a8a;color:#fff;font:bold 11px/1 Arial,sans-serif;padding:0;
+    opacity:.55;z-index:5;display:flex;align-items:center;justify-content:center}
+  .taskrow:hover .rocket{opacity:.85}
+  .rocket:hover{opacity:1 !important;background:#1d4ed8;
+    transform:translateY(-50%) scale(1.15)}
+  .rocket.set{opacity:1}                        /* a milestone has been chosen for this task */
+  td.taskcell input.task{padding-left:22px}     /* keep the number clear of the N */
   .msmenu{position:fixed;z-index:130;background:#fff;color:#111;border:1px solid #cbd5e1;border-radius:8px;
     box-shadow:0 10px 30px rgba(0,0,0,.3);padding:6px;min-width:250px;font-family:Arial;font-size:12.5px}
   .msmenu h5{margin:2px 4px 6px;font-size:11px;color:#555;font-weight:bold}
@@ -634,7 +659,14 @@
         <label><input type="checkbox" id="creditOn"> Show the <b>Created by m0rad</b> logo on the sheet</label>
         <label><input type="checkbox" id="clockLA"> Show the <b>Los Angeles</b> clock beside the sheet</label>
         <label><input type="checkbox" id="clockJO"> Show the <b>Jordan</b> clock, under the LA one</label>
-        <label><input type="checkbox" id="clockOut"> Show the <b>Leaving today</b> clock on the right, from this day's TIME OUT</label>
+        <label><input type="checkbox" id="clockOut"> Show the <b>Leaving today</b> countdown on the right, from this day's TIME OUT</label>
+        <label style="display:flex;gap:6px;align-items:center;font-weight:normal">Clock face:
+          <select id="clockStyle" style="padding:4px 6px">
+            <option value="led">LED</option><option value="flip">Flip panel</option>
+            <option value="min">Minimal</option><option value="glow">Neon glow</option>
+          </select>
+          <input type="color" id="clockColor" style="width:46px;height:30px;padding:0;border:1px solid #94a3b8;border-radius:6px;cursor:pointer">
+          <span style="color:#888">— or just click a clock to flip through the faces</span></label>
       </div></div>
     <div class="fld"><span>DRAFT FILE FORMAT — the file each send button creates</span>
       <div class="subchecks">
@@ -1272,6 +1304,8 @@ function defaultState(){
       customDay:false, customDayIdx:null,      // custom single day for a Daily send
       includeProjects:true, creditOn:true,
       clockLA:true, clockJO:true, clockOut:true,   // digital clocks beside the sheet
+      clockStyle:'led',                      // led · flip · min · glow — click a clock to change
+      clockColor:'#f2f7ff',
       rocketMode:'tab',                      // 'tab' = extension · 'helper' = nexus-helper.js
       nexusLookup:true,                      // pull project + contractor from Nexus on a 6-digit task
       nexusUrl:'http://nexus.tcs.local/protected.php',   // where the 🚀 rocket opens
@@ -1455,8 +1489,34 @@ async function initSaveFile(){
     const perm = await handlePerm(h, false);
     saveFilePending = (perm!=='granted');
     updateSaveFileUI();
-    if(!saveFilePending) doFileWrite();
+    if(!saveFilePending){ doFileWrite(); return; }
+    /* The browser will only re-grant write access off the back of something you
+       did, so it cannot be asked for on load. Instead the very first click or
+       key press in the page asks for it - which means the file relinks itself
+       without you having to find the Reconnect button. */
+    armAutoRelink();
   }catch(e){}
+}
+let autoRelinkArmed = false;
+function armAutoRelink(){
+  if(autoRelinkArmed || !saveFileHandle) return;
+  autoRelinkArmed = true;
+  const go = async ()=>{
+    document.removeEventListener('pointerdown', go, true);
+    document.removeEventListener('keydown', go, true);
+    autoRelinkArmed = false;
+    if(!saveFileHandle || !saveFilePending) return;
+    const perm = await handlePerm(saveFileHandle, true);
+    if(perm==='granted'){
+      saveFilePending = false; updateSaveFileUI(); await doFileWrite();
+      toast('🔗 Re-linked to <b>'+escHtml(saveFileHandle.name||'your file')+'</b> — auto-save is on again.', 5000);
+    }else{
+      updateSaveFileUI();
+      toast('⚠ The browser would not re-open your save file. Click <b>Reconnect</b> in Settings to try again.', 8000);
+    }
+  };
+  document.addEventListener('pointerdown', go, true);
+  document.addEventListener('keydown', go, true);
 }
 function updateSaveFileUI(){
   const st = document.getElementById('saveFileStat'); if(!st) return;
@@ -1467,7 +1527,9 @@ function updateSaveFileUI(){
   }
   const nm = saveFileHandle.name || 'the file';
   if(saveFilePending){
-    st.innerHTML = '🔒 Linked to <b>'+escHtml(nm)+'</b> — click <b>Reconnect</b> to resume writing (browsers ask once per session).';
+    st.innerHTML = '🔒 Linked to <b>'+escHtml(nm)+'</b> — re-linking as soon as you click anywhere '+
+                   '(the browser only allows it off the back of something you did). '+
+                   'Or press <b>Reconnect</b> now.';
     st.style.color = '#b45309'; if(rec) rec.style.display='';
   }else{
     st.innerHTML = '✅ Auto-saving to <b>'+escHtml(nm)+'</b> on every change.';
@@ -1691,7 +1753,7 @@ function buildTable(){
       for(const f of ['task','notes','project','contractor','job']){
         if(f==='task'){          // Task #: type anything (remembered) or pick from the TASKS legend
           h += '<td class="b tinfo taskcell"><input class="cell task redtx taskpick" title="Type a task # or pick one" data-row="'+ri+'" data-f="task" spellcheck="false" autocomplete="off"><button type="button" class="duprow" data-row="'+ri+'" tabindex="-1" title="Duplicate this row (Ctrl+D)">⧉</button>'+
-                 '<button type="button" class="rocket" data-row="'+ri+'" tabindex="-1" title="Send this row to Nexus">🚀</button></td>';
+                 '<button type="button" class="rocket" data-row="'+ri+'" tabindex="-1" title="Send this row to Nexus">N</button></td>';
         }else{                   // NOTES / PROJECT / CONTRACTOR / JOB TYPE grow taller as you type
           h += '<td class="b tinfo"><textarea class="cell task redtx grow" rows="1" data-row="'+ri+'" data-f="'+f+'" spellcheck="false" autocomplete="off"></textarea></td>';
         }
@@ -2767,6 +2829,12 @@ function bindSettings(){
     cr.addEventListener('change', ()=>{ state.settings.creditOn = cr.checked; save(); applyCredit(); }); }
   applyCredit();
   // digital clocks in the toolbar
+  const cst = document.getElementById('clockStyle');
+  if(cst){ cst.value = state.settings.clockStyle || 'led';
+    cst.addEventListener('change', ()=>{ state.settings.clockStyle = cst.value; save(); applyClockLook(); }); }
+  const ccl = document.getElementById('clockColor');
+  if(ccl){ ccl.value = state.settings.clockColor || '#f2f7ff';
+    ccl.addEventListener('input', ()=>{ state.settings.clockColor = ccl.value; save(); applyClockLook(); }); }
   [['clockLA','clockLA'],['clockJO','clockJO'],['clockOut','clockOut']].forEach(([id,key])=>{
     const el = document.getElementById(id);
     if(!el) return;
@@ -4829,6 +4897,26 @@ function luminance(hex){
 const CLOCK_ZONES = { LA:'America/Los_Angeles', JO:'Asia/Amman' };
 const CLOCK_NAMES = { LA:'Los Angeles', JO:'Jordan' };
 const CLOCK_ORDER = ['LA','JO'];
+const CLOCK_STYLES = ['led','flip','min','glow'];
+const CLOCK_STYLE_NAMES = {led:'LED', flip:'Flip panel', min:'Minimal', glow:'Neon glow'};
+function applyClockLook(){
+  const st = state.settings.clockStyle || 'led';
+  const c  = state.settings.clockColor || '#f2f7ff';
+  document.documentElement.style.setProperty('--clockfg', c);
+  document.documentElement.style.setProperty('--clockglow', hexToRgba(c, .55));
+  document.querySelectorAll('.clockcard').forEach(card=>{
+    CLOCK_STYLES.forEach(x=>card.classList.remove('st-'+x));
+    card.classList.add('st-'+st);
+  });
+}
+function nextClockStyle(){
+  const i = CLOCK_STYLES.indexOf(state.settings.clockStyle || 'led');
+  state.settings.clockStyle = CLOCK_STYLES[(i+1) % CLOCK_STYLES.length];
+  save(); applyClockLook();
+  const sel = document.getElementById('clockStyle');
+  if(sel) sel.value = state.settings.clockStyle;
+  toast('🕒 Clock face: <b>'+CLOCK_STYLE_NAMES[state.settings.clockStyle]+'</b>', 2500);
+}
 function clockParts(tz){
   try{
     const d = new Date();
@@ -4857,8 +4945,11 @@ function clockCard(k){
   const x = document.createElement('button');
   x.className = 'gclose'; x.type = 'button'; x.textContent = '✕';
   x.title = 'Hide this clock (turn it back on in Settings)';
-  x.onclick = ()=>{ state.settings['clock'+k] = false; save(); syncClockChecks(); applyGames(); };
+  x.onclick = (e)=>{ e.stopPropagation();
+                     state.settings['clock'+k] = false; save(); syncClockChecks(); applyGames(); };
   card.appendChild(x);
+  card.title = 'Click to change the clock face';
+  card.addEventListener('click', nextClockStyle);
   return card;
 }
 function tickClocks(){
@@ -4866,7 +4957,9 @@ function tickClocks(){
     const k = card.dataset.clock;
     const p = (k === 'OUT') ? leaveInfo() : clockParts(CLOCK_ZONES[k]);
     if(k === 'OUT'){
-      card.querySelector('.ledmain').textContent = p.h + ':' + p.m;
+      card.querySelector('.czone').textContent   = p.title;
+      card.querySelector('.ledghost').textContent = p.ghost;
+      card.querySelector('.ledmain').textContent = p.main;
       card.querySelector('.ledap').textContent   = p.ap;
       card.querySelector('.ledsec').textContent  = '';
       card.querySelector('.cdate').textContent   = p.note;
@@ -4886,20 +4979,29 @@ function syncClockChecks(){
   });
 }
 /* The "leaving today" clock: this day's TIME OUT, and how long is left. */
+/* A running countdown to the TIME OUT set for today - hours, minutes, seconds. */
 function leaveInfo(){
   try{
     const w = week(), dd = (w && w.days && w.days[todayCol()]) || {};
     const mins = parseClock(dd.tout);
-    if(mins == null) return {h:'--', m:'--', ap:'', note:'set TIME OUT for today'};
+    if(mins == null)
+      return {main:'--:--:--', ghost:'88:88:88', ap:'', title:'Leaving today',
+              note:'set TIME OUT for today'};
     let h12 = Math.floor(mins/60) % 12; if(h12 === 0) h12 = 12;
-    const now = new Date(), left = mins - (now.getHours()*60 + now.getMinutes());
-    let note;
-    if(left > 0)        note = 'in ' + (left>=60 ? Math.floor(left/60)+'h ' : '') + (left%60) + 'm';
-    else if(left > -60) note = 'you can go';
-    else                note = 'you left ' + Math.floor(-left/60) + 'h ' + ((-left)%60) + 'm ago';
-    return { h:(h12<10?' ':'')+h12, m:pad2(mins%60),
-             ap:(Math.floor(mins/60) >= 12 ? 'PM' : 'AM'), note:note };
-  }catch(e){ return {h:'--', m:'--', ap:'', note:''}; }
+    const at = h12 + ':' + pad2(mins%60) + ' ' + (Math.floor(mins/60) >= 12 ? 'PM' : 'AM');
+
+    const now = new Date();
+    let secs = mins*60 - (now.getHours()*3600 + now.getMinutes()*60 + now.getSeconds());
+    const past = secs < 0;
+    secs = Math.abs(secs);
+    const hh = Math.floor(secs/3600), mm = Math.floor((secs%3600)/60), ss = secs%60;
+    const clock = hh + ':' + pad2(mm) + ':' + pad2(ss);
+    return past
+      ? { main:clock, ghost:'88:88:88', ap:'', title:'Since check-out',
+          note:'you could have left at ' + at }
+      : { main:clock, ghost:'88:88:88', ap:'', title:'Check out in',
+          note:'at ' + at };
+  }catch(e){ return {main:'--:--:--', ghost:'88:88:88', ap:'', title:'Leaving today', note:''}; }
 }
 function leaveCard(){
   const card = document.createElement('div');
@@ -4916,8 +5018,11 @@ function leaveCard(){
   const x = document.createElement('button');
   x.className = 'gclose'; x.type = 'button'; x.textContent = '✕';
   x.title = 'Hide this clock (turn it back on in Settings)';
-  x.onclick = ()=>{ state.settings.clockOut = false; save(); syncClockChecks(); applyGames(); };
+  x.onclick = (e)=>{ e.stopPropagation();
+                     state.settings.clockOut = false; save(); syncClockChecks(); applyGames(); };
   card.appendChild(x);
+  card.title = 'Click to change the clock face';
+  card.addEventListener('click', nextClockStyle);
   return card;
 }
 function applyClocks(){ applyGames(); }
@@ -5022,6 +5127,7 @@ function applyGames(){
   L.classList.toggle('show', L.children.length>0);
   R.classList.toggle('show', R.children.length>0);
   document.body.classList.toggle('games-on', L.children.length>0 || R.children.length>0);
+  applyClockLook();
   tickClocks();
 }
 
