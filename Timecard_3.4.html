@@ -626,7 +626,8 @@
   </div>
   <div class="row" style="align-items:flex-end">
     <div class="fld" style="flex:1;min-width:300px">
-      <span>EMAIL MESSAGE — written at the top of every email, above the timecard</span>
+      <span>EMAIL MESSAGE — <b class="msgKindLbl" id="msgKindLbl">Daily</b> · written at the top of every email, above the timecard
+        <span style="color:#888;font-weight:normal">— Daily and Weekly each keep their own wording, like the send-to list</span></span>
       <textarea id="setMessage" placeholder="Hi, hope you are all doing well.&#10;Please find my timecard below."></textarea>
       <div class="subchecks" style="padding-top:6px">
         <label><input type="checkbox" id="incProjects"> Include the <b>projects worked on</b> summary table in the message</label>
@@ -1305,6 +1306,18 @@ if(!state.settings.subjectV2){
 if(!state.settings.taskLegend) state.settings.taskLegend = TASK_LEGEND.map(t=>[t[0],t[1]]);
 if(!state.settings.jobLegend)  state.settings.jobLegend  = JOB_LEGEND.map(t=>[t[0],t[1]]);
 if(state.settings.message===undefined) state.settings.message = '';
+/* The EMAIL MESSAGE follows Daily / Weekly the same way the recipients do, so a
+   weekly send carries the weekly wording. An older file has one shared message;
+   seed both kinds from it once. */
+if(!state.settings.messages){
+  state.settings.messages = { daily: state.settings.message || '',
+                              weekly: state.settings.message || '' };
+}
+function curMessage(kind){
+  const m = state.settings.messages || {};
+  const k = kind || (resolvedWeekly() ? 'weekly' : 'daily');
+  return (m[k] !== undefined && m[k] !== null) ? m[k] : (state.settings.message || '');
+}
 if(!state.settings.subjectMode) state.settings.subjectMode = 'auto';
 if(!state.settings.theme) state.settings.theme = 'light';
 if(state.settings.sendFormat!=='msg') state.settings.sendFormat = 'eml';
@@ -2379,11 +2392,16 @@ async function runLookupTest(){
     return show();
   }
   L.push('2. asking for task ' + task + ' …');
+  L.push('   (an open Nexus tab is used if there is one — it reaches Nexus');
+  L.push('    with your session, your proxy route and any certificate you accepted)');
   show();
   const t0 = Date.now();
   const res = await nexusLookup(task);
   L.push('   came back in ' + ((Date.now()-t0)/1000).toFixed(1) + 's');
   const d = (res && res.diag) || {};
+  if(d.nexusTabsOpen!==undefined) L.push('   Nexus tabs open: ' + d.nexusTabsOpen +
+        (d.nexusTabsOpen ? '' : '   <-- open Nexus in a tab, it is the reliable way'));
+  if(d.how)      L.push('   answered       : ' + d.how);
   if(d.tried && d.tried.length){
     L.push('   addresses tried:');
     d.tried.forEach(t=>L.push('     ' + t));
@@ -2683,6 +2701,9 @@ function loadRecipFields(){
   const k=recipEditKind(), r=(state.settings.recipients||{})[k]||{to:'',cc:''};
   const to=document.getElementById('setTo'), cc=document.getElementById('setCc');
   if(to) to.value=r.to||''; if(cc) cc.value=r.cc||'';
+  const msg=document.getElementById('setMessage');            // message follows the same kind
+  if(msg && document.activeElement!==msg) msg.value = curMessage(k);
+  const ml=document.getElementById('msgKindLbl'); if(ml) ml.textContent = (k==='weekly'?'Weekly':'Daily');
   const nm=(k==='weekly'?'Weekly':'Daily');
   const l1=document.getElementById('recipKindLbl'); if(l1) l1.textContent=nm;
   document.querySelectorAll('.recipKindLbl2').forEach(el=>el.textContent=nm);
@@ -2693,7 +2714,17 @@ function bindSettings(){
     p.hidden = !p.hidden;
   };
   const updPreview = ()=>{ document.getElementById('subjPreview').textContent = '→  '+subjectText(); };
-  const map = [['setSubject','subject'],['setMessage','message']];
+  const msgEl = document.getElementById('setMessage');
+  if(msgEl){
+    msgEl.value = curMessage();
+    msgEl.addEventListener('input', ()=>{
+      state.settings.messages = state.settings.messages || {daily:'', weekly:''};
+      state.settings.messages[recipEditKind()] = msgEl.value;
+      state.settings.message = msgEl.value;         // kept for older readers of this file
+      save(); updPreview();
+    });
+  }
+  const map = [['setSubject','subject']];
   for(const [id,key] of map){
     const el = document.getElementById(id);
     el.value = state.settings[key]||'';
@@ -4169,7 +4200,7 @@ async function saveFileConfirmed(name, blob, mime, desc){
 }
 /* the saved EMAIL MESSAGE, as plain text and as html paragraphs */
 function msgParts(){
-  const m = (state.settings.message||'').trim();
+  const m = (curMessage()||'').trim();
   return {
     text: m ? m+'\n\n' : '',
     html: m ? m.split(/\n/).map(l=>'<p style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;margin:0 0 6px">'+
@@ -4242,7 +4273,7 @@ function mailtoUrl(subject, body){
 async function mobileShareFile(bytes, name, mime){
   const to = splitEmails(sendToRaw()).join(', ');
   const cc = splitEmails(sendCcRaw()).join(', ');
-  const body = (state.settings.message||'').trim();
+  const body = (curMessage()||'').trim();
   const file = new File([bytes], name, {type:mime});
   if(canShareFiles([file])){
     try{
@@ -4278,7 +4309,7 @@ function bindEmailButtons(){
     if(!ensureRecipient()) return;
     const days = sendDays(), mp = msgParts();
     if(isMobile()){
-      const body = ((state.settings.message||'').trim() ? (state.settings.message).trim()+'\n\n' : '') +
+      const body = ((curMessage()||'').trim() ? (curMessage()).trim()+'\n\n' : '') +
                    projectsMsgText(days) + '\n\n' + buildPlainText(days);
       toast('✉ Opening your mail app with the timecard in the message…', 9000);
       location.href = mailtoUrl(subjectText(), body);
@@ -4713,8 +4744,9 @@ function syncUIFromState(){
   [['empName','employee'],['empMgr','manager'],['empPhone','phone'],['empMail','email']]
     .forEach(([id,k])=>{ const el=document.getElementById(id); if(el) el.value=state.settings[k]||''; });
   ['co1','co2','co3'].forEach(id=>{ const el=document.getElementById(id); if(el && state.settings[id]!=null) el.textContent=state.settings[id]; });
-  [['setSubject','subject'],['setMessage','message']]
+  [['setSubject','subject']]
     .forEach(([id,k])=>{ const el=document.getElementById(id); if(el) el.value=state.settings[k]||''; });
+  { const el=document.getElementById('setMessage'); if(el) el.value = curMessage(); }
   const cd=document.getElementById('subDaily'), cw=document.getElementById('subWeekly');
   if(cd&&cw){ const wk=resolvedWeekly(); cd.checked=!wk; cw.checked=wk; }
   if(typeof loadRecipFields==='function') loadRecipFields();

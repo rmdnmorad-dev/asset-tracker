@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Timecard \u2192 Nexus",
-  "version": "1.4",
+  "version": "1.6",
   "description": "Fills the Nexus hours form from a Timecard rocket press, and looks up a task's project and contractor. Never presses Submit.",
   "host_permissions": [
     "*://nexus.tcs.local/*"
@@ -40,5 +40,8 @@
         "*://nexus.tcs.local/*"
       ]
     }
+  ],
+  "permissions": [
+    "tabs"
   ]
 }

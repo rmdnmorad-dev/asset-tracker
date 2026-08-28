@@ -39,6 +39,31 @@ function pick(data) {
 
 /* Every answer carries a `diag` so the Timecard's "Test the lookup" button can
    say exactly how far the request got, instead of just failing quietly. */
+/* Any tab already sitting on the same host as the address we want. */
+async function findNexusTabs(url) {
+  let host;
+  try { host = new URL(url).hostname; } catch (e) { return []; }
+  try {
+    const tabs = await chrome.tabs.query({ url: ['http://' + host + '/*', 'https://' + host + '/*'] });
+    return tabs.filter(t => t.id !== undefined);
+  } catch (e) { return []; }
+}
+
+function askTab(tabId, url) {
+  return new Promise(resolve => {
+    let done = false;
+    const finish = (r) => { if (!done) { done = true; resolve(r); } };
+    setTimeout(() => finish({ ok: false, error: 'the tab did not answer in 15s' }), 15000);
+    try {
+      chrome.tabs.sendMessage(tabId, { type: 'tcFetchHere', url: url }, (r) => {
+        if (chrome.runtime.lastError)
+          return finish({ ok: false, error: chrome.runtime.lastError.message });
+        finish(r || { ok: false, error: 'no answer from the tab' });
+      });
+    } catch (e) { finish({ ok: false, error: String((e && e.message) || e) }); }
+  });
+}
+
 function flipScheme(u) {
   return u.startsWith('https://') ? 'http://'  + u.slice(8)
        : u.startsWith('http://')  ? 'https://' + u.slice(7) : null;
@@ -50,46 +75,61 @@ async function lookup(task, nexusUrl) {
   if (!/^\d{3,}$/.test(String(task || '')))
     return { ok: false, error: 'not a task number', diag: diag };
 
-  /* Try the address as given, then the other scheme. An internal site is often
-     only on one of the two, and a background fetch cannot click through a
-     certificate warning the way a tab can - both show up as "Failed to fetch". */
-  let res = null, used = null;
+  /* An open Nexus tab is the best place to ask from: it already reaches the
+     site, with its cookies, its proxy route and any certificate you accepted.
+     A background fetch has none of that, so it is only the fallback. */
+  let got = null;
   diag.step = 'fetching';
   const t0 = Date.now();
-  for (const attempt of [url, flipScheme(url)]) {
-    if (!attempt) continue;
-    try {
-      res = await fetch(attempt, {
-        credentials: 'include',
-        headers: { 'X-Requested-With': 'XMLHttpRequest' }
-      });
-      used = attempt;
-      diag.tried.push(attempt + ' -> ' + res.status);
-      break;
-    } catch (e) {
-      diag.tried.push(attempt + ' -> ' + String((e && e.message) || e));
-      res = null;
-    }
-  }
-  if (!res) {
-    diag.step = 'could not connect on either http or https';
-    return { ok: false,
-             error: 'could not reach Nexus at ' + url +
-                    ' (nor over the other scheme). Open that address in a tab: if it ' +
-                    'warns about the certificate, that is what blocks this.',
-             diag: diag };
-  }
-  diag.url = used;
-  diag.ms = Date.now() - t0;
-  diag.status = res.status;
-  diag.type = res.headers.get('content-type') || '';
-  diag.finalUrl = res.url;
-  if (!res.ok) {
-    diag.step = 'bad status';
-    return { ok: false, error: 'Nexus answered ' + res.status, diag: diag };
+
+  const nexusTabs = await findNexusTabs(url);
+  diag.nexusTabsOpen = nexusTabs.length;
+  for (const tab of nexusTabs) {
+    const viaTab = await askTab(tab.id, url);
+    diag.tried.push('in your Nexus tab -> ' + (viaTab.ok ? viaTab.status : viaTab.error));
+    if (viaTab.ok) { got = viaTab; diag.how = 'from your open Nexus tab'; break; }
   }
 
-  const text = (await res.text()).trim();
+  if (!got) {
+    for (const attempt of [url, flipScheme(url)]) {
+      if (!attempt) continue;
+      try {
+        const r = await fetch(attempt, {
+          credentials: 'include',
+          headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        diag.tried.push('background ' + attempt + ' -> ' + r.status);
+        got = { status: r.status, finalUrl: r.url,
+                type: r.headers.get('content-type') || '', text: await r.text() };
+        diag.how = 'from the extension itself';
+        diag.url = attempt;
+        break;
+      } catch (e) {
+        diag.tried.push('background ' + attempt + ' -> ' + String((e && e.message) || e));
+      }
+    }
+  }
+
+  if (!got) {
+    diag.step = nexusTabs.length ? 'the Nexus tab could not fetch it either'
+                                 : 'no Nexus tab open, and the extension cannot reach it directly';
+    return { ok: false,
+             error: nexusTabs.length
+               ? 'Nexus is open but would not answer ' + url + '. Open that exact address in a tab to see what it says.'
+               : 'open Nexus in a tab first, then try again — the extension on its own cannot reach ' + url,
+             diag: diag };
+  }
+
+  diag.ms = Date.now() - t0;
+  diag.status = got.status;
+  diag.type = got.type;
+  diag.finalUrl = got.finalUrl;
+  if (got.status < 200 || got.status >= 300) {
+    diag.step = 'bad status';
+    return { ok: false, error: 'Nexus answered ' + got.status, diag: diag };
+  }
+
+  const text = (got.text || '').trim();
   diag.length = text.length;
   diag.sample = text.slice(0, 300);
   if (!text) {
