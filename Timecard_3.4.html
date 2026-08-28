@@ -2384,6 +2384,10 @@ async function runLookupTest(){
   const res = await nexusLookup(task);
   L.push('   came back in ' + ((Date.now()-t0)/1000).toFixed(1) + 's');
   const d = (res && res.diag) || {};
+  if(d.tried && d.tried.length){
+    L.push('   addresses tried:');
+    d.tried.forEach(t=>L.push('     ' + t));
+  }
   if(d.url)      L.push('   address called : ' + d.url);
   if(d.finalUrl && d.finalUrl !== d.url) L.push('   ended up at    : ' + d.finalUrl);
   if(d.status!==undefined) L.push('   HTTP status    : ' + d.status);

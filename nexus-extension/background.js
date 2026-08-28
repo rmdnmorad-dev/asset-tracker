@@ -39,26 +39,47 @@ function pick(data) {
 
 /* Every answer carries a `diag` so the Timecard's "Test the lookup" button can
    say exactly how far the request got, instead of just failing quietly. */
+function flipScheme(u) {
+  return u.startsWith('https://') ? 'http://'  + u.slice(8)
+       : u.startsWith('http://')  ? 'https://' + u.slice(7) : null;
+}
+
 async function lookup(task, nexusUrl) {
   const url = ajaxUrl(nexusUrl, task);
-  const diag = { url: url, step: 'starting' };
+  const diag = { url: url, step: 'starting', tried: [] };
   if (!/^\d{3,}$/.test(String(task || '')))
     return { ok: false, error: 'not a task number', diag: diag };
 
-  let res;
+  /* Try the address as given, then the other scheme. An internal site is often
+     only on one of the two, and a background fetch cannot click through a
+     certificate warning the way a tab can - both show up as "Failed to fetch". */
+  let res = null, used = null;
   diag.step = 'fetching';
   const t0 = Date.now();
-  try {
-    res = await fetch(url, {
-      credentials: 'include',
-      headers: { 'X-Requested-With': 'XMLHttpRequest' }
-    });
-  } catch (e) {
-    diag.step = 'fetch threw';
-    diag.threw = String((e && e.message) || e);
-    return { ok: false,
-             error: 'could not reach ' + url + ' — ' + diag.threw, diag: diag };
+  for (const attempt of [url, flipScheme(url)]) {
+    if (!attempt) continue;
+    try {
+      res = await fetch(attempt, {
+        credentials: 'include',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      });
+      used = attempt;
+      diag.tried.push(attempt + ' -> ' + res.status);
+      break;
+    } catch (e) {
+      diag.tried.push(attempt + ' -> ' + String((e && e.message) || e));
+      res = null;
+    }
   }
+  if (!res) {
+    diag.step = 'could not connect on either http or https';
+    return { ok: false,
+             error: 'could not reach Nexus at ' + url +
+                    ' (nor over the other scheme). Open that address in a tab: if it ' +
+                    'warns about the certificate, that is what blocks this.',
+             diag: diag };
+  }
+  diag.url = used;
   diag.ms = Date.now() - t0;
   diag.status = res.status;
   diag.type = res.headers.get('content-type') || '';
