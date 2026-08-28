@@ -64,6 +64,17 @@ function askTab(tabId, url) {
   });
 }
 
+/* Put the wanted path onto the origin the tab is actually on. */
+function onTabOrigin(tabUrl, wanted) {
+  try {
+    const t = new URL(tabUrl), u = new URL(wanted);
+    if (t.host !== u.host && t.hostname !== u.hostname) return wanted;
+    u.protocol = t.protocol;
+    u.host = t.host;
+    return u.href;
+  } catch (e) { return wanted; }
+}
+
 function flipScheme(u) {
   return u.startsWith('https://') ? 'http://'  + u.slice(8)
        : u.startsWith('http://')  ? 'https://' + u.slice(7) : null;
@@ -85,9 +96,17 @@ async function lookup(task, nexusUrl) {
   const nexusTabs = await findNexusTabs(url);
   diag.nexusTabsOpen = nexusTabs.length;
   for (const tab of nexusTabs) {
-    const viaTab = await askTab(tab.id, url);
-    diag.tried.push('in your Nexus tab -> ' + (viaTab.ok ? viaTab.status : viaTab.error));
-    if (viaTab.ok) { got = viaTab; diag.how = 'from your open Nexus tab'; break; }
+    /* Ask using the tab's OWN origin, not the address the Timecard was
+       configured with. A tab sitting on https cannot fetch an http address -
+       the browser blocks it as mixed content - and the reverse wastes a
+       redirect. The tab is signed in at whatever origin it is on, so that is
+       the one to use. */
+    const target = onTabOrigin(tab.url, url);
+    if (target !== url) diag.rewrote = url + '  ->  ' + target;
+    const viaTab = await askTab(tab.id, target);
+    diag.tried.push('in your Nexus tab (' + target.replace(/\?.*$/, '') + ') -> ' +
+                    (viaTab.ok ? viaTab.status : viaTab.error));
+    if (viaTab.ok) { got = viaTab; diag.how = 'from your open Nexus tab'; diag.url = target; break; }
   }
 
   if (!got) {
