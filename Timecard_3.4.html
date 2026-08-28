@@ -2234,8 +2234,17 @@ function commitValue(inp, finalize){
     if(/^\d{4,}$/.test(task)){                 // any task number of 4+ digits (6- and 7-digit numbers included)
       state.taskInfo = state.taskInfo || {};
       if(inp.dataset.f==='task'){
-        // a 6-digit task can be looked up in Nexus for its project + contractor
-        if(/^\d{6}$/.test(task)) fillFromNexus(+inp.dataset.row, task);
+        /* Nexus is the truth for project + contractor on a 6-digit task, but the
+           lookup takes a moment while the memory autofill below is instant. So
+           note what these boxes held BEFORE the memory filled them in: anything
+           the memory writes now may be replaced by Nexus, anything that was
+           already there is yours and stays. */
+        if(/^\d{6}$/.test(task)){
+          const ri = +inp.dataset.row;
+          const before = { project:    String(r.project||'').trim(),
+                           contractor: String(r.contractor||'').trim() };
+          setTimeout(()=>fillFromNexus(ri, task, before), 0);
+        }
         const mem = state.taskInfo[task];
         if(mem){
           TASK_MEM.forEach(f=>{                 // fill notes, project, contractor AND job type
@@ -2348,12 +2357,18 @@ function markLookupHint(){
                                       : 'extension not detected on this page';
 }
 /* Fill this row's PROJECT and CONTRACTOR from Nexus. Job type is left alone -
-   that one is yours. Anything you have already typed is never overwritten. */
-async function fillFromNexus(ri, task){
+   that one is yours.
+   `before` is what those boxes held the instant the task number was typed, i.e.
+   before the remembered values were poured in. A box that was empty then is
+   Nexus's to fill, even if the memory has since guessed at it. A box that
+   already had something is yours and is never touched. */
+async function fillFromNexus(ri, task, before){
   if(state.settings.nexusLookup === false) return;
+  before = before || {};
   const w = week(), r = w.rows[ri];
   if(!r || String(r.task||'').trim() !== String(task)) return;
-  if(String(r.project||'').trim() && String(r.contractor||'').trim()) return;
+  const mine = f => !!String(before[f]||'').trim();      // you typed it yourself
+  if(mine('project') && mine('contractor')) return;
   const res = await nexusLookup(task);
   if(!res || !res.ok){
     if(res && res.error && res.error !== 'no extension')
@@ -2363,7 +2378,12 @@ async function fillFromNexus(ri, task){
   const w2 = week(), r2 = w2.rows[ri];
   if(!r2 || String(r2.task||'').trim() !== String(task)) return;   // the row moved on
   const put = (f, v)=>{
-    if(!v || String(r2[f]||'').trim()) return false;
+    if(!v || mine(f)) return false;                      // never overwrite your own typing
+    if(String(r2[f]||'').trim() === v) {                 // already right - just remember it
+      state.taskInfo = state.taskInfo || {};
+      (state.taskInfo[task] = state.taskInfo[task] || {})[f] = v;
+      return false;
+    }
     r2[f] = v;
     const cell = document.querySelector('.cell[data-row="'+ri+'"][data-f="'+f+'"]');
     if(cell){ cell.value = v; autoGrow(cell); }
