@@ -1319,7 +1319,6 @@ function defaultState(){
       todoHeight:300, railWidth:212,
       todos:[],
       rocketMode:'tab',                      // 'tab' = extension · 'helper' = nexus-helper.js
-      nexusLookup:true,                      // pull project + contractor from Nexus on a 6-digit task
       nexusUrl:'http://nexus.tcs.local/protected.php',   // where the 🚀 rocket opens
       helperUrl:'http://127.0.0.1:8765',                 // the desktop Nexus helper on this PC     // projects-worked-on summary in the message · credit logo on the sheet
       taskLegend: TASK_LEGEND.map(t=>[t[0],t[1]]),
@@ -1386,6 +1385,7 @@ if(!state.settings.beamColor) state.settings.beamColor = '#8ab4ff';
 if(state.settings.beamOn===undefined) state.settings.beamOn = true;
 if(!state.settings.barColor) state.settings.barColor = '#1f2937';
 if(!state.settings.btnColor) state.settings.btnColor = '#374151';
+delete state.settings.nexusLookup;      // the lookup is always on now; the switch is gone
 if(!state.settings.games) state.settings.games = {on:false, reaction:true};
 if(!state.taskInfo || typeof state.taskInfo!=='object') state.taskInfo = {};   // 6-digit task # -> {project, contractor}
 // separate SEND-TO / CC lists for the Daily vs the Weekly timecard (seeded from the old single list)
@@ -2516,7 +2516,6 @@ function markLookupHint(){
    Nexus's to fill, even if the memory has since guessed at it. A box that
    already had something is yours and is never touched. */
 async function fillFromNexus(ri, task, before){
-  if(state.settings.nexusLookup === false) return;
   before = before || {};
   const w = week(), r = w.rows[ri];
   if(!r || String(r.task||'').trim() !== String(task)) return;
@@ -2893,10 +2892,6 @@ function bindSettings(){
   });
   applyClocks();
   // where the 🚀 rocket opens Nexus
-  const nl = document.getElementById('nexusLookup');
-  if(nl){ nl.checked = state.settings.nexusLookup !== false;
-    nl.addEventListener('change', ()=>{ state.settings.nexusLookup = nl.checked; save(); });
-    markLookupHint(); }
   const btl = document.getElementById('btnLookupTest');
   if(btl) btl.addEventListener('click', runLookupTest);
   const rm = document.getElementById('rocketMode');
