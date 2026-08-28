@@ -542,21 +542,21 @@
   .sendmenu .btn2:hover{background:#eef3fb}
   .totcell.mismatch{background:#ff3b30 !important;color:#fff !important;box-shadow:0 0 8px 2px rgba(255,59,48,.8);animation:tcmis 1s ease-in-out infinite alternate}
   @keyframes tcmis{from{box-shadow:0 0 4px 1px rgba(255,59,48,.6)}to{box-shadow:0 0 12px 3px rgba(255,59,48,.95)}}
-  td.taskcell{position:relative}
-  .duprow{position:absolute;right:1px;top:1px;width:17px;height:17px;border:0;background:transparent;cursor:pointer;z-index:6;
+  /* The cell itself is an ordinary table cell - borders and padding exactly like
+     every other one. overflow:visible only so the N can hang outside it. */
+  td.taskcell{position:relative;overflow:visible}
+  .duprow{position:absolute;right:1px;top:1px;width:17px;height:17px;border:0;background:transparent;cursor:pointer;
     font-size:12px;line-height:1;padding:0;opacity:0;z-index:5;color:#2563eb}
   .taskrow:hover .duprow{opacity:.5} .duprow:hover{opacity:1 !important;transform:scale(1.3)}
-  /* 🚀 push this row's hours into Nexus */
-  /* The N is its own button in the cell, to the LEFT of and outside the task
-     box - the cell is a flex row, so it never sits on top of what you type. */
-  td.taskcell{display:flex;align-items:stretch;gap:2px;padding:0 !important}
-  td.taskcell input.task{flex:1;min-width:0}
-  .rocket[hidden]{visibility:hidden}            /* keeps the box the same width */
-  .rocket{order:-1;flex:0 0 18px;width:18px;align-self:stretch;border:0;border-radius:0;
-    cursor:pointer;background:#1e3a8a;color:#fff;font:bold 11px/1 Arial,sans-serif;
-    padding:0;display:flex;align-items:center;justify-content:center}
-  .rocket:hover{background:#1d4ed8}
-  .rocket.set{box-shadow:inset 0 0 0 2px #93c5fd}   /* a milestone is chosen for this task */
+  /* N — push this row's hours into Nexus. It sits in the margin to the LEFT of
+     the task box, outside the table, so it never touches the cell or its text. */
+  .rocket{position:absolute;left:-15px;top:50%;transform:translateY(-50%);
+    width:13px;height:15px;border:0;border-radius:3px;cursor:pointer;z-index:7;
+    background:#1e3a8a;color:#fff;font:bold 10px/1 Arial,sans-serif;padding:0;
+    display:flex;align-items:center;justify-content:center}
+  .rocket[hidden]{display:none}
+  .rocket:hover{background:#1d4ed8;transform:translateY(-50%) scale(1.15)}
+  .rocket.set{box-shadow:0 0 0 2px #93c5fd}     /* a milestone is chosen for this task */
   .msmenu{position:fixed;z-index:130;background:#fff;color:#111;border:1px solid #cbd5e1;border-radius:8px;
     box-shadow:0 10px 30px rgba(0,0,0,.3);padding:6px;min-width:250px;font-family:Arial;font-size:12.5px}
   .msmenu h5{margin:2px 4px 6px;font-size:11px;color:#555;font-weight:bold}
