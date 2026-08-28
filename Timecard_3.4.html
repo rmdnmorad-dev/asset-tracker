@@ -650,11 +650,11 @@
     <div class="fld"><span>TIMECARD TYPE</span>
       <div class="subchecks">
         <label><input type="checkbox" id="subDaily"> Daily timecard</label>
-        <label><input type="checkbox" id="subWeekly"> Weekly timecard</label>
         <div id="dailyKids" class="subchecks" style="margin:2px 0 4px 18px;padding-left:10px;border-left:2px solid #cbd5e1">
           <label><input type="radio" name="dayView" id="viewToday" value="today"> Only show the <b>current day</b> on the sheet</label>
           <label><input type="radio" name="dayView" id="viewWeek" value="week"> Show the <b>full week</b></label>
         </div>
+        <label><input type="checkbox" id="subWeekly"> Weekly timecard</label>
         <label><input type="checkbox" id="customDay"> Custom day (daily):
           <select id="customDaySel"></select>
           <span style="color:#888;font-weight:normal">— or drag the yellow line on the sheet</span></label>
@@ -787,31 +787,11 @@
   </div>
   <div class="row" style="margin-top:6px">
     <div class="fld" style="flex:1 1 100%">
-      <span>NEXUS 🚀 — the rocket on each task row opens that task in Nexus and fills the Hours form: milestone, hours, date and notes. It never presses Submit.</span>
-      <input type="text" id="nexusUrl" placeholder="http://nexus.tcs.local/protected.php">
-      <div class="subchecks" style="padding-top:4px">
-        <label><input type="checkbox" id="nexusLookup"> Look a 6-digit task's <b>project</b> and <b>contractor</b> up in Nexus as you type it
-          <span id="lookupState" style="color:#888;font-weight:normal">extension not detected on this page</span></label>
-        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:2px 0">
-          <button type="button" class="btn2" id="btnLookupTest">Test the lookup</button>
-          <input type="text" id="lookupTestTask" placeholder="a task number" value="303905"
-                 style="width:120px;padding:5px 7px;border:1px solid #94a3b8;border-radius:6px">
-          <span style="color:#888">— tells you exactly where it stops</span>
-        </div>
-        <pre id="lookupTestOut" hidden style="margin:2px 0;padding:8px 10px;background:#0f1626;color:#e8eefc;
-             border-radius:8px;font-size:11.5px;line-height:1.5;white-space:pre-wrap;word-break:break-word;
-             max-height:240px;overflow:auto"></pre>
-        <label>How the rocket works:
-          <select id="rocketMode" style="margin-left:6px">
-            <option value="tab">New tab in this browser — needs the Timecard → Nexus extension</option>
-            <option value="helper">Desktop helper — nexus-helper.js in its own window</option>
-          </select></label>
-      </div>
-      <div style="font-size:11px;color:#8a5a00;background:#fff8e6;border:1px solid #f0d98a;border-radius:6px;padding:6px 8px;margin:2px 0;line-height:1.45">
-        ⚠ <b>New tab</b> mode opens Nexus right next to this timecard, in whatever browser you are using. Install the
-        <b>Timecard → Nexus</b> extension once (<code>nexus-extension</code> folder → browser Extensions page → Developer mode → Load unpacked) and it fills the form in that tab.
-        Without the extension the tab still opens, but nothing is filled in.
-        Right-click a 🚀 (or Alt+click) to choose that task's <b>milestone</b>; it is remembered per task number.
+      <div style="font-size:11px;color:#555;background:#f6f7f9;border:1px solid #e2e6ec;border-radius:6px;padding:8px 10px;line-height:1.6">
+        <b>N</b> — the navy N beside a 6-digit task opens that task in Nexus and fills the Hours form.
+        It never presses Submit. Right-click it (or Alt+click) to choose that task's <b>milestone</b>;
+        it is remembered per task number. Typing a 6-digit task also fills its <b>project</b> and
+        <b>contractor</b> from Nexus. Keep a Nexus tab open and signed in.
       </div>
     </div>
   </div>
@@ -2472,7 +2452,9 @@ function nexusLookup(task){
    instead of guessed at. */
 async function runLookupTest(){
   const out = document.getElementById('lookupTestOut');
-  const task = (document.getElementById('lookupTestTask').value||'').trim() || '303905';
+  const box = document.getElementById('lookupTestTask');
+  if(!out || !box) return;                    // the panel is not in Settings any more
+  const task = (box.value||'').trim() || '303905';
   const L = [];
   const show = ()=>{ out.hidden = false; out.textContent = L.join('\n'); };
   L.push('Nexus address : ' + (state.settings.nexusUrl || NEXUS_URL_DEFAULT));
