@@ -498,14 +498,36 @@
     opacity:.5;font-weight:bold;margin-bottom:3px}
   .leds{display:flex;align-items:stretch;justify-content:center;gap:5px}
   .ledwrap{position:relative;display:inline-block}
-  .ledghost,.ledmain{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-    font-size:37px;font-weight:700;line-height:1;letter-spacing:1px;white-space:pre;
+  .ledghost,.ledmain{font-family:var(--clockfont,ui-monospace,SFMono-Regular,Menlo,Consolas,monospace);
+    font-size:var(--clocksize,37px);font-weight:700;line-height:1;letter-spacing:1px;white-space:pre;
     font-variant-numeric:tabular-nums}
   .ledghost{color:rgba(233,241,255,.07)}        /* the unlit segments behind the time */
   .ledmain{position:absolute;left:0;top:0;color:#f2f7ff;text-shadow:0 0 12px rgba(130,180,255,.45)}
   .ledside{display:flex;flex-direction:column;justify-content:space-between;padding:2px 0 3px}
   .ledap{font-size:10.5px;font-weight:800;letter-spacing:.08em;opacity:.9}
   .ledsec{font-size:13px;font-weight:700;opacity:.7;text-align:right;font-variant-numeric:tabular-nums}
+  /* to-do list, in the same side rail as the clocks */
+  .todocard{padding:10px 11px 9px}
+  .todocard h4{margin:0 0 7px;font-size:12px;display:flex;align-items:center;gap:6px}
+  .todoadd{display:flex;gap:5px;margin-bottom:7px}
+  .todoadd input{flex:1;min-width:0;border:1px solid #94a3b8;border-radius:6px;
+    padding:5px 7px;font-size:12px;background:#fff;color:#111}
+  .todoadd button{border:0;border-radius:6px;background:#2563eb;color:#fff;
+    font-weight:bold;cursor:pointer;padding:0 9px;font-size:14px;line-height:1}
+  .todolist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;
+    max-height:300px;overflow:auto}
+  .todolist li{display:grid;grid-template-columns:16px 1fr 16px;gap:7px;align-items:start;
+    font-family:var(--todofont,inherit);font-size:var(--todosize,12.5px);
+    color:var(--todofg,inherit);line-height:1.35;padding:3px 2px;border-radius:5px}
+  .todolist li:hover{background:rgba(127,127,127,.12)}
+  .todolist input[type=checkbox]{margin:2px 0 0;cursor:pointer}
+  .todolist .tdtext{word-break:break-word;cursor:text}
+  .todolist li.done .tdtext{text-decoration:line-through;opacity:.45}
+  .todolist .tddel{border:0;background:transparent;color:#ef4444;cursor:pointer;
+    font-size:13px;line-height:1;padding:0;opacity:0}
+  .todolist li:hover .tddel{opacity:.75}
+  .todolist .tddel:hover{opacity:1}
+  .todoempty{font-size:11.5px;opacity:.55;padding:4px 2px}
   /* four faces; click a clock to move to the next one */
   .clockcard{cursor:pointer}
   .clockcard .ledmain{color:var(--clockfg,#f2f7ff)}
@@ -525,7 +547,7 @@
     0 0 22px var(--clockglow,rgba(130,180,255,.55))}
   .clockcard.st-glow{background:radial-gradient(120% 120% at 50% 0%,#16233d 0%,#080d18 100%)}
   .clockcard[data-clock="OUT"] .ledghost,
-  .clockcard[data-clock="OUT"] .ledmain{font-size:27px;letter-spacing:0}
+  .clockcard[data-clock="OUT"] .ledmain{font-size:calc(var(--clocksize,37px) * .73);letter-spacing:0}
   .cdate{margin-top:5px;text-align:center;font-size:9.5px;opacity:.5;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   /* Send Email dropdown */
@@ -541,6 +563,7 @@
     font-size:12px;line-height:1;padding:0;opacity:0;z-index:5;color:#2563eb}
   .taskrow:hover .duprow{opacity:.5} .duprow:hover{opacity:1 !important;transform:scale(1.3)}
   /* 🚀 push this row's hours into Nexus */
+  .rocket[hidden]{display:none}
   .rocket{position:absolute;left:2px;top:50%;transform:translateY(-50%);
     width:17px;height:17px;border:0;border-radius:4px;cursor:pointer;
     background:#1e3a8a;color:#fff;font:bold 11px/1 Arial,sans-serif;padding:0;
@@ -644,6 +667,10 @@
       <div class="subchecks">
         <label><input type="checkbox" id="subDaily"> Daily timecard</label>
         <label><input type="checkbox" id="subWeekly"> Weekly timecard</label>
+        <div id="dailyKids" class="subchecks" style="margin:2px 0 4px 18px;padding-left:10px;border-left:2px solid #cbd5e1">
+          <label><input type="radio" name="dayView" id="viewToday" value="today"> Only show the <b>current day</b> on the sheet</label>
+          <label><input type="radio" name="dayView" id="viewWeek" value="week"> Show the <b>full week</b></label>
+        </div>
         <label><input type="checkbox" id="customDay"> Custom day (daily):
           <select id="customDaySel"></select>
           <span style="color:#888;font-weight:normal">— or drag the yellow line on the sheet</span></label>
@@ -667,6 +694,14 @@
           </select>
           <input type="color" id="clockColor" style="width:46px;height:30px;padding:0;border:1px solid #94a3b8;border-radius:6px;cursor:pointer">
           <span style="color:#888">— or just click a clock to flip through the faces</span></label>
+        <label style="display:flex;gap:6px;align-items:center;font-weight:normal">Digits:
+          <select id="clockFont" style="padding:4px 6px">
+            <option value="mono">Monospace</option><option value="digital">Typewriter</option>
+            <option value="round">Rounded</option><option value="sharp">Narrow</option>
+            <option value="system">System</option>
+          </select>
+          size <input type="range" id="clockSize" min="20" max="60" step="1" style="width:120px">
+          <span id="clockSizeVal" style="color:#888;min-width:38px">37px</span></label>
       </div></div>
     <div class="fld"><span>DRAFT FILE FORMAT — the file each send button creates</span>
       <div class="subchecks">
@@ -772,6 +807,16 @@
         <pre id="lookupTestOut" hidden style="margin:2px 0;padding:8px 10px;background:#0f1626;color:#e8eefc;
              border-radius:8px;font-size:11.5px;line-height:1.5;white-space:pre-wrap;word-break:break-word;
              max-height:240px;overflow:auto"></pre>
+        <label><input type="checkbox" id="todoOn"> Show the <b>To-do list</b> beside the sheet</label>
+        <label style="display:flex;gap:6px;align-items:center;font-weight:normal">To-do style:
+          <select id="todoFont" style="padding:4px 6px">
+            <option value="system">System</option><option value="serif">Serif</option>
+            <option value="mono">Monospace</option><option value="round">Rounded</option>
+            <option value="hand">Handwriting</option>
+          </select>
+          size <input type="range" id="todoSize" min="10" max="20" step="0.5" style="width:100px">
+          <span id="todoSizeVal" style="color:#888;min-width:38px">12.5px</span>
+          <input type="color" id="todoColor" style="width:46px;height:30px;padding:0;border:1px solid #94a3b8;border-radius:6px;cursor:pointer"></label>
         <label>How the rocket works:
           <select id="rocketMode" style="margin-left:6px">
             <option value="tab">New tab in this browser — needs the Timecard → Nexus extension</option>
@@ -1305,7 +1350,10 @@ function defaultState(){
       includeProjects:true, creditOn:true,
       clockLA:true, clockJO:true, clockOut:true,   // digital clocks beside the sheet
       clockStyle:'led',                      // led · flip · min · glow — click a clock to change
-      clockColor:'#f2f7ff',
+      clockColor:'#f2f7ff', clockSize:37, clockFont:'mono',
+      dayView:'week',                        // 'week' or 'today' — only used on a Daily send
+      todoOn:true, todoFont:'system', todoSize:12.5, todoColor:'',
+      todos:[],
       rocketMode:'tab',                      // 'tab' = extension · 'helper' = nexus-helper.js
       nexusLookup:true,                      // pull project + contractor from Nexus on a 6-digit task
       nexusUrl:'http://nexus.tcs.local/protected.php',   // where the 🚀 rocket opens
@@ -2402,6 +2450,7 @@ function markRockets(){
   document.querySelectorAll('#tblhost .rocket').forEach(b=>{
     const r = week().rows[+b.dataset.row] || {}, t = String(r.task||'').trim();
     const ms = t ? taskMilestone(t) : '';
+    b.hidden = !/^\d{6}$/.test(t);            // only a real 6-digit task can go to Nexus
     b.classList.toggle('set', !!ms);
     b.title = t ? ('Send to Nexus — task '+t+(ms?' · '+ms:' · pick a milestone first')+
                    '\nRight-click (or Alt+click) to change the milestone') : 'Enter a task # first';
@@ -2797,7 +2846,8 @@ function bindSettings(){
   document.getElementById('setCc').addEventListener('input', e=>{ state.settings.recipients[recipEditKind()].cc = e.target.value; save(); });
   // Daily / Weekly checkboxes: pick one, or untick to follow the calendar again
   const cd = document.getElementById('subDaily'), cw = document.getElementById('subWeekly');
-  const reflect = ()=>{ const w = resolvedWeekly(); cd.checked = !w; cw.checked = w; loadRecipFields(); updPreview(); };
+  const reflect = ()=>{ const w = resolvedWeekly(); cd.checked = !w; cw.checked = w;
+                        loadRecipFields(); updPreview(); applyDayView(); };
   reflectSubject = reflect;                    // so the day watcher can re-tick the boxes
   const pick = (mode)=>{ state.settings.subjectMode = mode;
                          state.settings.subjectModeDay = mode==='auto' ? null : subjectDayStamp();
@@ -2815,9 +2865,9 @@ function bindSettings(){
     // (so a Sunday goes back to ticking Weekly automatically)
     state.settings.subjectMode = cx.checked ? 'daily' : 'auto';
     state.settings.subjectModeDay = cx.checked ? subjectDayStamp() : null;
-    save(); updateDayIndicator(); syncCustomDayUI(); reflect(); updPreview();
+    save(); updateDayIndicator(); syncCustomDayUI(); reflect(); updPreview(); applyDayView();
   });
-  csel.addEventListener('change', ()=>{ setCustomDay(+csel.value, true); updPreview(); });
+  csel.addEventListener('change', ()=>{ setCustomDay(+csel.value, true); updPreview(); applyDayView(); });
   syncCustomDayUI();
   // include the projects-worked-on summary in the message?
   const ip = document.getElementById('incProjects');
@@ -2829,9 +2879,38 @@ function bindSettings(){
     cr.addEventListener('change', ()=>{ state.settings.creditOn = cr.checked; save(); applyCredit(); }); }
   applyCredit();
   // digital clocks in the toolbar
+  ['viewToday','viewWeek'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.addEventListener('change', ()=>{
+      if(el.checked){ state.settings.dayView = el.value; save(); applyDayView(); }
+    });
+  });
+  const tdo = document.getElementById('todoOn');
+  if(tdo){ tdo.checked = state.settings.todoOn !== false;
+    tdo.addEventListener('change', ()=>{ state.settings.todoOn = tdo.checked; save(); applyGames(); }); }
+  const tdf = document.getElementById('todoFont');
+  if(tdf){ tdf.value = state.settings.todoFont || 'system';
+    tdf.addEventListener('change', ()=>{ state.settings.todoFont = tdf.value; save(); applyTodoLook(); }); }
+  const tds = document.getElementById('todoSize'), tdsv = document.getElementById('todoSizeVal');
+  if(tds){ tds.value = state.settings.todoSize || 12.5;
+    if(tdsv) tdsv.textContent = tds.value + 'px';
+    tds.addEventListener('input', ()=>{ state.settings.todoSize = +tds.value;
+      if(tdsv) tdsv.textContent = tds.value + 'px'; save(); applyTodoLook(); }); }
+  const tdc = document.getElementById('todoColor');
+  if(tdc){ tdc.value = state.settings.todoColor || '#e8eefc';
+    tdc.addEventListener('input', ()=>{ state.settings.todoColor = tdc.value; save(); applyTodoLook(); }); }
   const cst = document.getElementById('clockStyle');
   if(cst){ cst.value = state.settings.clockStyle || 'led';
     cst.addEventListener('change', ()=>{ state.settings.clockStyle = cst.value; save(); applyClockLook(); }); }
+  const cfo = document.getElementById('clockFont');
+  if(cfo){ cfo.value = state.settings.clockFont || 'mono';
+    cfo.addEventListener('change', ()=>{ state.settings.clockFont = cfo.value; save(); applyClockLook(); }); }
+  const csz = document.getElementById('clockSize'), cszv = document.getElementById('clockSizeVal');
+  if(csz){ csz.value = state.settings.clockSize || 37;
+    if(cszv) cszv.textContent = csz.value + 'px';
+    csz.addEventListener('input', ()=>{ state.settings.clockSize = +csz.value;
+      if(cszv) cszv.textContent = csz.value + 'px'; save(); applyClockLook(); }); }
   const ccl = document.getElementById('clockColor');
   if(ccl){ ccl.value = state.settings.clockColor || '#f2f7ff';
     ccl.addEventListener('input', ()=>{ state.settings.clockColor = ccl.value; save(); applyClockLook(); }); }
@@ -2905,7 +2984,8 @@ function bindSettings(){
   const barc = document.getElementById('barColor');
   barc.value = state.settings.barColor || '#1f2937';
   barc.addEventListener('input', ()=>{ state.settings.barColor = barc.value; save(); applyBar();
-applyBtnColor(); });
+applyBtnColor();
+applyDayView(); });
   const btnc = document.getElementById('btnColor');
   if(btnc){ btnc.value = state.settings.btnColor || '#374151';
     btnc.addEventListener('input', ()=>{ state.settings.btnColor = btnc.value; save(); applyBtnColor(); }); }
@@ -4899,11 +4979,110 @@ const CLOCK_NAMES = { LA:'Los Angeles', JO:'Jordan' };
 const CLOCK_ORDER = ['LA','JO'];
 const CLOCK_STYLES = ['led','flip','min','glow'];
 const CLOCK_STYLE_NAMES = {led:'LED', flip:'Flip panel', min:'Minimal', glow:'Neon glow'};
+const CLOCK_FONTS = {
+  mono:    'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace',
+  digital: '"Courier New",Courier,monospace',
+  round:   '"Trebuchet MS",Verdana,Geneva,sans-serif',
+  sharp:   '"Arial Narrow",Impact,"Haettenschweiler",sans-serif',
+  system:  '"Segoe UI",-apple-system,Roboto,Helvetica,Arial,sans-serif'
+};
+/* On a Daily send you can narrow the sheet to just the day it covers. Every
+   day cell and every <col> carries data-daycol, so one rule hides a column
+   cleanly, headers, totals and all. */
+function applyDayView(){
+  let st = document.getElementById('dayViewCss');
+  if(!st){ st = document.createElement('style'); st.id = 'dayViewCss'; document.head.appendChild(st); }
+  const only = (state.settings.dayView === 'today') && !resolvedWeekly();
+  if(!only){ st.textContent = ''; }
+  else{
+    const keep = dailyCol();
+    const hide = [0,1,2,3,4,5,6].filter(d=>d!==keep)
+                   .map(d=>'#sheet [data-daycol="'+d+'"]').join(',');
+    st.textContent = hide ? hide + '{display:none}' : '';
+  }
+  const vt = document.getElementById('viewToday'), vw = document.getElementById('viewWeek');
+  if(vt && vw){
+    vt.checked = state.settings.dayView === 'today';
+    vw.checked = state.settings.dayView !== 'today';
+    const kids = document.getElementById('dailyKids');
+    if(kids) kids.style.display = resolvedWeekly() ? 'none' : '';   // only meaningful on Daily
+  }
+}
+/* ---- To-do list, in the side rail ------------------------------------- */
+const TODO_FONTS = {
+  system:  '"Segoe UI",-apple-system,Roboto,Helvetica,Arial,sans-serif',
+  serif:   'Georgia,"Times New Roman",serif',
+  mono:    'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace',
+  round:   '"Trebuchet MS",Verdana,Geneva,sans-serif',
+  hand:    '"Segoe Script","Comic Sans MS",cursive'
+};
+function todoList(){ return (state.settings.todos = state.settings.todos || []); }
+function applyTodoLook(){
+  const r = document.documentElement.style;
+  r.setProperty('--todofont', TODO_FONTS[state.settings.todoFont] || TODO_FONTS.system);
+  r.setProperty('--todosize', (state.settings.todoSize || 12.5) + 'px');
+  r.setProperty('--todofg', state.settings.todoColor || 'inherit');
+}
+function renderTodo(card){
+  const ul = card.querySelector('.todolist');
+  const items = todoList();
+  ul.innerHTML = '';
+  if(!items.length){
+    const p = document.createElement('div');
+    p.className = 'todoempty'; p.textContent = 'Nothing yet — add something above.';
+    ul.appendChild(p); return;
+  }
+  items.forEach((it, i)=>{
+    const li = document.createElement('li');
+    if(it.done) li.className = 'done';
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !!it.done;
+    cb.title = 'Mark done';
+    cb.addEventListener('change', ()=>{ it.done = cb.checked; save(); renderTodo(card); });
+    const tx = document.createElement('span');
+    tx.className = 'tdtext'; tx.textContent = it.t;
+    tx.contentEditable = 'true'; tx.spellcheck = false;
+    tx.addEventListener('blur', ()=>{ it.t = tx.textContent.trim(); if(!it.t) items.splice(i,1);
+                                      save(); renderTodo(card); });
+    tx.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); tx.blur(); } });
+    const del = document.createElement('button');
+    del.className = 'tddel'; del.type = 'button'; del.textContent = '✕'; del.title = 'Remove';
+    del.addEventListener('click', ()=>{ items.splice(i,1); save(); renderTodo(card); });
+    li.appendChild(cb); li.appendChild(tx); li.appendChild(del);
+    ul.appendChild(li);
+  });
+}
+function todoCard(){
+  const card = document.createElement('div');
+  card.className = 'gcard todocard';
+  card.style.position = 'relative';
+  card.innerHTML =
+    '<h4>📝 To-do</h4>'+
+    '<div class="todoadd"><input type="text" placeholder="Add a task…" spellcheck="false">'+
+    '<button type="button" title="Add">+</button></div>'+
+    '<ul class="todolist"></ul>';
+  const inp = card.querySelector('.todoadd input'), btn = card.querySelector('.todoadd button');
+  const add = ()=>{ const v = inp.value.trim(); if(!v) return;
+                    todoList().push({t:v, done:false}); inp.value=''; save(); renderTodo(card); };
+  btn.addEventListener('click', add);
+  inp.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); add(); } });
+  const x = document.createElement('button');
+  x.className = 'gclose'; x.type = 'button'; x.textContent = '✕';
+  x.title = 'Hide the to-do list (turn it back on in Settings)';
+  x.onclick = ()=>{ state.settings.todoOn = false; save();
+                    const el=document.getElementById('todoOn'); if(el) el.checked=false;
+                    applyGames(); };
+  card.appendChild(x);
+  renderTodo(card);
+  return card;
+}
 function applyClockLook(){
   const st = state.settings.clockStyle || 'led';
   const c  = state.settings.clockColor || '#f2f7ff';
   document.documentElement.style.setProperty('--clockfg', c);
   document.documentElement.style.setProperty('--clockglow', hexToRgba(c, .55));
+  document.documentElement.style.setProperty('--clocksize', (state.settings.clockSize||37)+'px');
+  document.documentElement.style.setProperty('--clockfont',
+    CLOCK_FONTS[state.settings.clockFont] || CLOCK_FONTS.mono);
   document.querySelectorAll('.clockcard').forEach(card=>{
     CLOCK_STYLES.forEach(x=>card.classList.remove('st-'+x));
     card.classList.add('st-'+st);
@@ -4991,16 +5170,13 @@ function leaveInfo(){
     const at = h12 + ':' + pad2(mins%60) + ' ' + (Math.floor(mins/60) >= 12 ? 'PM' : 'AM');
 
     const now = new Date();
-    let secs = mins*60 - (now.getHours()*3600 + now.getMinutes()*60 + now.getSeconds());
-    const past = secs < 0;
-    secs = Math.abs(secs);
+    const secs = mins*60 - (now.getHours()*3600 + now.getMinutes()*60 + now.getSeconds());
+    if(secs <= 0)                                  // the countdown has run out
+      return { main:'0:00:00', ghost:'88:88:88', ap:'', title:'Time to go',
+               note:'check out was ' + at };
     const hh = Math.floor(secs/3600), mm = Math.floor((secs%3600)/60), ss = secs%60;
-    const clock = hh + ':' + pad2(mm) + ':' + pad2(ss);
-    return past
-      ? { main:clock, ghost:'88:88:88', ap:'', title:'Since check-out',
-          note:'you could have left at ' + at }
-      : { main:clock, ghost:'88:88:88', ap:'', title:'Check out in',
-          note:'at ' + at };
+    return { main: hh + ':' + pad2(mm) + ':' + pad2(ss), ghost:'88:88:88', ap:'',
+             title:'Till check out', note:'at ' + at };
   }catch(e){ return {main:'--:--:--', ghost:'88:88:88', ap:'', title:'Leaving today', note:''}; }
 }
 function leaveCard(){
@@ -5114,6 +5290,7 @@ function applyGames(){
   // the clocks ride in the same side rail, stacked above any games
   CLOCK_ORDER.forEach(k=>{ if(state.settings['clock'+k]!==false) L.appendChild(clockCard(k)); });
   if(state.settings.clockOut !== false) R.appendChild(leaveCard());
+  if(state.settings.todoOn !== false)    R.appendChild(todoCard());
   const enabled = g.on ? GAMES.slice() : [];
   enabled.forEach((name,i)=>{
     const card = GAME_FACTORY[name]();
@@ -5128,6 +5305,7 @@ function applyGames(){
   R.classList.toggle('show', R.children.length>0);
   document.body.classList.toggle('games-on', L.children.length>0 || R.children.length>0);
   applyClockLook();
+  applyTodoLook();
   tickClocks();
 }
 
