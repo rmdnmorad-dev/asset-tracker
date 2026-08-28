@@ -1,8 +1,12 @@
 # Timecard → Nexus (browser extension)
 
-Fills the Nexus hours form from a Timecard 🚀 press — **in the browser you are
-already using**, in a tab right next to the timecard. No second window, no
-Node.js, no helper running in the background.
+Two things, both **in the browser you are already using**:
+
+1. **The 🚀** fills the Nexus hours form for that row, in a tab right next to
+   the timecard. No second window, no Node.js, no helper in the background.
+2. **Task lookup** — type a 6-digit task number in the timecard and its
+   **project** and **contractor** are pulled from Nexus and filled in. Job type
+   stays yours to pick.
 
 It never presses Submit. You do that.
 
@@ -25,9 +29,16 @@ extension.
    - Vivaldi — `vivaldi://extensions`
 3. Turn on **Developer mode** (top-right in most, bottom-left in Edge).
 4. Click **Load unpacked** and pick the `nexus-extension` folder.
-5. That's it. "Timecard → Nexus" appears in the list.
+5. Click **Details** on "Timecard → Nexus" and turn on
+   **Allow access to file URLs**.
 
-Then just press a 🚀 in the timecard.
+Step 5 matters: the timecard is a file on your disk, and without that tick the
+extension is not allowed to talk to it, so the task lookup stays silent. The 🚀
+works either way. Settings tells you which state you are in — it says
+*"extension found — lookups will work"* once the tick is on and the page has
+been reloaded.
+
+Then just press a 🚀, or type a task number.
 
 ## What you'll see
 
@@ -70,10 +81,15 @@ refreshing the page doesn't re-run it.
 
 ## What it can touch
 
-- It runs **only** on `nexus.tcs.local`. Every other site is out of scope —
-  that's enforced by the browser from the manifest, not by the code.
-- It asks for **no permissions**: no history, no tabs, no storage, no network
-  access.
+- It runs **only** on `nexus.tcs.local` and on local files. Every other site is
+  out of scope — enforced by the browser from the manifest, not by the code.
+- Its only permission is to reach `nexus.tcs.local`. No history, no tabs, no
+  storage, no other site.
+- The lookup uses the same address Nexus's own Edit button uses
+  (`php/ajax.php?function=get_project_info`), with your own cookies. It sees
+  exactly what you can see when you search that task, and nothing else.
+- On a local file it only ever answers the timecard's own messages, so on any
+  other local page it does nothing.
 - It **never presses Submit**, so it cannot file hours you have not read.
 - It sends nothing anywhere. Everything happens inside the page you are
   looking at.
@@ -97,3 +113,21 @@ rocket again.
 **Your Nexus is on a different address.** Change it in the timecard's Settings,
 and edit the two `matches` lines in `manifest.json` to the same host, then
 reload the extension.
+
+## The task lookup
+
+Type a 6-digit task number and the row's **project** and **contractor** fill
+themselves in a moment later. Anything you have already typed is left alone —
+it only fills boxes that are empty, and it never touches the job type.
+
+The answers are remembered per task number, so the same task fills instantly
+next time even without Nexus.
+
+Turn it off in the timecard's Settings if you would rather type them yourself.
+
+**"extension not detected on this page"** in Settings means either the
+extension is not installed, or **Allow access to file URLs** is off (see step 5
+above). Reload the timecard after turning it on.
+
+**"sign in to Nexus first"** means your Nexus session has expired. Open Nexus,
+sign in, then type the number again.

@@ -728,6 +728,8 @@
       <span>NEXUS 🚀 — the rocket on each task row opens that task in Nexus and fills the Hours form: milestone, hours, date and notes. It never presses Submit.</span>
       <input type="text" id="nexusUrl" placeholder="http://nexus.tcs.local/protected.php">
       <div class="subchecks" style="padding-top:4px">
+        <label><input type="checkbox" id="nexusLookup"> Look a 6-digit task's <b>project</b> and <b>contractor</b> up in Nexus as you type it
+          <span id="lookupState" style="color:#888;font-weight:normal">extension not detected on this page</span></label>
         <label>How the rocket works:
           <select id="rocketMode" style="margin-left:6px">
             <option value="tab">New tab in this browser — needs the Timecard → Nexus extension</option>
@@ -1261,6 +1263,7 @@ function defaultState(){
       includeProjects:true, creditOn:true,
       clockLA:true, clockJO:true, clockOut:true,   // digital clocks beside the sheet
       rocketMode:'tab',                      // 'tab' = extension · 'helper' = nexus-helper.js
+      nexusLookup:true,                      // pull project + contractor from Nexus on a 6-digit task
       nexusUrl:'http://nexus.tcs.local/protected.php',   // where the 🚀 rocket opens
       helperUrl:'http://127.0.0.1:8765',                 // the desktop Nexus helper on this PC     // projects-worked-on summary in the message · credit logo on the sheet
       taskLegend: TASK_LEGEND.map(t=>[t[0],t[1]]),
@@ -2231,6 +2234,8 @@ function commitValue(inp, finalize){
     if(/^\d{4,}$/.test(task)){                 // any task number of 4+ digits (6- and 7-digit numbers included)
       state.taskInfo = state.taskInfo || {};
       if(inp.dataset.f==='task'){
+        // a 6-digit task can be looked up in Nexus for its project + contractor
+        if(/^\d{6}$/.test(task)) fillFromNexus(+inp.dataset.row, task);
         const mem = state.taskInfo[task];
         if(mem){
           TASK_MEM.forEach(f=>{                 // fill notes, project, contractor AND job type
@@ -2310,6 +2315,72 @@ function markRockets(){
   });
 }
 // what this row would send for the day the timecard is set to
+/* ---- look a task up in Nexus -------------------------------------------
+   This page is a local file, so it cannot reach Nexus itself. The
+   "Timecard → Nexus" extension can, and answers over postMessage. If the
+   extension is not installed nothing replies and we simply carry on. */
+let nexusBridge = false;                 // set when the extension says hello
+let lookupSeq = 0;
+const lookupWaiting = {};
+window.addEventListener('message', (e)=>{
+  if(e.source !== window || !e.data) return;
+  if(e.data.__tc === 'ready'){ nexusBridge = true; markLookupHint(); return; }
+  if(e.data.__tc === 'lookupResult'){
+    const cb = lookupWaiting[e.data.id];
+    if(cb){ delete lookupWaiting[e.data.id]; cb(e.data); }
+  }
+});
+function nexusLookup(task){
+  return new Promise(resolve=>{
+    if(!nexusBridge) return resolve({ok:false, error:'no extension'});
+    const id = ++lookupSeq;
+    let done = false;
+    const finish = (r)=>{ if(done) return; done = true; delete lookupWaiting[id]; resolve(r); };
+    lookupWaiting[id] = finish;
+    setTimeout(()=>finish({ok:false, error:'Nexus took too long'}), 20000);
+    window.postMessage({__tc:'lookup', id:id, task:String(task),
+                        nexusUrl: state.settings.nexusUrl || NEXUS_URL_DEFAULT}, '*');
+  });
+}
+function markLookupHint(){
+  const el = document.getElementById('lookupState');
+  if(el) el.textContent = nexusBridge ? 'extension found — lookups will work'
+                                      : 'extension not detected on this page';
+}
+/* Fill this row's PROJECT and CONTRACTOR from Nexus. Job type is left alone -
+   that one is yours. Anything you have already typed is never overwritten. */
+async function fillFromNexus(ri, task){
+  if(state.settings.nexusLookup === false) return;
+  const w = week(), r = w.rows[ri];
+  if(!r || String(r.task||'').trim() !== String(task)) return;
+  if(String(r.project||'').trim() && String(r.contractor||'').trim()) return;
+  const res = await nexusLookup(task);
+  if(!res || !res.ok){
+    if(res && res.error && res.error !== 'no extension')
+      toast('🔎 Task '+task+': '+res.error, 7000);
+    return;
+  }
+  const w2 = week(), r2 = w2.rows[ri];
+  if(!r2 || String(r2.task||'').trim() !== String(task)) return;   // the row moved on
+  const put = (f, v)=>{
+    if(!v || String(r2[f]||'').trim()) return false;
+    r2[f] = v;
+    const cell = document.querySelector('.cell[data-row="'+ri+'"][data-f="'+f+'"]');
+    if(cell){ cell.value = v; autoGrow(cell); }
+    state.taskInfo = state.taskInfo || {};
+    const m = state.taskInfo[task] = state.taskInfo[task] || {};
+    m[f] = v;
+    return true;
+  };
+  const got = [];
+  if(put('project', res.data.project))       got.push('project');
+  if(put('contractor', res.data.contractor)) got.push('contractor');
+  if(got.length){
+    recalc(); save();
+    toast('🔎 '+task+' — '+res.data.project+(res.data.contractor ? ' · '+res.data.contractor : '')+
+          '<br><span style="opacity:.85">from Nexus. Job type is still yours to pick.</span>', 7000);
+  }
+}
 function rocketPayload(ri){
   const w = week(), r = w.rows[ri], d = dailyCol(), dates = weekDates();
   const task = String(r.task||'').trim();
@@ -2594,6 +2665,10 @@ function bindSettings(){
   });
   applyClocks();
   // where the 🚀 rocket opens Nexus
+  const nl = document.getElementById('nexusLookup');
+  if(nl){ nl.checked = state.settings.nexusLookup !== false;
+    nl.addEventListener('change', ()=>{ state.settings.nexusLookup = nl.checked; save(); });
+    markLookupHint(); }
   const rm = document.getElementById('rocketMode');
   if(rm){ rm.value = state.settings.rocketMode || 'tab';
     rm.addEventListener('change', ()=>{ state.settings.rocketMode = rm.value; save(); }); }
