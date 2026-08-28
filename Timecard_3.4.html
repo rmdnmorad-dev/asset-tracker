@@ -447,7 +447,7 @@
   input.cell{line-height:1.15}
 
   /* ---------- side mini-games (hidden until enabled in Settings) ---------- */
-  .gpanel{position:fixed;top:64px;bottom:12px;width:212px;z-index:55;overflow-y:auto;overflow-x:hidden;
+  .gpanel{position:fixed;top:64px;bottom:12px;width:var(--railwidth,212px);z-index:55;overflow-y:auto;overflow-x:hidden;
     display:none;flex-direction:column;gap:12px;padding:10px 8px;background:transparent}
   .gpanel.show{display:flex}
   #gamesLeft{left:8px} #gamesRight{right:8px}
@@ -515,7 +515,7 @@
   .todoadd button{border:0;border-radius:6px;background:#2563eb;color:#fff;
     font-weight:bold;cursor:pointer;padding:0 9px;font-size:14px;line-height:1}
   .todolist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;
-    max-height:300px;overflow:auto}
+    max-height:var(--todoheight,300px);overflow:auto}
   .todolist li{display:grid;grid-template-columns:16px 1fr 16px;gap:7px;align-items:start;
     font-family:var(--todofont,inherit);font-size:var(--todosize,12.5px);
     color:var(--todofg,inherit);line-height:1.35;padding:3px 2px;border-radius:5px}
@@ -528,24 +528,8 @@
   .todolist li:hover .tddel{opacity:.75}
   .todolist .tddel:hover{opacity:1}
   .todoempty{font-size:11.5px;opacity:.55;padding:4px 2px}
-  /* four faces; click a clock to move to the next one */
-  .clockcard{cursor:pointer}
-  .clockcard .ledmain{color:var(--clockfg,#f2f7ff)}
-  .clockcard.st-led  .ledmain{text-shadow:0 0 12px var(--clockglow,rgba(130,180,255,.45))}
-  .clockcard.st-flip .ledghost{display:none}
-  .clockcard.st-flip .ledmain{position:static;background:#05080f;border-radius:6px;
-    padding:5px 9px;border:1px solid rgba(255,255,255,.09);text-shadow:none;
-    box-shadow:inset 0 -1px 0 rgba(255,255,255,.06)}
-  .clockcard.st-flip .leds{align-items:center}
-  .clockcard.st-min  .ledghost{display:none}
-  .clockcard.st-min  .ledmain{position:static;font-weight:400;text-shadow:none;letter-spacing:2px}
-  .clockcard.st-min  {background:transparent;border-color:rgba(255,255,255,.14)}
-  body:not(.dark) .clockcard.st-min{background:transparent;border-color:rgba(0,0,0,.18);color:#0f172a}
-  body:not(.dark) .clockcard.st-min .ledmain{color:var(--clockfg,#0f172a)}
-  .clockcard.st-glow .ledghost{display:none}
-  .clockcard.st-glow .ledmain{position:static;text-shadow:0 0 6px var(--clockglow,rgba(130,180,255,.9)),
-    0 0 22px var(--clockglow,rgba(130,180,255,.55))}
-  .clockcard.st-glow{background:radial-gradient(120% 120% at 50% 0%,#16233d 0%,#080d18 100%)}
+  .clockcard .ledmain{color:var(--clockfg,#f2f7ff);
+    text-shadow:0 0 12px var(--clockglow,rgba(130,180,255,.45))}
   .clockcard[data-clock="OUT"] .ledghost,
   .clockcard[data-clock="OUT"] .ledmain{font-size:calc(var(--clocksize,37px) * .73);letter-spacing:0}
   .cdate{margin-top:5px;text-align:center;font-size:9.5px;opacity:.5;
@@ -559,20 +543,20 @@
   .totcell.mismatch{background:#ff3b30 !important;color:#fff !important;box-shadow:0 0 8px 2px rgba(255,59,48,.8);animation:tcmis 1s ease-in-out infinite alternate}
   @keyframes tcmis{from{box-shadow:0 0 4px 1px rgba(255,59,48,.6)}to{box-shadow:0 0 12px 3px rgba(255,59,48,.95)}}
   td.taskcell{position:relative}
-  .duprow{position:absolute;right:1px;top:1px;width:17px;height:17px;border:0;background:transparent;cursor:pointer;
+  .duprow{position:absolute;right:1px;top:1px;width:17px;height:17px;border:0;background:transparent;cursor:pointer;z-index:6;
     font-size:12px;line-height:1;padding:0;opacity:0;z-index:5;color:#2563eb}
   .taskrow:hover .duprow{opacity:.5} .duprow:hover{opacity:1 !important;transform:scale(1.3)}
   /* 🚀 push this row's hours into Nexus */
-  .rocket[hidden]{display:none}
-  .rocket{position:absolute;left:2px;top:50%;transform:translateY(-50%);
-    width:17px;height:17px;border:0;border-radius:4px;cursor:pointer;
-    background:#1e3a8a;color:#fff;font:bold 11px/1 Arial,sans-serif;padding:0;
-    opacity:.55;z-index:5;display:flex;align-items:center;justify-content:center}
-  .taskrow:hover .rocket{opacity:.85}
-  .rocket:hover{opacity:1 !important;background:#1d4ed8;
-    transform:translateY(-50%) scale(1.15)}
-  .rocket.set{opacity:1}                        /* a milestone has been chosen for this task */
-  td.taskcell input.task{padding-left:22px}     /* keep the number clear of the N */
+  /* The N is its own button in the cell, to the LEFT of and outside the task
+     box - the cell is a flex row, so it never sits on top of what you type. */
+  td.taskcell{display:flex;align-items:stretch;gap:2px;padding:0 !important}
+  td.taskcell input.task{flex:1;min-width:0}
+  .rocket[hidden]{visibility:hidden}            /* keeps the box the same width */
+  .rocket{order:-1;flex:0 0 18px;width:18px;align-self:stretch;border:0;border-radius:0;
+    cursor:pointer;background:#1e3a8a;color:#fff;font:bold 11px/1 Arial,sans-serif;
+    padding:0;display:flex;align-items:center;justify-content:center}
+  .rocket:hover{background:#1d4ed8}
+  .rocket.set{box-shadow:inset 0 0 0 2px #93c5fd}   /* a milestone is chosen for this task */
   .msmenu{position:fixed;z-index:130;background:#fff;color:#111;border:1px solid #cbd5e1;border-radius:8px;
     box-shadow:0 10px 30px rgba(0,0,0,.3);padding:6px;min-width:250px;font-family:Arial;font-size:12.5px}
   .msmenu h5{margin:2px 4px 6px;font-size:11px;color:#555;font-weight:bold}
@@ -687,13 +671,23 @@
         <label><input type="checkbox" id="clockLA"> Show the <b>Los Angeles</b> clock beside the sheet</label>
         <label><input type="checkbox" id="clockJO"> Show the <b>Jordan</b> clock, under the LA one</label>
         <label><input type="checkbox" id="clockOut"> Show the <b>Leaving today</b> countdown on the right, from this day's TIME OUT</label>
-        <label style="display:flex;gap:6px;align-items:center;font-weight:normal">Clock face:
-          <select id="clockStyle" style="padding:4px 6px">
-            <option value="led">LED</option><option value="flip">Flip panel</option>
-            <option value="min">Minimal</option><option value="glow">Neon glow</option>
+        <label><input type="checkbox" id="todoOn"> Show the <b>To-do list</b> beside the sheet</label>
+        <label style="display:flex;gap:6px;align-items:center;font-weight:normal">To-do font:
+          <select id="todoFont" style="padding:4px 6px">
+            <option value="system">System</option><option value="serif">Serif</option>
+            <option value="mono">Monospace</option><option value="round">Rounded</option>
+            <option value="hand">Handwriting</option>
           </select>
-          <input type="color" id="clockColor" style="width:46px;height:30px;padding:0;border:1px solid #94a3b8;border-radius:6px;cursor:pointer">
-          <span style="color:#888">— or just click a clock to flip through the faces</span></label>
+          text <input type="range" id="todoSize" min="10" max="24" step="0.5" style="width:100px">
+          <span id="todoSizeVal" style="color:#888;min-width:44px">12.5px</span>
+          <input type="color" id="todoColor" style="width:46px;height:30px;padding:0;border:1px solid #94a3b8;border-radius:6px;cursor:pointer"></label>
+        <label style="display:flex;gap:6px;align-items:center;font-weight:normal">To-do size:
+          height <input type="range" id="todoHeight" min="120" max="700" step="10" style="width:110px">
+          <span id="todoHeightVal" style="color:#888;min-width:48px">300px</span>
+          width <input type="range" id="railWidth" min="170" max="380" step="5" style="width:110px">
+          <span id="railWidthVal" style="color:#888;min-width:48px">212px</span></label>
+        <label style="display:flex;gap:6px;align-items:center;font-weight:normal">Clock colour:
+          <input type="color" id="clockColor" style="width:46px;height:30px;padding:0;border:1px solid #94a3b8;border-radius:6px;cursor:pointer"></label>
         <label style="display:flex;gap:6px;align-items:center;font-weight:normal">Digits:
           <select id="clockFont" style="padding:4px 6px">
             <option value="mono">Monospace</option><option value="digital">Typewriter</option>
@@ -807,16 +801,6 @@
         <pre id="lookupTestOut" hidden style="margin:2px 0;padding:8px 10px;background:#0f1626;color:#e8eefc;
              border-radius:8px;font-size:11.5px;line-height:1.5;white-space:pre-wrap;word-break:break-word;
              max-height:240px;overflow:auto"></pre>
-        <label><input type="checkbox" id="todoOn"> Show the <b>To-do list</b> beside the sheet</label>
-        <label style="display:flex;gap:6px;align-items:center;font-weight:normal">To-do style:
-          <select id="todoFont" style="padding:4px 6px">
-            <option value="system">System</option><option value="serif">Serif</option>
-            <option value="mono">Monospace</option><option value="round">Rounded</option>
-            <option value="hand">Handwriting</option>
-          </select>
-          size <input type="range" id="todoSize" min="10" max="20" step="0.5" style="width:100px">
-          <span id="todoSizeVal" style="color:#888;min-width:38px">12.5px</span>
-          <input type="color" id="todoColor" style="width:46px;height:30px;padding:0;border:1px solid #94a3b8;border-radius:6px;cursor:pointer"></label>
         <label>How the rocket works:
           <select id="rocketMode" style="margin-left:6px">
             <option value="tab">New tab in this browser — needs the Timecard → Nexus extension</option>
@@ -1349,10 +1333,10 @@ function defaultState(){
       customDay:false, customDayIdx:null,      // custom single day for a Daily send
       includeProjects:true, creditOn:true,
       clockLA:true, clockJO:true, clockOut:true,   // digital clocks beside the sheet
-      clockStyle:'led',                      // led · flip · min · glow — click a clock to change
       clockColor:'#f2f7ff', clockSize:37, clockFont:'mono',
       dayView:'week',                        // 'week' or 'today' — only used on a Daily send
       todoOn:true, todoFont:'system', todoSize:12.5, todoColor:'',
+      todoHeight:300, railWidth:212,
       todos:[],
       rocketMode:'tab',                      // 'tab' = extension · 'helper' = nexus-helper.js
       nexusLookup:true,                      // pull project + contractor from Nexus on a 6-digit task
@@ -2900,9 +2884,14 @@ function bindSettings(){
   const tdc = document.getElementById('todoColor');
   if(tdc){ tdc.value = state.settings.todoColor || '#e8eefc';
     tdc.addEventListener('input', ()=>{ state.settings.todoColor = tdc.value; save(); applyTodoLook(); }); }
-  const cst = document.getElementById('clockStyle');
-  if(cst){ cst.value = state.settings.clockStyle || 'led';
-    cst.addEventListener('change', ()=>{ state.settings.clockStyle = cst.value; save(); applyClockLook(); }); }
+  [['todoHeight','todoHeight',300],['railWidth','railWidth',212]].forEach(([id,key,dflt])=>{
+    const el = document.getElementById(id), lab = document.getElementById(id+'Val');
+    if(!el) return;
+    el.value = state.settings[key] || dflt;
+    if(lab) lab.textContent = el.value + 'px';
+    el.addEventListener('input', ()=>{ state.settings[key] = +el.value;
+      if(lab) lab.textContent = el.value + 'px'; save(); applyTodoLook(); });
+  });
   const cfo = document.getElementById('clockFont');
   if(cfo){ cfo.value = state.settings.clockFont || 'mono';
     cfo.addEventListener('change', ()=>{ state.settings.clockFont = cfo.value; save(); applyClockLook(); }); }
@@ -4977,8 +4966,6 @@ function luminance(hex){
 const CLOCK_ZONES = { LA:'America/Los_Angeles', JO:'Asia/Amman' };
 const CLOCK_NAMES = { LA:'Los Angeles', JO:'Jordan' };
 const CLOCK_ORDER = ['LA','JO'];
-const CLOCK_STYLES = ['led','flip','min','glow'];
-const CLOCK_STYLE_NAMES = {led:'LED', flip:'Flip panel', min:'Minimal', glow:'Neon glow'};
 const CLOCK_FONTS = {
   mono:    'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace',
   digital: '"Courier New",Courier,monospace',
@@ -5022,6 +5009,14 @@ function applyTodoLook(){
   r.setProperty('--todofont', TODO_FONTS[state.settings.todoFont] || TODO_FONTS.system);
   r.setProperty('--todosize', (state.settings.todoSize || 12.5) + 'px');
   r.setProperty('--todofg', state.settings.todoColor || 'inherit');
+  r.setProperty('--todoheight', (state.settings.todoHeight || 300) + 'px');
+  const w = state.settings.railWidth || 212;
+  r.setProperty('--railwidth', w + 'px');
+  // the sheet is pushed in by however wide the rail is
+  document.querySelectorAll('#sheetWrap').forEach(el=>{
+    el.style.marginLeft = el.style.marginRight =
+      document.body.classList.contains('games-on') ? (w + 16) + 'px' : '';
+  });
 }
 function renderTodo(card){
   const ul = card.querySelector('.todolist');
@@ -5076,25 +5071,12 @@ function todoCard(){
   return card;
 }
 function applyClockLook(){
-  const st = state.settings.clockStyle || 'led';
   const c  = state.settings.clockColor || '#f2f7ff';
   document.documentElement.style.setProperty('--clockfg', c);
   document.documentElement.style.setProperty('--clockglow', hexToRgba(c, .55));
   document.documentElement.style.setProperty('--clocksize', (state.settings.clockSize||37)+'px');
   document.documentElement.style.setProperty('--clockfont',
     CLOCK_FONTS[state.settings.clockFont] || CLOCK_FONTS.mono);
-  document.querySelectorAll('.clockcard').forEach(card=>{
-    CLOCK_STYLES.forEach(x=>card.classList.remove('st-'+x));
-    card.classList.add('st-'+st);
-  });
-}
-function nextClockStyle(){
-  const i = CLOCK_STYLES.indexOf(state.settings.clockStyle || 'led');
-  state.settings.clockStyle = CLOCK_STYLES[(i+1) % CLOCK_STYLES.length];
-  save(); applyClockLook();
-  const sel = document.getElementById('clockStyle');
-  if(sel) sel.value = state.settings.clockStyle;
-  toast('🕒 Clock face: <b>'+CLOCK_STYLE_NAMES[state.settings.clockStyle]+'</b>', 2500);
 }
 function clockParts(tz){
   try{
@@ -5127,8 +5109,6 @@ function clockCard(k){
   x.onclick = (e)=>{ e.stopPropagation();
                      state.settings['clock'+k] = false; save(); syncClockChecks(); applyGames(); };
   card.appendChild(x);
-  card.title = 'Click to change the clock face';
-  card.addEventListener('click', nextClockStyle);
   return card;
 }
 function tickClocks(){
@@ -5197,8 +5177,6 @@ function leaveCard(){
   x.onclick = (e)=>{ e.stopPropagation();
                      state.settings.clockOut = false; save(); syncClockChecks(); applyGames(); };
   card.appendChild(x);
-  card.title = 'Click to change the clock face';
-  card.addEventListener('click', nextClockStyle);
   return card;
 }
 function applyClocks(){ applyGames(); }
