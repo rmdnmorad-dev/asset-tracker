@@ -442,11 +442,11 @@
   input.cell{line-height:1.15}
 
   /* ---------- side mini-games (hidden until enabled in Settings) ---------- */
-  .gpanel{position:fixed;top:64px;bottom:12px;width:var(--railwidth,212px);z-index:100;overflow-y:auto;overflow-x:visible;
+  .gpanel{position:fixed;top:64px;bottom:12px;width:var(--railwidth,212px);z-index:100;overflow:visible;
     display:none;flex-direction:column;gap:12px;padding:10px 8px;background:transparent}
   .gpanel.show{display:flex}
   #gamesLeft{left:8px} #gamesRight{right:8px}
-  .gcard{background:#0f1626;color:#e8eefc;border:1px solid #2a3550;border-radius:12px;
+  .gcard{position:relative;background:#0f1626;color:#e8eefc;border:1px solid #2a3550;border-radius:12px;
     padding:10px;box-shadow:0 6px 18px rgba(0,0,0,.28);font-family:Arial;
     user-select:none;-webkit-user-select:none}
   /* the to-do text is the one thing you do need to select and edit */
@@ -536,8 +536,11 @@
   .todoempty{font-size:11.5px;opacity:.55;padding:4px 2px}
   .clockcard .ledmain{color:var(--clockfg,#f2f7ff);
     text-shadow:0 0 12px var(--clockglow,rgba(130,180,255,.45))}
+  /* a resized clock carries its own size; the digits scale to the box */
   .clockcard[data-clock="OUT"] .ledghost,
-  .clockcard[data-clock="OUT"] .ledmain{font-size:calc(var(--clocksize,37px) * .73);letter-spacing:0}
+  .clockcard[data-clock="OUT"] .ledmain{font-size:calc(var(--cardsize,var(--clocksize,37px)) * .73);letter-spacing:0}
+  .clockcard .ledghost,.clockcard .ledmain{font-size:var(--cardsize,var(--clocksize,37px))}
+  .clockcard{overflow:hidden}
   .cdate{margin-top:5px;text-align:center;font-size:9.5px;opacity:.5;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   /* Send Email dropdown */
@@ -692,15 +695,10 @@
           <span id="todoHeightVal" style="color:#888;min-width:48px">300px</span>
           width <input type="range" id="railWidth" min="170" max="380" step="5" style="width:110px">
           <span id="railWidthVal" style="color:#888;min-width:48px">212px</span></label>
-        <label style="display:flex;gap:6px;align-items:center;font-weight:normal">Clock colour:
-          <input type="color" id="clockColor" style="width:46px;height:30px;padding:0;border:1px solid #94a3b8;border-radius:6px;cursor:pointer"></label>
-        <label style="display:flex;gap:6px;align-items:center;font-weight:normal">Digits:
-          <select id="clockFont" style="padding:4px 6px">
-            <option value="mono">Monospace</option><option value="digital">Typewriter</option>
-            <option value="round">Rounded</option><option value="sharp">Narrow</option>
-            <option value="system">System</option>
-          </select>
-          <span style="color:#888">— drag the corner of a clock to resize its digits</span></label>
+        <div style="font-size:11px;color:#888;padding:2px 0 4px 18px">
+          Drag a clock by its top edge to move it, and its bottom-right corner to resize it.
+          Double-click the top edge to send it back to the side.
+        </div>
       </div></div>
     <div class="fld"><span>DRAFT FILE FORMAT — the file each send button creates</span>
       <div class="subchecks">
@@ -2881,12 +2879,6 @@ function bindSettings(){
     el.addEventListener('input', ()=>{ state.settings[key] = +el.value;
       if(lab) lab.textContent = el.value + 'px'; save(); applyTodoLook(); });
   });
-  const cfo = document.getElementById('clockFont');
-  if(cfo){ cfo.value = state.settings.clockFont || 'mono';
-    cfo.addEventListener('change', ()=>{ state.settings.clockFont = cfo.value; save(); applyClockLook(); }); }
-  const ccl = document.getElementById('clockColor');
-  if(ccl){ ccl.value = state.settings.clockColor || '#f2f7ff';
-    ccl.addEventListener('input', ()=>{ state.settings.clockColor = ccl.value; save(); applyClockLook(); }); }
   [['clockLA','clockLA'],['clockJO','clockJO'],['clockOut','clockOut']].forEach(([id,key])=>{
     const el = document.getElementById(id);
     if(!el) return;
@@ -3381,8 +3373,14 @@ async function captureSheet(){
   if(document.activeElement) document.activeElement.blur();
   document.body.classList.add('capturing');           // forces light even in dark theme
   await raf2();
-  try{ return await html2canvas(document.getElementById('sheet'),
-        {scale:capScale(document.getElementById('sheet')), backgroundColor:'#ffffff', logging:false, onclone: replaceInputsInClone}); }
+  try{
+    return await withEmailDayView(async ()=>{
+      await raf2();                                     // let the hidden columns settle
+      return html2canvas(document.getElementById('sheet'),
+        {scale:capScale(document.getElementById('sheet')), backgroundColor:'#ffffff',
+         logging:false, onclone: replaceInputsInClone});
+    });
+  }
   finally{ document.body.classList.remove('capturing'); }
 }
 /* Daily image: render the clean single-day HTML table off-screen and capture that. */
@@ -3442,7 +3440,12 @@ function dailyCol(){
   return state.settings.customDay ? (state.settings.customDayIdx==null ? todayCol() : state.settings.customDayIdx)
                                   : todayCol();
 }
-function sendDays(){ return resolvedWeekly() ? [0,1,2,3,4,5,6] : [dailyCol()]; }
+/* What the draft email covers. A Weekly send is always the whole week; a Daily
+   one is the single day, unless you asked for the full week under Daily. */
+function sendDays(){
+  if(resolvedWeekly()) return [0,1,2,3,4,5,6];
+  return state.settings.dayView === 'today' ? [dailyCol()] : [0,1,2,3,4,5,6];
+}
 
 /* ---------------- true vector / text PDF ----------------
    The sheet is DRAWN with jsPDF primitives (rectangles + real text) rather
@@ -4963,20 +4966,30 @@ const CLOCK_FONTS = {
   sharp:   '"Arial Narrow",Impact,"Haettenschweiler",sans-serif',
   system:  '"Segoe UI",-apple-system,Roboto,Helvetica,Arial,sans-serif'
 };
-/* On a Daily send you can narrow the sheet to just the day it covers. Every
-   day cell and every <col> carries data-daycol, so one rule hides a column
-   cleanly, headers, totals and all. */
-function applyDayView(){
+/* The two Daily options decide what the DRAFT EMAIL carries - one day column or
+   the whole week. The sheet on screen is never changed by them; it always shows
+   the full week. The only time columns are hidden is for the split second the
+   picture of the sheet is being taken. */
+function emailOnlyToday(){
+  return state.settings.dayView === 'today' && !resolvedWeekly();
+}
+function dayViewCss(on){
   let st = document.getElementById('dayViewCss');
   if(!st){ st = document.createElement('style'); st.id = 'dayViewCss'; document.head.appendChild(st); }
-  const only = (state.settings.dayView === 'today') && !resolvedWeekly();
-  if(!only){ st.textContent = ''; }
-  else{
-    const keep = dailyCol();
-    const hide = [0,1,2,3,4,5,6].filter(d=>d!==keep)
-                   .map(d=>'#sheet [data-daycol="'+d+'"]').join(',');
-    st.textContent = hide ? hide + '{display:none}' : '';
-  }
+  if(!on){ st.textContent = ''; return; }
+  const keep = dailyCol();
+  st.textContent = [0,1,2,3,4,5,6].filter(d=>d!==keep)
+                     .map(d=>'#sheet [data-daycol="'+d+'"]').join(',') + '{display:none}';
+}
+/* Hide the other days only while `fn` runs - used around taking the picture. */
+async function withEmailDayView(fn){
+  const on = emailOnlyToday();
+  if(on) dayViewCss(true);
+  try { return await fn(); }
+  finally { if(on) dayViewCss(false); }
+}
+function applyDayView(){
+  dayViewCss(false);                       // never leave the sheet narrowed
   const vt = document.getElementById('viewToday'), vw = document.getElementById('viewWeek');
   if(vt && vw){
     vt.checked = state.settings.dayView === 'today';
@@ -5039,7 +5052,6 @@ function renderTodo(card){
 function todoCard(){
   const card = document.createElement('div');
   card.className = 'gcard todocard';
-  card.style.position = 'relative';
   card.innerHTML =
     '<h4>📝 To-do</h4>'+
     '<div class="todoadd"><input type="text" placeholder="Add a task…" spellcheck="false">'+
@@ -5071,13 +5083,18 @@ function applyCardPos(card){
   const pos = (state.settings.cardPos||{})[cardKey(card)];
   if(pos && pos.left!=null){
     card.classList.add('floating');
-    card.style.left = pos.left+'px';
-    card.style.top  = pos.top+'px';
+    // a window that has since been made smaller must not leave a card off-screen
+    card.style.left = Math.max(0, Math.min(window.innerWidth-60,  pos.left))+'px';
+    card.style.top  = Math.max(0, Math.min(window.innerHeight-40, pos.top ))+'px';
   }else{
     card.classList.remove('floating');
     card.style.left = card.style.top = '';
   }
 }
+/* Keep every moved card on screen when the window is resized. */
+addEventListener('resize', ()=>{
+  document.querySelectorAll('.gcard.floating').forEach(applyCardPos);
+});
 function makeDraggable(card){
   const grip = document.createElement('div');
   grip.className = 'ghandle';
@@ -5115,26 +5132,40 @@ function makeDraggable(card){
   });
   applyCardPos(card);
 }
+/* Width and height are dragged independently; the digits follow the height so
+   the clock can be made wide and flat, or tall and narrow, as you like. */
+function applyCardSize(card){
+  const sz = (state.settings.cardSize||{})[cardKey(card)];
+  if(!sz) { card.style.width = card.style.height = ''; card.style.removeProperty('--cardsize'); return; }
+  card.style.width  = sz.w+'px';
+  card.style.height = sz.h+'px';
+  card.style.setProperty('--cardsize', Math.max(12, Math.round(sz.h*0.42))+'px');
+}
 function makeClockResizable(card){
   const grip = document.createElement('div');
   grip.className = 'gsize';
-  grip.title = 'Drag to resize the digits';
+  grip.title = 'Drag to resize — sideways for width, up and down for height';
   card.appendChild(grip);
   let d = null;
   grip.addEventListener('pointerdown', e=>{
     e.preventDefault(); e.stopPropagation();
-    d = { x:e.clientX, y:e.clientY, size:(state.settings.clockSize||37) };
+    const r = card.getBoundingClientRect();
+    d = { x:e.clientX, y:e.clientY, w:r.width, h:r.height };
     grip.setPointerCapture(e.pointerId);
   });
   grip.addEventListener('pointermove', e=>{
     if(!d) return;
-    const push = ((e.clientX-d.x) + (e.clientY-d.y)) / 2;   // either direction grows it
-    state.settings.clockSize = Math.max(16, Math.min(90, Math.round(d.size + push/3)));
-    applyClockLook();
+    state.settings.cardSize = state.settings.cardSize || {};
+    state.settings.cardSize[cardKey(card)] = {
+      w: Math.max(120, Math.min(700, Math.round(d.w + (e.clientX-d.x)))),
+      h: Math.max(60,  Math.min(500, Math.round(d.h + (e.clientY-d.y))))
+    };
+    applyCardSize(card);
   });
   const stop = ()=>{ if(d){ d = null; save(); } };
   grip.addEventListener('pointerup', stop);
   grip.addEventListener('pointercancel', stop);
+  applyCardSize(card);
 }
 function applyClockLook(){
   const c  = state.settings.clockColor || '#f2f7ff';
@@ -5161,7 +5192,6 @@ function clockCard(k){
   const card = document.createElement('div');
   card.className = 'gcard clockcard';
   card.dataset.clock = k;
-  card.style.position = 'relative';
   card.innerHTML =
     '<div class="czone">'+CLOCK_NAMES[k]+'</div>'+
     '<div class="leds">'+
@@ -5230,7 +5260,6 @@ function leaveCard(){
   const card = document.createElement('div');
   card.className = 'gcard clockcard';
   card.dataset.clock = 'OUT';
-  card.style.position = 'relative';
   card.innerHTML =
     '<div class="czone">Leaving today</div>'+
     '<div class="leds">'+
@@ -5340,8 +5369,7 @@ function applyGames(){
   const enabled = g.on ? GAMES.slice() : [];
   enabled.forEach((name,i)=>{
     const card = GAME_FACTORY[name]();
-    card.style.position = 'relative';
-    const x = document.createElement('button'); x.className='gclose'; x.type='button'; x.textContent='✕';
+      const x = document.createElement('button'); x.className='gclose'; x.type='button'; x.textContent='✕';
     x.title = 'Hide the game (turn it back on in Settings)';
     x.onclick = ()=>{ state.settings.games.on = false; save(); syncGameChecks(); applyGames(); };
     card.dataset.game = name;
