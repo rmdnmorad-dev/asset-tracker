@@ -120,8 +120,11 @@
 
   /* ---------- Sheet ---------- */
   /* The sheet can be widened past the window; the PAGE scrolls to reach it
-     rather than the wrapper clipping whatever falls off the right. */
-  #sheetWrap{overflow:visible;padding:18px 14px 40px}
+     rather than the wrapper clipping whatever falls off the right.
+     centerSheet() keeps it centred in the window as it grows — it opens out to
+     the LEFT as well as the right, and only stops when its left edge reaches
+     the left wall; past that it can only run rightwards, into the scroll. */
+  #sheetWrap{overflow:visible;padding:18px 0 40px}
   #sheet{background:#fff;width:1452px;padding:10px 14px 16px;border:1px solid #8ea0b5;
     box-shadow:0 3px 14px rgba(0,0,0,.18);margin:0 auto}
 
@@ -426,7 +429,7 @@
     #settings .fld{flex:1 1 100%;min-width:0}
     #settings .fld input,#settings .fld textarea,#settings .fld select{width:100%;box-sizing:border-box}
     #settings input,#settings textarea{font-size:16px}   /* iOS won't zoom when a field is 16px+ */
-    #sheetWrap{padding:10px 6px 30px;-webkit-overflow-scrolling:touch}
+    #sheetWrap{padding:10px 0 30px;-webkit-overflow-scrolling:touch}
     #searchWrap{left:8px;right:8px;width:auto}
     #combo{max-width:92vw}
   }
@@ -586,16 +589,16 @@
     padding:7px;font-size:15px;text-align:center}
   body:not(.dark) .ginput{background:#fff;color:#111;border-color:#94a3b8}
   @media (max-width: 1500px){ .gpanel{width:190px} }
-  /* make room for the panels so they sit BESIDE the sheet, not over it */
-  body.games-on #sheetWrap{margin-left:228px;margin-right:228px}
-  @media (max-width: 1500px){ body.games-on #sheetWrap{margin-left:206px;margin-right:206px} }
-  @media (max-width: 1200px){ #gamesLeft,#gamesRight{display:none !important} body.games-on #sheetWrap{margin-left:0;margin-right:0} }  /* not enough room beside the sheet */
+  /* The sheet is centred by centerSheet(), which leaves the rails their room on
+     its own — no wrapper margins, so a wide sheet is free to open out to the
+     left instead of being pinned beside the rail and running off to the right. */
+  @media (max-width: 1200px){ #gamesLeft,#gamesRight{display:none !important} }  /* not enough room beside the sheet */
 
   @media print{
     #toolbar,#settings,#toast,.beamring,.clickfx,#bgLayer{display:none !important}
     .rowbtns,.colgrip{display:none !important}
     #sheetWrap{padding:0;overflow:visible}
-    #sheet{box-shadow:none;border:none;margin:0}
+    #sheet{box-shadow:none;border:none;margin:0 !important}
     body{background:#fff}
   }
 </style>
@@ -1841,7 +1844,28 @@ function applyColWidths(){
   });
   tbl.style.width = total+'px';
   document.getElementById('sheet').style.width = (total+30)+'px';   // + padding
+  centerSheet();
 }
+/* Keep the sheet in the middle of the window.
+   As it is widened it grows BOTH ways — left and right — until its left edge
+   reaches the wall (WALL px from the window edge). Only then does it stop
+   moving left and the extra width runs off to the right, where the page's own
+   sideways scroll reaches it. The side rails need no gap reserved for them:
+   while the sheet is narrow enough to sit between them the centring already
+   leaves them clear. */
+const WALL = 10;
+function centerSheet(){
+  const wrap = document.getElementById('sheetWrap'), sheet = document.getElementById('sheet');
+  if(!wrap || !sheet) return;
+  sheet.style.marginLeft = sheet.style.marginRight = '0px';
+  const win = document.documentElement.clientWidth || window.innerWidth;
+  // where the wrapper's content box starts, in window coordinates
+  const wrapLeft = wrap.getBoundingClientRect().left + (window.scrollX || 0) +
+                   (parseFloat(getComputedStyle(wrap).paddingLeft) || 0);
+  const want = Math.max(WALL, Math.round((win - sheet.offsetWidth) / 2));
+  sheet.style.marginLeft = Math.max(0, Math.round(want - wrapLeft)) + 'px';
+}
+addEventListener('resize', centerSheet);
 function bindColResize(){
   const host = document.getElementById('tblhost');
   let drag = null;
@@ -5015,11 +5039,9 @@ function applyTodoLook(){
   r.setProperty('--todoheight', (state.settings.todoHeight || 300) + 'px');
   const w = state.settings.railWidth || 212;
   r.setProperty('--railwidth', w + 'px');
-  // the sheet is pushed in by however wide the rail is
-  document.querySelectorAll('#sheetWrap').forEach(el=>{
-    el.style.marginLeft = el.style.marginRight =
-      document.body.classList.contains('games-on') ? (w + 16) + 'px' : '';
-  });
+  // the sheet stays centred in the window on its own — see centerSheet()
+  document.querySelectorAll('#sheetWrap').forEach(el=>{ el.style.marginLeft = el.style.marginRight = ''; });
+  centerSheet();
 }
 function renderTodo(card){
   const ul = card.querySelector('.todolist');
