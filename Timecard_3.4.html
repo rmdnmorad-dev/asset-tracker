@@ -156,26 +156,10 @@
   .lbl{background:var(--gray);font-weight:bold;text-align:center;font-size:12.5px}
   .lbl.red{color:var(--red)}
   .dayhdr{background:var(--dgray);font-weight:bold;text-align:center;font-size:12px;font-family:var(--cg);position:relative}
-  /* draggable column-resize grips.
-     The grip sits ON the column line and is grabbable down the WHOLE height of
-     the header bar, on both sides of the line. The cell would otherwise clip
-     the half that hangs over its edge, so the header cells let it through and
-     their label does its own clipping in .hdrtx instead. */
+  /* draggable column-resize grips */
   .colhdr{position:relative}
-  /* .tc td sets overflow:hidden, so this has to out-rank it or the grip is
-     clipped back to the inside of the cell — which is what made the line
-     itself, and everything right of it, miss the grip. */
-  .tc td.colhdr,.tc td.dayhdr{overflow:visible}
-  .colhdr .hdrtx,.dayhdr .hdrtx{display:block;overflow:hidden;white-space:nowrap;
-    text-overflow:ellipsis;padding:0 2px}
-  /* 16px wide, sitting square on the line — 8px of it each side — and the full
-     height of the header bar, top border to bottom border. */
-  .colgrip{position:absolute;top:-1px;bottom:-1px;right:-9px;width:16px;cursor:col-resize;z-index:8;
-    touch-action:none;display:flex;align-items:center;justify-content:center}
-  /* a permanent handle, so you can see where to take hold of it */
-  .colgrip::before{content:'';display:block;width:3px;height:calc(100% - 6px);border-radius:2px;
-    background:rgba(37,99,235,.42)}
-  .colgrip:hover::before,.colgrip.grabbing::before{background:#1d4ed8;width:5px;height:100%}
+  .colgrip{position:absolute;top:0;right:-4px;width:9px;height:100%;cursor:col-resize;z-index:6;touch-action:none}
+  .colgrip:hover{background:rgba(37,99,235,.4)}
   body.capturing .colgrip{display:none !important}
   .datec{background:#fff;text-align:center;font-family:var(--cg);font-size:11.5px}
   .yellow{background:var(--yellow);text-align:center;font-size:12.5px;outline:none}
@@ -1737,8 +1721,7 @@ function buildTable(){
 
   // day headers ---------------------------------------------------------
   h += '<tr><td class="nb" colspan="5"></td>';
-  for(let d=0; d<7; d++) h += '<td class="b dayhdr" colspan="2" data-daycol="'+d+'" id="dh'+d+'">'+
-                              '<span class="hdrtx">'+DAYS[d]+'</span>'+gripDay(d)+'</td>';
+  for(let d=0; d<7; d++) h += '<td class="b dayhdr" colspan="2" data-daycol="'+d+'" id="dh'+d+'">'+DAYS[d]+gripDay(d)+'</td>';
   h += '<td class="b yellow" rowspan="8" data-totcol id="thLabel">'+
        esc(state.settings.totalHoursLabel||'Total Hours')+'</td></tr>';
 
@@ -1769,9 +1752,9 @@ function buildTable(){
   h += '<tr><td class="b lbl" colspan="5">TOTAL WORK HOURS</td>';
   for(let d=0; d<7; d++) h += '<td class="b totcell" colspan="2" rowspan="2" data-daycol="'+d+'" id="tot'+d+'">0:00</td>';
   h += '<td class="b totcell" rowspan="2" data-totcol id="weekTot">0:00</td></tr>';
-  const colHdr = (txt,i) => '<td class="b colhdr"><span class="hdrtx">'+txt+'</span>'+gripInfo(i)+'</td>';
-  h += '<tr>'+colHdr('TASK #',0)+colHdr('NOTES',1)+colHdr('PROJECT',2)+
-       colHdr('CONTRACTOR',3)+colHdr('JOB TYPE',4)+'</tr>';
+  h += '<tr><td class="b colhdr">TASK #'+gripInfo(0)+'</td><td class="b colhdr">NOTES'+gripInfo(1)+'</td>'+
+       '<td class="b colhdr">PROJECT'+gripInfo(2)+'</td><td class="b colhdr">CONTRACTOR'+gripInfo(3)+'</td>'+
+       '<td class="b colhdr">JOB TYPE'+gripInfo(4)+'</td></tr>';
 
   // task sections ----------------------------------------------------------
   const w = week(), names = state.settings.sectionNames;
@@ -1897,7 +1880,6 @@ function bindColResize(){
       const d = +g.dataset.day, n = 5+2*d, wi = 6+2*d;   // day grip resizes ALL days uniformly
       drag = {x:e.clientX, kind:'day', tot0:cw[n]+cw[wi], ratio:cw[wi]/(cw[n]+cw[wi])};
     }
-    drag.g = g; g.classList.add('grabbing');
     g.setPointerCapture(e.pointerId);
     document.body.style.cursor = 'col-resize';
   });
@@ -1913,11 +1895,7 @@ function bindColResize(){
     }
     applyColWidths();
   });
-  const end = ()=>{
-    if(!drag) return;
-    if(drag.g) drag.g.classList.remove('grabbing');
-    drag = null; document.body.style.cursor=''; save();
-  };
+  const end = ()=>{ if(drag){ drag=null; document.body.style.cursor=''; save(); } };
   host.addEventListener('pointerup', end);
   host.addEventListener('pointercancel', end);
 }
