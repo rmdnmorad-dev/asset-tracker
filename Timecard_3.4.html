@@ -2600,18 +2600,38 @@ async function fillFromNexus(ri, task, before){
           '<br><span style="opacity:.85">from Nexus. Job type is still yours to pick.</span>', 7000);
   }
 }
-function rocketPayload(ri){
-  const w = week(), r = w.rows[ri], d = dailyCol(), dates = weekDates();
-  const task = String(r.task||'').trim();
-  const hrs = num(r.h[d]) || num(r.ha[d]) || 0;
-  return { task, milestone: taskMilestone(task), hours: hrs ? String(fmtNum(hrs)) : '',
-           date: usDatePad(dates[d]), desc: String(r.notes||'').trim(), day: DAYS[d] };
+function rowHours(r, d){ return num(r.h[d]) || num(r.ha[d]) || 0; }
+/* Every day this row has hours on. Nexus books one day per submission, so the
+   rocket has to send exactly one of them. */
+function rowHourDays(r){
+  const out = [];
+  for(let d=0; d<7; d++){ const h = rowHours(r,d); if(h) out.push({d, hrs:h}); }
+  return out;
 }
-function rocketGo(ri, btn, forcePick){
-  const p = rocketPayload(ri);
+function rocketPayload(ri, dayIdx){
+  const w = week(), r = w.rows[ri], dates = weekDates();
+  const choices = rowHourDays(r);
+  // The day you are on, unless it has nothing on this row and exactly one other
+  // day does — then that is plainly the one you meant.
+  let d = dayIdx==null ? dailyCol() : dayIdx, moved = false;
+  if(dayIdx==null && !rowHours(r,d) && choices.length===1){ d = choices[0].d; moved = true; }
+  const task = String(r.task||'').trim();
+  const hrs = rowHours(r,d);
+  return { task, milestone: taskMilestone(task), hours: hrs ? String(fmtNum(hrs)) : '',
+           date: usDatePad(dates[d]), desc: String(r.notes||'').trim(), day: DAYS[d],
+           dayIdx: d, moved, choices };
+}
+function rocketGo(ri, btn, forcePick, dayIdx){
+  const p = rocketPayload(ri, dayIdx);
   if(!/^\d{3,}$/.test(p.task)){ toast('🚀 Put a task number in this row first.'); return; }
-  if(forcePick || !p.milestone){ milestoneMenu(btn, p.task, ()=>rocketGo(ri, btn, false)); return; }
+  if(forcePick || !p.milestone){ milestoneMenu(btn, p.task, ()=>rocketGo(ri, btn, false, dayIdx)); return; }
+  // Nothing on today, but hours on several other days — only you know which one.
+  if(dayIdx==null && !p.hours && p.choices.length>1){
+    dayMenu(btn, p.choices, d=>rocketGo(ri, btn, false, d)); return;
+  }
   if(!p.hours) toast('🚀 No hours logged for <b>'+p.day+'</b> on this row — sending the note only.', 6000);
+  else if(p.moved) toast('🚀 Nothing on <b>'+DAYS[dailyCol()]+'</b> for this row — sending <b>'+p.day+
+                         '</b> instead ('+p.hours+' h).', 7000);
   const job = {task:p.task, milestone:p.milestone, hours:p.hours, date:p.date, desc:p.desc};
   const what = '<b>'+p.task+'</b> · '+p.milestone+' · '+(p.hours||'0')+' h · '+p.date;
   if(state.settings.rocketMode === 'helper'){ rocketViaHelper(job, what); return; }
@@ -2648,24 +2668,38 @@ function sendToHelper(job, onOk, onFail){
             '/job?d=' + encodeURIComponent(JSON.stringify(job)) + '&t=' + Date.now();
 }
 // small popup to choose this task's milestone (remembered per task number)
-function milestoneMenu(anchor, task, done){
+/* The little pop-up the rocket asks its questions with. */
+function rocketMenu(anchor, title, buttons, pick){
   document.querySelectorAll('.msmenu').forEach(m=>m.remove());
-  const cur = taskMilestone(task);
   const m = document.createElement('div');
   m.className = 'msmenu';
-  m.innerHTML = '<h5>Milestone for task '+escHtml(task)+'</h5>' +
-    NEXUS_MILESTONES.map(x=>'<button type="button" class="ms'+(x===cur?' cur':'')+'" data-ms="'+escHtml(x)+'">'+escHtml(x)+'</button>').join('');
+  m.innerHTML = '<h5>'+title+'</h5>' + buttons.map(b=>
+    '<button type="button" class="ms'+(b.cur?' cur':'')+'" data-v="'+esc(String(b.v))+'">'+b.label+'</button>').join('');
   document.body.appendChild(m);
   const r = anchor.getBoundingClientRect();
   m.style.left = Math.min(r.left, innerWidth - m.offsetWidth - 10) + 'px';
   m.style.top  = Math.min(r.bottom + 4, innerHeight - m.offsetHeight - 10) + 'px';
   m.addEventListener('click', e=>{
     const b = e.target.closest('button.ms'); if(!b) return;
-    setTaskMilestone(task, b.dataset.ms); m.remove(); if(done) done();
+    m.remove(); pick(b.dataset.v);
   });
   setTimeout(()=>document.addEventListener('mousedown', function off(ev){
     if(!m.contains(ev.target)){ m.remove(); document.removeEventListener('mousedown', off); }
   }), 0);
+}
+function milestoneMenu(anchor, task, done){
+  const cur = taskMilestone(task);
+  rocketMenu(anchor, 'Milestone for task '+escHtml(task),
+    NEXUS_MILESTONES.map(x=>({v:x, label:escHtml(x), cur:x===cur})),
+    v=>{ setTaskMilestone(task, v); if(done) done(); });
+}
+/* Which day's hours to book, when the day you are on has none on this row. */
+function dayMenu(anchor, choices, done){
+  const dates = weekDates();
+  rocketMenu(anchor, 'Which day&rsquo;s hours?',
+    choices.map(c=>({v:c.d, label:escHtml(DAYS[c.d])+' &middot; '+escHtml(usDate(dates[c.d]))+
+                             ' &mdash; <b>'+escHtml(fmtNum(c.hrs))+' h</b>'})),
+    v=>done(+v));
 }
 function buildShortcutHelp(){
   const host = document.getElementById('shortcutHelp'); if(!host) return;
