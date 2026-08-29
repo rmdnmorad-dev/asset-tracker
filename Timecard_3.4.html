@@ -119,7 +119,9 @@
   .chip b:hover{color:#ef4444}
 
   /* ---------- Sheet ---------- */
-  #sheetWrap{overflow:auto;padding:18px 14px 40px}
+  /* The sheet can be widened past the window; the PAGE scrolls to reach it
+     rather than the wrapper clipping whatever falls off the right. */
+  #sheetWrap{overflow:visible;padding:18px 14px 40px}
   #sheet{background:#fff;width:1452px;padding:10px 14px 16px;border:1px solid #8ea0b5;
     box-shadow:0 3px 14px rgba(0,0,0,.18);margin:0 auto}
 
@@ -408,13 +410,6 @@
   /* Only phones lose the sideways scrollbar. Zooming in on a desktop drops the
      CSS viewport under 860px too, and hiding overflow there left the page with
      no way to scroll to what the zoom had pushed off-screen. */
-  /* Zooming in shrinks the CSS viewport, so a zoomed desktop looks exactly like
-     a small screen. Default to the desktop reading of that: stop clipping the
-     sheet inside its own box and let the whole page scroll both ways, the way
-     any other page does. */
-  @media (max-width: 1240px){
-    #sheetWrap{overflow:visible}
-  }
   /* A real touch screen keeps the old behaviour - the sheet scrolls in its own
      box and the page never jitters sideways. This comes second so it wins. */
   @media (max-width: 860px) and (pointer: coarse){
@@ -447,12 +442,23 @@
   input.cell{line-height:1.15}
 
   /* ---------- side mini-games (hidden until enabled in Settings) ---------- */
-  .gpanel{position:fixed;top:64px;bottom:12px;width:var(--railwidth,212px);z-index:55;overflow-y:auto;overflow-x:hidden;
+  .gpanel{position:fixed;top:64px;bottom:12px;width:var(--railwidth,212px);z-index:100;overflow-y:auto;overflow-x:visible;
     display:none;flex-direction:column;gap:12px;padding:10px 8px;background:transparent}
   .gpanel.show{display:flex}
   #gamesLeft{left:8px} #gamesRight{right:8px}
   .gcard{background:#0f1626;color:#e8eefc;border:1px solid #2a3550;border-radius:12px;
-    padding:10px;box-shadow:0 6px 18px rgba(0,0,0,.28);font-family:Arial}
+    padding:10px;box-shadow:0 6px 18px rgba(0,0,0,.28);font-family:Arial;
+    user-select:none;-webkit-user-select:none}
+  /* the to-do text is the one thing you do need to select and edit */
+  .gcard .tdtext,.gcard .todoadd input{user-select:text;-webkit-user-select:text}
+  /* dragged free of the rail */
+  .gcard.floating{position:fixed;z-index:110;margin:0}
+  .gcard .ghandle{position:absolute;left:0;right:0;top:0;height:16px;cursor:move}
+  .gcard .gsize{position:absolute;right:2px;bottom:2px;width:14px;height:14px;
+    cursor:nwse-resize;opacity:.35;
+    background:linear-gradient(135deg,transparent 0 45%,currentColor 45% 55%,transparent 55% 70%,
+                currentColor 70% 80%,transparent 80%)}
+  .gcard .gsize:hover{opacity:.8}
   body:not(.dark) .gcard{background:#fff;color:#0f172a;border-color:#dbe2ee;box-shadow:0 6px 16px rgba(30,50,90,.12)}
   .gcard h4{margin:0 0 3px;font-size:13px;display:flex;align-items:center;gap:6px}
   .gcard .gsub{font-size:10.5px;opacity:.65;margin:0 0 8px}
@@ -694,8 +700,7 @@
             <option value="round">Rounded</option><option value="sharp">Narrow</option>
             <option value="system">System</option>
           </select>
-          size <input type="range" id="clockSize" min="20" max="60" step="1" style="width:120px">
-          <span id="clockSizeVal" style="color:#888;min-width:38px">37px</span></label>
+          <span style="color:#888">— drag the corner of a clock to resize its digits</span></label>
       </div></div>
     <div class="fld"><span>DRAFT FILE FORMAT — the file each send button creates</span>
       <div class="subchecks">
@@ -1673,6 +1678,8 @@ function fmtNum(n){ return String(parseFloat(n.toFixed(2))); }
 /* ---------------- learned drop-down memory ---------------- */
 function dlOptions(field){
   const seen = new Set(), out=[];
+  const sortAZ = a => a.sort((x,y)=>String(x).localeCompare(String(y), undefined,
+                                {numeric:true, sensitivity:'base'}));
   const add = v=>{ const t=String(v==null?'':v).trim(); if(!t) return; const k=t.toLowerCase(); if(!seen.has(k)){ seen.add(k); out.push(t); } };
   (state.history[field]||[]).forEach(add);
   // also harvest every value ever typed into this column across all saved weeks, so nothing is missing from the list
@@ -1680,7 +1687,7 @@ function dlOptions(field){
     for(const wk in state.weeks){ const wobj=state.weeks[wk]; if(!wobj||!wobj.rows) continue;
       wobj.rows.forEach(r=>add(r[field])); }
   }
-  return out;
+  return sortAZ(out);                      // the list reads A-Z, not in the order things happened
 }
 function addHistory(field, val){
   if(!field) return;                       // time boxes use the wheel, no memory needed
@@ -2041,6 +2048,7 @@ function deleteSel(){
   if(!cells.length) return;
   cells.forEach(c=>setCellVal(c, ''));
   if(selInput && INFO_FIELDS.indexOf(selInput.dataset.f)>=0) updateHoursInd(selInput.dataset.f, '');
+  markRockets();                    // a cleared task number must drop its N straight away
   recalc(); save();
 }
 // copy: a TSV (tabs between columns, newlines between rows) covering the selection's bounding box
@@ -2330,26 +2338,26 @@ function commitValue(inp, finalize){
     if(/^\d{4,}$/.test(task)){                 // any task number of 4+ digits (6- and 7-digit numbers included)
       state.taskInfo = state.taskInfo || {};
       if(inp.dataset.f==='task'){
-        /* Nexus is the truth for project + contractor on a 6-digit task, but the
-           lookup takes a moment while the memory autofill below is instant. So
-           note what these boxes held BEFORE the memory filled them in: anything
-           the memory writes now may be replaced by Nexus, anything that was
-           already there is yours and stays. */
+        /* A 6-digit number is a real Nexus task, so Nexus answers for it and the
+           remembered values are left out of it entirely - they were only ever a
+           guess. Any other length is not something Nexus knows about, so those
+           still fill from the memory as before. */
         if(/^\d{6}$/.test(task)){
           const ri = +inp.dataset.row;
           const before = { project:    String(r.project||'').trim(),
                            contractor: String(r.contractor||'').trim() };
           setTimeout(()=>fillFromNexus(ri, task, before), 0);
-        }
-        const mem = state.taskInfo[task];
-        if(mem){
-          TASK_MEM.forEach(f=>{                 // fill notes, project, contractor AND job type
-            if(!String(r[f]||'').trim() && mem[f]){
-              r[f] = mem[f];
-              const cell = document.querySelector('.cell[data-row="'+inp.dataset.row+'"][data-f="'+f+'"]');
-              if(cell){ cell.value = r[f]; autoGrow(cell); }
-            }
-          });
+        }else{
+          const mem = state.taskInfo[task];
+          if(mem){
+            TASK_MEM.forEach(f=>{               // fill notes, project, contractor AND job type
+              if(!String(r[f]||'').trim() && mem[f]){
+                r[f] = mem[f];
+                const cell = document.querySelector('.cell[data-row="'+inp.dataset.row+'"][data-f="'+f+'"]');
+                if(cell){ cell.value = r[f]; autoGrow(cell); }
+              }
+            });
+          }
         }
       }else if(TASK_MEM.indexOf(inp.dataset.f)>=0){
         const m = state.taskInfo[task] = state.taskInfo[task] || {};
@@ -2876,11 +2884,6 @@ function bindSettings(){
   const cfo = document.getElementById('clockFont');
   if(cfo){ cfo.value = state.settings.clockFont || 'mono';
     cfo.addEventListener('change', ()=>{ state.settings.clockFont = cfo.value; save(); applyClockLook(); }); }
-  const csz = document.getElementById('clockSize'), cszv = document.getElementById('clockSizeVal');
-  if(csz){ csz.value = state.settings.clockSize || 37;
-    if(cszv) cszv.textContent = csz.value + 'px';
-    csz.addEventListener('input', ()=>{ state.settings.clockSize = +csz.value;
-      if(cszv) cszv.textContent = csz.value + 'px'; save(); applyClockLook(); }); }
   const ccl = document.getElementById('clockColor');
   if(ccl){ ccl.value = state.settings.clockColor || '#f2f7ff';
     ccl.addEventListener('input', ()=>{ state.settings.clockColor = ccl.value; save(); applyClockLook(); }); }
@@ -2990,7 +2993,7 @@ function chooseComboItem(item){
   autoGrow(comboInp);
   closeCombo();
 }
-function renderCombo(){
+function renderCombo(keep){
   if(!comboInp) return;
   // legend-fed pickers: Task # reads the 1st (TASKS) legend, Job Type the 2nd
   const legKind = comboInp.classList.contains('taskpick') ? 'task'
@@ -3044,15 +3047,25 @@ function renderCombo(){
   const cells = comboCells();
   const firstReal = cells.findIndex(c => (c.dataset.v||'') !== '');
   comboActive = -1;
-  setComboActive(firstReal >= 0 ? firstReal : 0);
+  if(keep && keep.keepIndex >= 0){
+    setComboActive(Math.min(keep.keepIndex, Math.max(0, cells.length-1)));
+    combo.scrollTop = keep.keepScroll || 0;
+  }else{
+    setComboActive(firstReal >= 0 ? firstReal : 0);
+  }
 }
 combo.addEventListener('mousedown', e=>{
   e.preventDefault();                       // keep focus in the cell
   const item = e.target.closest('.citem');
   if(!item || !comboInp) return;
   if(e.target.classList.contains('cx')){
+    /* Keep the list exactly where it was: same scroll position, and the
+       highlight where the removed row used to be, so several can be taken out
+       one after another without hunting for your place again. */
+    const wasScroll = combo.scrollTop;
+    const wasIndex  = comboCells().indexOf(item);
     forgetHistory(HIST_OF[comboInp.dataset.f], item.dataset.v);
-    renderCombo();                          // stay open so several can be removed
+    renderCombo({keepIndex: wasIndex, keepScroll: wasScroll});
   }else{
     chooseComboItem(item);
   }
@@ -5044,8 +5057,84 @@ function todoCard(){
                     const el=document.getElementById('todoOn'); if(el) el.checked=false;
                     applyGames(); };
   card.appendChild(x);
+  makeDraggable(card);
   renderTodo(card);
   return card;
+}
+/* Every side card can be dragged out of the rail and dropped anywhere, and
+   the clocks carry a corner grip that scales their digits. Positions and the
+   size are remembered. */
+function cardKey(card){ return card.dataset.clock ? 'clock'+card.dataset.clock
+                             : card.classList.contains('todocard') ? 'todo'
+                             : 'game'+(card.dataset.game||''); }
+function applyCardPos(card){
+  const pos = (state.settings.cardPos||{})[cardKey(card)];
+  if(pos && pos.left!=null){
+    card.classList.add('floating');
+    card.style.left = pos.left+'px';
+    card.style.top  = pos.top+'px';
+  }else{
+    card.classList.remove('floating');
+    card.style.left = card.style.top = '';
+  }
+}
+function makeDraggable(card){
+  const grip = document.createElement('div');
+  grip.className = 'ghandle';
+  grip.title = 'Drag to move — double-click to send it back to the side';
+  card.insertBefore(grip, card.firstChild);
+  let d = null;
+  grip.addEventListener('pointerdown', e=>{
+    e.preventDefault(); e.stopPropagation();
+    const r = card.getBoundingClientRect();
+    d = { dx:e.clientX-r.left, dy:e.clientY-r.top };
+    card.classList.add('floating');
+    card.style.left = r.left+'px'; card.style.top = r.top+'px';
+    grip.setPointerCapture(e.pointerId);
+  });
+  grip.addEventListener('pointermove', e=>{
+    if(!d) return;
+    const x = Math.max(0, Math.min(window.innerWidth-40,  e.clientX-d.dx));
+    const y = Math.max(0, Math.min(window.innerHeight-30, e.clientY-d.dy));
+    card.style.left = x+'px'; card.style.top = y+'px';
+  });
+  const drop = ()=>{
+    if(!d) return;
+    d = null;
+    state.settings.cardPos = state.settings.cardPos || {};
+    state.settings.cardPos[cardKey(card)] = { left:parseInt(card.style.left,10),
+                                              top:parseInt(card.style.top,10) };
+    save();
+  };
+  grip.addEventListener('pointerup', drop);
+  grip.addEventListener('pointercancel', drop);
+  grip.addEventListener('dblclick', ()=>{                 // back into the rail
+    state.settings.cardPos = state.settings.cardPos || {};
+    delete state.settings.cardPos[cardKey(card)];
+    save(); applyCardPos(card);
+  });
+  applyCardPos(card);
+}
+function makeClockResizable(card){
+  const grip = document.createElement('div');
+  grip.className = 'gsize';
+  grip.title = 'Drag to resize the digits';
+  card.appendChild(grip);
+  let d = null;
+  grip.addEventListener('pointerdown', e=>{
+    e.preventDefault(); e.stopPropagation();
+    d = { x:e.clientX, y:e.clientY, size:(state.settings.clockSize||37) };
+    grip.setPointerCapture(e.pointerId);
+  });
+  grip.addEventListener('pointermove', e=>{
+    if(!d) return;
+    const push = ((e.clientX-d.x) + (e.clientY-d.y)) / 2;   // either direction grows it
+    state.settings.clockSize = Math.max(16, Math.min(90, Math.round(d.size + push/3)));
+    applyClockLook();
+  });
+  const stop = ()=>{ if(d){ d = null; save(); } };
+  grip.addEventListener('pointerup', stop);
+  grip.addEventListener('pointercancel', stop);
 }
 function applyClockLook(){
   const c  = state.settings.clockColor || '#f2f7ff';
@@ -5086,6 +5175,7 @@ function clockCard(k){
   x.onclick = (e)=>{ e.stopPropagation();
                      state.settings['clock'+k] = false; save(); syncClockChecks(); applyGames(); };
   card.appendChild(x);
+  makeDraggable(card); makeClockResizable(card);
   return card;
 }
 function tickClocks(){
@@ -5154,6 +5244,7 @@ function leaveCard(){
   x.onclick = (e)=>{ e.stopPropagation();
                      state.settings.clockOut = false; save(); syncClockChecks(); applyGames(); };
   card.appendChild(x);
+  makeDraggable(card); makeClockResizable(card);
   return card;
 }
 function applyClocks(){ applyGames(); }
@@ -5253,7 +5344,9 @@ function applyGames(){
     const x = document.createElement('button'); x.className='gclose'; x.type='button'; x.textContent='✕';
     x.title = 'Hide the game (turn it back on in Settings)';
     x.onclick = ()=>{ state.settings.games.on = false; save(); syncGameChecks(); applyGames(); };
+    card.dataset.game = name;
     card.appendChild(x);
+    makeDraggable(card);
     (i%2===0 ? L : R).appendChild(card);
   });
   L.classList.toggle('show', L.children.length>0);
