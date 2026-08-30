@@ -32,6 +32,9 @@ extension.
 5. Click **Details** on "Timecard → Nexus" and turn on
    **Allow access to file URLs**.
 
+It shows up under the same navy **N** as the button in the timecard, so it is
+easy to pick out in a list of extensions.
+
 Step 5 matters: the timecard is a file on your disk, and without that tick the
 extension is not allowed to talk to it, so the task lookup stays silent. The 🚀
 works either way. Settings tells you which state you are in — it says
@@ -71,6 +74,10 @@ that reads that, and it only runs on Nexus pages.
 Two files, for one reason: a content script runs in an isolated world and
 cannot see the page's own jQuery, which the form needs. So `content.js` reads
 the job and injects `page.js` into the page itself, where jQuery is real.
+
+The folder holds nine files: `manifest.json`, `background.js`, `content.js`,
+`page.js`, `bridge.js`, this README, and `icon16/32/48/128.png` — the navy N.
+They all have to sit in the one folder, or the browser refuses to load it.
 
 Every step waits for the thing it needs to appear rather than counting
 seconds, so a slow, US-hosted Nexus just means a longer wait — never a
