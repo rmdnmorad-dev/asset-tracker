@@ -2576,8 +2576,10 @@ async function runLookupTest(taskArg){
     d.fields.forEach(f=>L.push('     ' + f));
   }else if(d.keys) L.push('   fields sent    : ' + d.keys.join(', '));
   L.push('');
+  if(d.subTasks) L.push('   sub-tasks      : ' + d.subTasks);
   if(res && res.ok){
-    L.push('3. RESULT: project    = ' + res.data.project);
+    L.push('3. RESULT: row read   = ' + (res.data.row || task));
+    L.push('           project    = ' + res.data.project);
     L.push('           contractor = ' + res.data.contractor);
     L.push('           job type   = ' + (res.data.jobType || '(none — see the field list above)'));
     if(d.jobTypeFrom) L.push('           job type came from field: ' + d.jobTypeFrom);
@@ -2647,7 +2649,9 @@ async function fillFromNexus(ri, task, before){
   if(got.length){
     recalc(); save();
     const bits = [res.data.project, res.data.contractor, res.data.jobType].filter(Boolean);
-    toast('🔎 '+task+' — '+bits.join(' · ')+
+    // say which row it read, so a sub-task's description is not a surprise
+    const row = res.data.row && res.data.row !== task ? res.data.row + ' (newest sub-task)' : task;
+    toast('🔎 '+row+' — '+bits.join(' · ')+
           '<br><span style="opacity:.85">'+got.join(', ')+' from Nexus.</span>', 7000);
   }
   // Nothing in the answer was clearly the task's description, so JOB TYPE was

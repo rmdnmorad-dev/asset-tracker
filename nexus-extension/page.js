@@ -91,14 +91,36 @@
     var m = new RegExp('^' + rx(task) + '(?:-(\\d+))?$').exec(row);
     return m ? (m[1] == null ? -1 : +m[1]) : null;    // -1 = the task itself
   }
+  /* Which task this row is. data-row is the row Nexus opens, but it does not
+     always carry the suffix; the row's own text does - the Project ID cell
+     reads "LM68339XTRASAV.300042-2" - so both are read and the higher wins.
+     Returns null when the row is not this task at all, which is what keeps
+     3000420 and 1300042 out of it. */
+  function rowNumber(btn, task) {
+    var base = task.replace(/-\d+$/, '');
+    var want = /-(\d+)$/.exec(task);          // an exact sub-task was asked for
+    var tr = btn.closest('tr');
+    var best = subOf(String(btn.getAttribute('data-row') || '').trim(), base);
+    var m = new RegExp('(?:^|[^0-9-])' + rx(base) + '-(\\d+)(?![0-9])', 'g');
+    var text = tr ? (tr.textContent || '') : '', hit;
+    while ((hit = m.exec(text)) !== null) {
+      var n = +hit[1];
+      if (best === null || n > best) best = n;
+    }
+    if (best === null) return null;                        // a different task
+    if (want && +want[1] !== best) return null;            // not the one asked for
+    return { row: best < 0 ? base : base + '-' + best, sub: best };
+  }
   function editButtons(task) {
-    var all = document.querySelectorAll('button.btn-edit[data-row]'), out = [];
+    var all = document.querySelectorAll('button.btn-edit[data-row]'), out = [], seen = {};
     for (var i = 0; i < all.length; i++) {
-      var b = all[i], row = String(b.getAttribute('data-row') || '').trim();
-      if (!row) continue;                 // Nexus's hidden template button
-      var s = subOf(row, task);
-      if (s === null || !b.closest('tr') || !vis(b)) continue;
-      out.push({ btn: b, row: row, sub: s });
+      var b = all[i];
+      if (!String(b.getAttribute('data-row') || '').trim()) continue;   // hidden template button
+      if (!b.closest('tr') || !vis(b)) continue;
+      var r = rowNumber(b, task);
+      if (!r || seen[r.row]) continue;
+      seen[r.row] = 1;
+      out.push({ btn: b, row: r.row, sub: r.sub });
     }
     out.sort(function (a, b) { return a.sub - b.sub; });
     return out;
@@ -166,15 +188,16 @@
     // so a button we make ourselves has no row to belong to and opens a
     // half-built task window. Only a task already listed on screen ever
     // worked; any other number quietly broke.
-    var btn = editButton(J.task);
-    if (!btn) {
-      say('searching for task <b>' + J.task + '</b>…');
-      btn = await lookUp(J.task, false);
-    }
+    /* Always search, even when the number is already on screen. Whatever is
+       showing might be one row of a task that has sub-tasks, and the newest
+       one cannot be picked out of rows that were never listed. */
+    say('searching for task <b>' + J.task + '</b>…');
+    var btn = await lookUp(J.task, false);
     if (!btn) {
       say('not in the list — clearing the other filters and searching again…');
       btn = await lookUp(J.task, true);
     }
+    if (!btn) btn = editButton(J.task);          // fall back to whatever is on screen
     if (!btn) throw new Error(
       'Task ' + J.task + ' did not come back from the search.<br>' +
       'Check the number, and that you can see the task in Nexus yourself.');
@@ -188,8 +211,8 @@
     var opened = target.row;
 
     say(rows.length > 1
-      ? 'task <b>' + J.task + '</b> has ' + rows.length + ' sub-tasks — opening the newest, <b>' +
-        opened + '</b>…'
+      ? 'saw ' + rows.map(function (r) { return r.row; }).join(', ') +
+        ' — opening the newest, <b>' + opened + '</b>…'
       : 'opening task <b>' + opened + '</b>…');
     click(target.btn);
 

@@ -105,110 +105,164 @@ function flipScheme(u) {
        : u.startsWith('http://')  ? 'https://' + u.slice(7) : null;
 }
 
-async function lookup(task, nexusUrl) {
-  const url = ajaxUrl(nexusUrl, task);
-  const diag = { url: url, step: 'starting', tried: [] };
-  if (!/^\d{3,}$/.test(String(task || '')))
-    return { ok: false, error: 'not a task number', diag: diag };
+/* One request for one row id. Returns the body, or null if the route failed.
+   `route` is remembered between calls so the sub-task probes do not repeat the
+   work of finding out how this browser can reach Nexus. */
+async function ask(rowId, nexusUrl, diag, route, loud) {
+  const url = ajaxUrl(nexusUrl, rowId);
+  const note = (s) => { if (loud) diag.tried.push(s); };
 
   /* An open Nexus tab is the best place to ask from: it already reaches the
      site, with its cookies, its proxy route and any certificate you accepted.
      A background fetch has none of that, so it is only the fallback. */
-  let got = null;
-  diag.step = 'fetching';
-  const t0 = Date.now();
-
-  const nexusTabs = await findNexusTabs(url);
-  diag.nexusTabsOpen = nexusTabs.length;
-  for (const tab of nexusTabs) {
+  if (route.tabId !== undefined) {
     /* Ask using the tab's OWN origin, not the address the Timecard was
        configured with. A tab sitting on https cannot fetch an http address -
        the browser blocks it as mixed content - and the reverse wastes a
        redirect. The tab is signed in at whatever origin it is on, so that is
        the one to use. */
-    const target = onTabOrigin(tab.url, url);
-    if (target !== url) diag.rewrote = url + '  ->  ' + target;
-    const viaTab = await askTab(tab.id, target);
-    diag.tried.push('in your Nexus tab (' + target.replace(/\?.*$/, '') + ') -> ' +
-                    (viaTab.ok ? viaTab.status : viaTab.error));
-    if (viaTab.ok) { got = viaTab; diag.how = 'from your open Nexus tab'; diag.url = target; break; }
+    const target = onTabOrigin(route.tabUrl, url);
+    if (loud && target !== url) diag.rewrote = url + '  ->  ' + target;
+    const viaTab = await askTab(route.tabId, target);
+    note('in your Nexus tab (' + target.replace(/\?.*$/, '') + ') -> ' +
+         (viaTab.ok ? viaTab.status : viaTab.error));
+    if (viaTab.ok) { if (loud) { diag.how = 'from your open Nexus tab'; diag.url = target; } return viaTab; }
+    return null;
   }
 
-  if (!got) {
-    for (const attempt of [url, flipScheme(url)]) {
-      if (!attempt) continue;
-      try {
-        const r = await fetch(attempt, {
-          credentials: 'include',
-          headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        });
-        diag.tried.push('background ' + attempt + ' -> ' + r.status);
-        got = { status: r.status, finalUrl: r.url,
-                type: r.headers.get('content-type') || '', text: await r.text() };
-        diag.how = 'from the extension itself';
-        diag.url = attempt;
-        break;
-      } catch (e) {
-        diag.tried.push('background ' + attempt + ' -> ' + String((e && e.message) || e));
-      }
+  for (const attempt of [route.scheme === 'flip' ? flipScheme(url) : url]) {
+    if (!attempt) continue;
+    try {
+      const r = await fetch(attempt, {
+        credentials: 'include',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      });
+      note('background ' + attempt + ' -> ' + r.status);
+      if (loud) { diag.how = 'from the extension itself'; diag.url = attempt; }
+      return { status: r.status, finalUrl: r.url,
+               type: r.headers.get('content-type') || '', text: await r.text() };
+    } catch (e) {
+      note('background ' + attempt + ' -> ' + String((e && e.message) || e));
     }
   }
+  return null;
+}
 
-  if (!got) {
-    diag.step = nexusTabs.length ? 'the Nexus tab could not fetch it either'
-                                 : 'no Nexus tab open, and the extension cannot reach it directly';
-    return { ok: false,
-             error: nexusTabs.length
-               ? 'Nexus is open but would not answer ' + url + '. Open that exact address in a tab to see what it says.'
-               : 'open Nexus in a tab first, then try again — the extension on its own cannot reach ' + url,
-             diag: diag };
+/* Work out how this browser can reach Nexus, and prove it on the row we
+   actually want. Returns { route, got } or null. */
+async function openRoute(task, nexusUrl, diag) {
+  const url = ajaxUrl(nexusUrl, task);
+  const tabs = await findNexusTabs(url);
+  diag.nexusTabsOpen = tabs.length;
+  for (const tab of tabs) {
+    const route = { tabId: tab.id, tabUrl: tab.url };
+    const got = await ask(task, nexusUrl, diag, route, true);
+    if (got) return { route: route, got: got };
   }
+  for (const scheme of ['as-is', 'flip']) {
+    const route = { scheme: scheme };
+    const got = await ask(task, nexusUrl, diag, route, true);
+    if (got) return { route: route, got: got };
+  }
+  return null;
+}
 
-  diag.ms = Date.now() - t0;
-  diag.status = got.status;
-  diag.type = got.type;
-  diag.finalUrl = got.finalUrl;
-  if (got.status < 200 || got.status >= 300) {
-    diag.step = 'bad status';
-    return { ok: false, error: 'Nexus answered ' + got.status, diag: diag };
-  }
+/* Turn a body into the task's fields, or null if it is not a task. `soft` is
+   for the sub-task probes, where "not there" is the expected answer and must
+   not be reported as a failure. */
+function readBody(got, task, diag, soft) {
+  if (!got) return soft ? null : { error: 'no answer' };
+  if (!soft) { diag.status = got.status; diag.type = got.type; diag.finalUrl = got.finalUrl; }
+  if (got.status < 200 || got.status >= 300)
+    return soft ? null : (diag.step = 'bad status', { error: 'Nexus answered ' + got.status });
 
   const text = (got.text || '').trim();
-  diag.length = text.length;
-  diag.sample = text.slice(0, 300);
-  if (!text) {
-    diag.step = 'empty body';
-    return { ok: false, error: 'task ' + task + ' not found (Nexus sent nothing back)', diag: diag };
-  }
+  if (!soft) { diag.length = text.length; diag.sample = text.slice(0, 300); }
+  if (!text)
+    return soft ? null : (diag.step = 'empty body',
+      { error: 'task ' + task + ' not found (Nexus sent nothing back)' });
   // A login page instead of JSON means the session has expired.
-  if (/^\s*</.test(text)) {
-    diag.step = 'got HTML, not JSON';
-    return { ok: false, error: 'sign in to Nexus first, then try again', diag: diag };
-  }
+  if (/^\s*</.test(text))
+    return soft ? null : (diag.step = 'got HTML, not JSON',
+      { error: 'sign in to Nexus first, then try again' });
 
   let data;
   try { data = JSON.parse(text); }
   catch (e) {
-    diag.step = 'body is not JSON';
-    return { ok: false, error: 'Nexus sent something unreadable', diag: diag };
+    return soft ? null : (diag.step = 'body is not JSON', { error: 'Nexus sent something unreadable' });
   }
-  diag.keys = Object.keys(data).slice(0, 40);
-  /* The whole answer, field by field, so the box that should hold the task's
-     description can be pointed at instead of guessed at. */
-  diag.fields = Object.keys(data).slice(0, 60).map((k) => {
-    const v = data[k];
-    const t = v == null ? '' : String(v);
-    return k + ' = ' + (t.length > 120 ? t.slice(0, 120) + '…' : t);
-  });
-
+  if (!soft) {
+    diag.keys = Object.keys(data).slice(0, 40);
+    /* The whole answer, field by field, so the box that should hold the task's
+       description can be pointed at instead of guessed at. */
+    diag.fields = Object.keys(data).slice(0, 60).map((k) => {
+      const v = data[k];
+      const t = v == null ? '' : String(v);
+      return k + ' = ' + (t.length > 120 ? t.slice(0, 120) + '…' : t);
+    });
+  }
   const info = pick(data);
-  if (!info) {
-    diag.step = 'JSON had no projectName / Contractor / description';
-    return { ok: false, error: 'task ' + task + ' not found', diag: diag };
+  if (!info)
+    return soft ? null : (diag.step = 'JSON had no projectName / Contractor / description',
+      { error: 'task ' + task + ' not found' });
+  return { info: info };
+}
+
+/* Nexus lists a task's sub-tasks as separate rows - 300042, 300042-1,
+   300042-2 - and each carries its own description. The newest one is the one
+   the timecard wants. There is no call that lists them, so they are asked for
+   in turn and the run stops at the first one that is not there. */
+const MAX_SUBTASKS = 40;
+async function latestSub(task, nexusUrl, diag, route) {
+  let best = null;
+  for (let n = 1; n <= MAX_SUBTASKS; n++) {
+    const row = task + '-' + n;
+    const r = readBody(await ask(row, nexusUrl, diag, route, false), row, diag, true);
+    if (!r || !r.info) break;                 // not there, so nothing above it is either
+    best = { row: row, info: r.info };
+  }
+  return best;
+}
+
+async function lookup(task, nexusUrl) {
+  const diag = { url: ajaxUrl(nexusUrl, task), step: 'starting', tried: [] };
+  task = String(task || '').trim();
+  if (!/^\d{3,}(-\d+)?$/.test(task))
+    return { ok: false, error: 'not a task number', diag: diag };
+
+  diag.step = 'fetching';
+  const t0 = Date.now();
+  const opened = await openRoute(task, nexusUrl, diag);
+  if (!opened) {
+    diag.step = diag.nexusTabsOpen ? 'the Nexus tab could not fetch it either'
+                                   : 'no Nexus tab open, and the extension cannot reach it directly';
+    return { ok: false,
+             error: diag.nexusTabsOpen
+               ? 'Nexus is open but would not answer ' + diag.url + '. Open that exact address in a tab to see what it says.'
+               : 'open Nexus in a tab first, then try again — the extension on its own cannot reach ' + diag.url,
+             diag: diag };
+  }
+
+  const base = readBody(opened.got, task, diag, false);
+  if (base.error) return { ok: false, error: base.error, diag: diag };
+
+  let row = task, info = base.info;
+  // A number typed WITH a suffix already names the row it wants.
+  if (!/-\d+$/.test(task)) {
+    const newest = await latestSub(task, nexusUrl, diag, opened.route);
+    if (newest) { row = newest.row; info = newest.info; }
+  }
+  diag.ms = Date.now() - t0;
+  diag.row = row;
+  if (row !== task) {
+    diag.subTasks = 'used ' + row + ' — the newest sub-task of ' + task;
+    // show the row that was actually used, not the one that was typed
+    const re = readBody(await ask(row, nexusUrl, diag, opened.route, false), row, diag, false);
+    if (re && re.info) info = re.info;
   }
   diag.jobTypeFrom = info.jobTypeKey || '(no description field in the answer)';
   diag.step = 'ok';
-  return { ok: true, data: info, diag: diag };
+  return { ok: true, data: Object.assign({ row: row }, info), diag: diag };
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {

@@ -89,11 +89,18 @@ The folder holds nine files: `manifest.json`, `background.js`, `content.js`,
 `page.js`, `bridge.js`, this README, and `icon16/32/48/128.png` — the navy N.
 They all have to sit in the one folder, or the browser refuses to load it.
 
-**Sub-tasks.** Nexus lists a task and its sub-tasks as separate rows — 321526,
-321526-1, 321526-2. Hours belong on the newest, so the 🚀 opens the highest
-suffix the search brings back, and the banner names the row it opened. A task
-with no sub-tasks opens itself, as before. Type the number *with* a suffix and
-you get that exact row.
+**Sub-tasks.** Nexus lists a task and its sub-tasks as separate rows — 300042,
+300042-1, 300042-2 — and each carries its own description. The newest is the
+live one, so **both** halves use it:
+
+- the 🚀 opens the highest suffix the search brings back, and the banner names
+  the rows it saw and the one it opened;
+- the lookup asks for `-1`, `-2`, … in turn until one is not there, and fills
+  PROJECT, CONTRACTOR and JOB TYPE from the last one that answered. The toast
+  says which row it read.
+
+A task with no sub-tasks uses itself, as before. Type the number *with* a
+suffix and you get that exact row, with no probing.
 
 Every step waits for the thing it needs to appear rather than counting
 seconds, so a slow, US-hosted Nexus just means a longer wait — never a
@@ -139,14 +146,14 @@ reload the extension.
 
 ## The task lookup
 
-Type a 6-digit task number and the row's **project** and **contractor** fill
-themselves in a moment later. Anything you have already typed is left alone —
-it only fills boxes that are empty, and it never touches the job type.
+Type a 6-digit task number and the row's **project**, **contractor** and **job
+type** fill themselves in a moment later, taken from the newest sub-task.
+Anything you have already typed is left alone — it only fills boxes that are
+empty, so a job type you disagree with has to be cleared before Nexus will
+replace it.
 
 The answers are remembered per task number, so the same task fills instantly
 next time even without Nexus.
-
-Turn it off in the timecard's Settings if you would rather type them yourself.
 
 **"extension not detected on this page"** in Settings means either the
 extension is not installed, or **Allow access to file URLs** is off (see step 5
