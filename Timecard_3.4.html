@@ -2277,6 +2277,12 @@ function bindSheetInputs(){
     if(dup){ e.preventDefault(); e.stopPropagation(); duplicateRow(+dup.dataset.row); return; }
     const rk = e.target.closest && e.target.closest('.rocket');
     if(rk){ e.preventDefault(); e.stopPropagation();
+      // Ctrl/⌘ + click = show exactly what Nexus answers for this task
+      if(e.ctrlKey || e.metaKey){
+        const r = week().rows[+rk.dataset.row];
+        runLookupTest(String((r && r.task) || '').trim());
+        return;
+      }
       // plain click = go (using the milestone remembered for this task); Alt/right-click = change the milestone
       rocketGo(+rk.dataset.row, rk, e.altKey || e.shiftKey); return; }
   });
@@ -2497,13 +2503,40 @@ function nexusLookup(task){
 }
 /* Walks the whole chain and says where it stopped, so a failure can be read
    instead of guessed at. */
-async function runLookupTest(){
-  const out = document.getElementById('lookupTestOut');
+/* The panel it prints into. Nexus has no place in Settings, so it is built on
+   demand — Ctrl/⌘ + click the N button on a row and it appears over the sheet. */
+function lookupTestPanel(){
+  let p = document.getElementById('lookupTestPanel');
+  if(p) return p.querySelector('pre');
+  p = document.createElement('div');
+  p.id = 'lookupTestPanel';
+  p.style.cssText = 'position:fixed;z-index:200;left:50%;top:6vh;transform:translateX(-50%);' +
+    'width:min(760px,94vw);max-height:82vh;overflow:auto;background:#0f1626;color:#e8eefc;' +
+    'border:1px solid #2a3550;border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.45);padding:12px 14px;' +
+    'font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace';
+  p.innerHTML = '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;' +
+      'font:bold 13px Arial,sans-serif">' +
+      '<span style="flex:1">What Nexus answers for this task</span>' +
+      '<button type="button" class="gbtn" data-act="copy">Copy</button>' +
+      '<button type="button" class="gbtn sec" data-act="close">Close</button></div>' +
+    '<pre style="margin:0;white-space:pre-wrap;word-break:break-word;user-select:text"></pre>';
+  const pre = p.querySelector('pre');
+  p.addEventListener('click', e=>{
+    const b = e.target.closest('button[data-act]'); if(!b) return;
+    if(b.dataset.act === 'close') p.remove();
+    else { navigator.clipboard.writeText(pre.textContent).then(
+             ()=>toast('📋 Copied.'), ()=>toast('Select the text and copy it by hand.')); }
+  });
+  document.body.appendChild(p);
+  return pre;
+}
+async function runLookupTest(taskArg){
   const box = document.getElementById('lookupTestTask');
-  if(!out || !box) return;                    // the panel is not in Settings any more
-  const task = (box.value||'').trim() || '303905';
+  const out = document.getElementById('lookupTestOut') || lookupTestPanel();
+  const task = String(taskArg || (box && box.value) || '').trim() || '303905';
   const L = [];
-  const show = ()=>{ out.hidden = false; out.textContent = L.join('\n'); };
+  const show = ()=>{ out.hidden = false; out.textContent = L.join('\n');
+                     if(out.closest) { const p = out.closest('#lookupTestPanel'); if(p) p.hidden = false; } };
   L.push('Nexus address : ' + (state.settings.nexusUrl || NEXUS_URL_DEFAULT));
   L.push('page is       : ' + location.protocol + '//' + (location.host || '(local file)'));
   L.push('1. extension bridge on this page : ' + (nexusBridge ? 'YES' : 'NO'));
@@ -2535,15 +2568,26 @@ async function runLookupTest(){
   if(d.status!==undefined) L.push('   HTTP status    : ' + d.status);
   if(d.type)     L.push('   content type   : ' + d.type);
   if(d.length!==undefined) L.push('   body length    : ' + d.length);
-  if(d.keys)     L.push('   fields sent    : ' + d.keys.join(', '));
   if(d.step)     L.push('   got as far as  : ' + d.step);
   if(d.threw)    L.push('   error          : ' + d.threw);
+  if(d.fields && d.fields.length){
+    L.push('');
+    L.push('   everything Nexus sent back for this task:');
+    d.fields.forEach(f=>L.push('     ' + f));
+  }else if(d.keys) L.push('   fields sent    : ' + d.keys.join(', '));
   L.push('');
   if(res && res.ok){
     L.push('3. RESULT: project    = ' + res.data.project);
     L.push('           contractor = ' + res.data.contractor);
+    L.push('           job type   = ' + (res.data.jobType || '(none — see the field list above)'));
+    if(d.jobTypeFrom) L.push('           job type came from field: ' + d.jobTypeFrom);
     L.push('');
-    L.push('   Working. Typing this task number will fill those two boxes.');
+    L.push(res.data.jobType
+      ? '   Working. Typing this task number fills those three boxes.'
+      : '   Project and contractor work. Nothing in the answer above is clearly\n' +
+        '   the task\'s description, so JOB TYPE is left for you to type. If one\n' +
+        '   of the fields listed above IS the description, say which and it will\n' +
+        '   be used.');
   }else{
     L.push('3. FAILED: ' + ((res && res.error) || 'no answer'));
     if(d.sample){ L.push(''); L.push('   what Nexus actually sent back:');
@@ -2556,8 +2600,10 @@ function markLookupHint(){
   if(el) el.textContent = nexusBridge ? 'extension found — lookups will work'
                                       : 'extension not detected on this page';
 }
-/* Fill this row's PROJECT and CONTRACTOR from Nexus. Job type is left alone -
-   that one is yours.
+/* Fill this row's PROJECT, CONTRACTOR and JOB TYPE from Nexus. Job type is the
+   task's own description over there - the Description column in its task list.
+   If the answer holds nothing that is clearly that, job type is left empty
+   rather than filled with a category like "CUSTOM ENGINEERING".
    `before` is what those boxes held the instant the task number was typed, i.e.
    before the remembered values were poured in. A box that was empty then is
    Nexus's to fill, even if the memory has since guessed at it. A box that
@@ -2603,6 +2649,12 @@ async function fillFromNexus(ri, task, before){
     const bits = [res.data.project, res.data.contractor, res.data.jobType].filter(Boolean);
     toast('🔎 '+task+' — '+bits.join(' · ')+
           '<br><span style="opacity:.85">'+got.join(', ')+' from Nexus.</span>', 7000);
+  }
+  // Nothing in the answer was clearly the task's description, so JOB TYPE was
+  // left alone rather than filled with the wrong thing.
+  if(!res.data.jobType && !mine('job') && !String(r2.job||'').trim()){
+    toast('🔎 '+task+' — Nexus sent no task description, so JOB TYPE is still yours to type.'+
+          '<br><span style="opacity:.85">Ctrl+click the <b>N</b> to see everything it did send.</span>', 8000);
   }
 }
 function rowHours(r, d){ return num(r.h[d]) || num(r.ha[d]) || 0; }
@@ -2731,7 +2783,8 @@ function buildShortcutHelp(){
     ['Ctrl/⌘ + D','duplicate the current row'],
     ['Ctrl/⌘ + F','find / search the sheet'],
     ['🚀 on a task row','send that row\'s hours to Nexus'],
-    ['Right-click / Alt+click 🚀','choose that task\'s milestone']
+    ['Right-click / Alt+click 🚀','choose that task\'s milestone'],
+    ['Ctrl/⌘ + click 🚀','show exactly what Nexus answers for that task']
   ];
   host.innerHTML = rows.map(r=>'<div style="break-inside:avoid"><kbd style="background:#fff;border:1px solid #cfd4dc;border-bottom-width:2px;border-radius:4px;padding:1px 5px;font-family:monospace;font-size:10.5px;color:#111">'+r[0]+'</kbd> — '+r[1]+'</div>').join('');
 }

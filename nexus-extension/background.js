@@ -24,17 +24,21 @@ function ajaxUrl(nexusUrl, task) {
 /* The task's own description - the "Description" column in Nexus's task list,
    e.g. "Exterior Refrigeration Pipe Supports". That is what the timecard's JOB
    TYPE holds. It is NOT the description on the Hours tab, which is per entry.
-   The key it arrives under differs between Nexus builds, so take the first one
-   that is actually there, and fall back to anything that reads like a task
-   description. `jobTypeFrom` reports which key it used, for the diagnostics. */
+ *
+ * Only fields that ARE a description are read. TaskType, Deliverable and Trade
+ * are categories, not descriptions - TaskType is what filled JOB TYPE with
+ * "CUSTOM ENGINEERING" - and a wrong value on a timesheet is worse than an
+ * empty box, so anything not clearly a description is left alone and JOB TYPE
+ * stays yours to type. `diag.fields` lists the whole answer, so a Nexus that
+ * names the field something else can be read off rather than guessed at. */
 const JOB_KEYS = ['Description', 'description', 'TaskDescription', 'Task_Description',
-                  'taskDescription', 'task_description', 'TaskType', 'Task_Type',
-                  'taskType', 'TaskName', 'Task_Name', 'ScopeOfWork', 'Scope'];
+                  'taskDescription', 'task_description', 'TaskDesc', 'task_desc'];
 function jobTypeFrom(data) {
   const s = (v) => (typeof v === 'string' ? v.trim() : '');
   for (const k of JOB_KEYS) if (s(data[k])) return { value: s(data[k]), key: k };
   for (const k of Object.keys(data)) {
-    if (!/desc/i.test(k) || /project|hour|emp/i.test(k)) continue;   // not the project's, not an entry's
+    // a description of the TASK: not the project's, not one hours entry's
+    if (!/desc/i.test(k) || /project|hour|emp|milestone|ms_/i.test(k)) continue;
     if (s(data[k])) return { value: s(data[k]), key: k };
   }
   return { value: '', key: '' };
@@ -189,6 +193,13 @@ async function lookup(task, nexusUrl) {
     return { ok: false, error: 'Nexus sent something unreadable', diag: diag };
   }
   diag.keys = Object.keys(data).slice(0, 40);
+  /* The whole answer, field by field, so the box that should hold the task's
+     description can be pointed at instead of guessed at. */
+  diag.fields = Object.keys(data).slice(0, 60).map((k) => {
+    const v = data[k];
+    const t = v == null ? '' : String(v);
+    return k + ' = ' + (t.length > 120 ? t.slice(0, 120) + '…' : t);
+  });
 
   const info = pick(data);
   if (!info) {

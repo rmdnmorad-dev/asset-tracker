@@ -7,7 +7,16 @@ Two things, both **in the browser you are already using**:
 2. **Task lookup** — type a 6-digit task number in the timecard and its
    **project**, **contractor** and **job type** are pulled from Nexus and
    filled in. Job type is the task's own description — the *Description*
-   column in Nexus's task list, not the note on the Hours tab.
+   column in Nexus's task list, not the note on the Hours tab. Only a field
+   that really is a description is used: a category such as *TaskType* or
+   *Deliverable* is never taken for one, and if the answer holds no
+   description then JOB TYPE is left empty for you rather than filled with the
+   wrong thing.
+
+   **Ctrl/⌘ + click the N** on any row to see exactly what Nexus answers for
+   that task, field by field, with a Copy button. That is the place to look if
+   job type stays empty — the field that holds the description will be in that
+   list.
 
 It never presses Submit. You do that.
 
