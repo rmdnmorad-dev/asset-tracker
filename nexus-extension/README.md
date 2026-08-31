@@ -98,9 +98,17 @@ live one, so **both** halves use it:
 
 - the 🚀 opens the highest suffix the search brings back, and the banner names
   the rows it saw and the one it opened;
-- the lookup asks for `-1`, `-2`, … in turn until one is not there, and fills
-  PROJECT, CONTRACTOR and JOB TYPE from the last one that answered. The toast
-  says which row it read.
+- the lookup asks for `-1`, `-2`, … until one is not there, and fills PROJECT,
+  CONTRACTOR and JOB TYPE from the last one that answered. The toast says which
+  row it read.
+
+Some Nexus builds answer `get_project_info` with the parent task whatever
+sub-task number they are given, and then the number alone cannot tell the rows
+apart. The task list still can — it prints a Description against every row — so
+whenever the 🚀 opens a task, the descriptions of every row it saw are read off
+the list and kept. From then on that task's JOB TYPE is the newest sub-task's
+own description, and the row on the timecard refreshes itself a few seconds
+after the press.
 
 A task with no sub-tasks uses itself, as before. Type the number *with* a
 suffix and you get that exact row, with no probing.
@@ -116,8 +124,10 @@ refreshing the page doesn't re-run it.
 
 - It runs **only** on `nexus.tcs.local` and on local files. Every other site is
   out of scope — enforced by the browser from the manifest, not by the code.
-- Its only permission is to reach `nexus.tcs.local`. No history, no tabs, no
-  storage, no other site.
+- Its permissions are: reach `nexus.tcs.local`; see your tabs, so it can find
+  the Nexus one you already have open instead of piling up new ones; and its
+  own local storage, which holds nothing but task numbers and the descriptions
+  read off Nexus's own task list. No history, no bookmarks, no other site.
 - The lookup uses the same address Nexus's own Edit button uses
   (`php/ajax.php?function=get_project_info`), with your own cookies. It sees
   exactly what you can see when you search that task, and nothing else.

@@ -216,9 +216,26 @@ function readBody(got, task, diag, soft) {
    task is answered by the first batch. */
 const MAX_SUBTASKS = 40;
 const PROBE_BATCH = 5;
-async function latestSub(task, nexusUrl, diag, route) {
-  let best = null;
-  for (let start = 1; start <= MAX_SUBTASKS; start += PROBE_BATCH) {
+/* Two answers that are the same in every field are the same row. */
+function sameInfo(a, b) {
+  return !!a && !!b && a.jobType === b.jobType && a.project === b.project &&
+         a.contractor === b.contractor && a.projectId === b.projectId;
+}
+async function latestSub(task, nexusUrl, diag, route, base) {
+  /* Check the first sub-task on its own. Some Nexus builds hand back the task
+     itself whatever suffix they are given, and asking forty times for forty
+     copies of the same answer is slow and, worse, ends up filling JOB TYPE
+     with the wrong row's description. */
+  const one = readBody(await ask(task + '-1', nexusUrl, diag, route, false), task + '-1', diag, true);
+  if (!one || !one.info) return null;                  // no sub-tasks at all
+  if (sameInfo(one.info, base)) {
+    diag.subTasks = 'this Nexus answers the same whatever sub-task number it is given, ' +
+                    'so sub-tasks cannot be told apart by number alone — if this task ' +
+                    'has any, press N once and the task list will teach it which is newest';
+    return null;
+  }
+  let best = { row: task + '-1', info: one.info };
+  for (let start = 2; start <= MAX_SUBTASKS; start += PROBE_BATCH) {
     const ns = [];
     for (let n = start; n < start + PROBE_BATCH && n <= MAX_SUBTASKS; n++) ns.push(n);
     const found = await Promise.all(ns.map(async (n) => {
@@ -234,6 +251,36 @@ async function latestSub(task, nexusUrl, diag, route) {
     if (gap) break;
   }
   return best;
+}
+
+/* ---- what the task list itself said ------------------------------------
+   Where get_project_info cannot tell sub-tasks apart, the list can: it prints
+   a Description against every row. page.js reads that whenever the N button
+   opens a task, and it is kept here so the next lookup of that number gets the
+   newest sub-task's own description instead of the parent's. */
+const learned = new Map();
+function saveLearned() {
+  try { chrome.storage.local.set({ tcLearned: Object.fromEntries(learned) }); } catch (e) {}
+}
+try {
+  chrome.storage.local.get('tcLearned', (o) => {
+    void chrome.runtime.lastError;
+    const m = (o && o.tcLearned) || {};
+    for (const k of Object.keys(m)) learned.set(k, m[k]);
+  });
+} catch (e) {}
+function baseOf(task) { return String(task || '').replace(/-\d+$/, ''); }
+function rememberRows(seen) {
+  if (!seen || !seen.task || !Array.isArray(seen.rows) || !seen.rows.length) return;
+  let best = null;
+  for (const r of seen.rows) {
+    const m = /-(\d+)$/.exec(String(r.row || ''));
+    const n = m ? +m[1] : -1;
+    if (r.desc && (!best || n > best.n)) best = { n: n, row: r.row, desc: r.desc };
+  }
+  if (!best) return;
+  learned.set(baseOf(seen.task), { row: best.row, desc: best.desc });
+  saveLearned();
 }
 
 /* The same task is asked for again the moment a whole column is pasted, so a
@@ -272,11 +319,20 @@ async function lookup(task, nexusUrl) {
   let row = task, info = base.info;
   // A number typed WITH a suffix already names the row it wants.
   if (!/-\d+$/.test(task)) {
-    const newest = await latestSub(task, nexusUrl, diag, opened.route);
+    const newest = await latestSub(task, nexusUrl, diag, opened.route, base.info);
     if (newest) {
       row = newest.row;
       info = newest.info;
       diag.subTasks = 'used ' + row + ' — the newest sub-task of ' + task;
+    }
+    /* Whatever the endpoint managed, the list is the authority on which row is
+       newest and what it is for. */
+    const seen = learned.get(baseOf(task));
+    if (seen && seen.desc && seen.desc !== info.jobType) {
+      info = Object.assign({}, info, { jobType: seen.desc, jobTypeKey: 'the task list' });
+      row = seen.row || row;
+      diag.fromList = 'job type read off the task list, row ' + row;
+      diag.subTasks = 'used ' + row + ' — the newest sub-task of ' + task + ', per the task list';
     }
   }
   diag.ms = Date.now() - t0;
@@ -350,6 +406,13 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       reply(res);
     });
     return true;                                        // reply arrives asynchronously
+  }
+
+  // page.js, by way of the Nexus tab's content script
+  if (msg.type === 'tcRowsSeen') {
+    rememberRows(msg.seen);
+    cache.clear();                       // the old answer is the one we outgrew
+    return;
   }
 
   if (msg.type === 'tcOpen') {

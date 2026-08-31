@@ -2760,9 +2760,48 @@ function dropStaleInfo(){
   });
   if(cleared) recalc();
 }
+/* Ask again for one row, throwing away what Nexus put there last time. Used
+   after an N press: opening the task teaches the extension what the task list
+   says the newest sub-task is for, which can be better than the first answer. */
+function relookupRow(ri){
+  const r = week().rows[ri]; if(!r) return;
+  if(r.nx){
+    TASK_INFO_FIELDS.forEach(f=>{
+      if(!r.nx[f] || String(r[f]||'').trim() !== String(r.nx[f]).trim()) return;
+      r[f] = '';
+      const cell = document.querySelector('.cell[data-row="'+ri+'"][data-f="'+f+'"]');
+      if(cell){ cell.value = ''; autoGrow(cell); }
+    });
+    delete r.nx;
+  }
+  delete swept[ri];
+  sweepTasks();
+}
+/* A number pasted into a highlighted box is on screen but not yet in the sheet
+   — nothing has committed it. Rather than wait for a blur or an Enter that may
+   never come, the boxes themselves are read. A box still being typed in has to
+   hold the same thing for a whole tick first, so half-typed numbers are not
+   mistaken for finished ones. */
+const settling = {};
+function adoptTypedTasks(){
+  const rows = week().rows;
+  let took = false;
+  document.querySelectorAll('#tblhost .cell[data-f="task"]').forEach(inp=>{
+    const i = +inp.dataset.row, r = rows[i];
+    if(!r) return;
+    const v = String(inp.value||'').trim();
+    if(!/^\d{6}(-\d+)?$/.test(v) || v === String(r.task||'').trim()){ delete settling[i]; return; }
+    if(document.activeElement === inp && settling[i] !== v){ settling[i] = v; return; }
+    delete settling[i];
+    r.task = v;
+    took = true;
+  });
+  if(took){ markRockets(); recalc(); save(); }
+}
 async function runSweep(){
   if(sweeping || !nexusBridge) return;
   sweeping = true;
+  adoptTypedTasks();
   dropStaleInfo();
   try{
     let done = 0;
@@ -2828,6 +2867,11 @@ function rocketGo(ri, btn, forcePick, dayIdx){
         toast('🚀 '+r.how+' — '+what+
               '<br><span style="opacity:.85">It fills the Hours form there; check it and press <b>Submit</b>.</span>', 9000);
         setTimeout(checkNexusTabs, 1500);
+        /* Opening the task shows the extension the list, and the list knows
+           which sub-task is newest and what it is for. Ask again once it has
+           had time to read it, so JOB TYPE catches up. */
+        setTimeout(()=>relookupRow(ri),  9000);
+        setTimeout(()=>relookupRow(ri), 22000);
       }else{
         rocketNewTab(job, what);
       }
@@ -5687,6 +5731,10 @@ updateUndoButtons();
   setInterval(checkNexusTabs, 10000);
   addEventListener('focus', checkNexusTabs);
   setTimeout(checkNexusTabs, 1200);
+  /* Every three seconds, look up whatever is still missing. It costs nothing
+     when there is nothing to do, and it means a task number never sits there
+     unfilled — however it got onto the sheet. */
+  setInterval(sweepTasks, 3000);
   setTimeout(sweepTasks, 1500);          // fill in anything the sheet opened with
 }
 initSaveFile();                          // resume the linked auto-save file, if one was set up before

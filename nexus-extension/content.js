@@ -38,6 +38,13 @@ function tcInject(job) {
 /* A job handed to a tab that is already sitting on the task list. Nothing
    reloads, so whatever you had open stays open. If this is some other Nexus
    page the answer is no, and the extension sends the tab to the list instead. */
+/* page.js runs in the page's own world and cannot reach the extension, so what
+   it read off the task list comes back through here. */
+window.addEventListener('message', function (e) {
+  if (e.source !== window || !e.data || !e.data.__tcRows) return;
+  try { chrome.runtime.sendMessage({ type: 'tcRowsSeen', seen: e.data.__tcRows }); } catch (err) {}
+});
+
 chrome.runtime.onMessage.addListener(function (msg, sender, reply) {
   if (!msg || msg.type !== 'tcJob' || !msg.job || !msg.job.task) return;
   if (!document.querySelector('input.task_search')) { reply({ ok: false }); return; }

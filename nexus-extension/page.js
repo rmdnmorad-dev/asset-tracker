@@ -135,6 +135,30 @@
     return l.length ? l[l.length - 1].btn : null;     // the newest sub-task
   }
 
+  /* The list's own Description column, found by its heading rather than by
+     counting - the columns move about between views. */
+  function descColumn(tr) {
+    var tbl = tr && tr.closest('table');
+    if (!tbl) return -1;
+    var heads = tbl.querySelectorAll('thead th, thead td');
+    for (var i = 0; i < heads.length; i++)
+      if (norm(heads[i].textContent).replace(/[^A-Z]/g, '') === 'DESCRIPTION') return i;
+    return -1;
+  }
+  function rowDescriptions(list) {
+    if (!list.length) return [];
+    var idx = descColumn(list[0].btn.closest('tr'));
+    if (idx < 0) return [];
+    var out = [];
+    list.forEach(function (r) {
+      var tr = r.btn.closest('tr');
+      if (!tr || idx >= tr.children.length) return;
+      var d = String(tr.children[idx].textContent || '').replace(/\s+/g, ' ').trim();
+      if (d) out.push({ row: r.row, desc: d });
+    });
+    return out;
+  }
+
   function fire(el, types) {
     types.forEach(function (t) { el.dispatchEvent(new Event(t, { bubbles: true })); });
     if (window.jQuery) try { window.jQuery(el).trigger('input').trigger('change'); } catch (e) {}
@@ -214,6 +238,16 @@
     var rows = editButtons(J.task);
     var target = rows.length ? rows[rows.length - 1] : { btn: btn, row: J.task, sub: -1 };
     var opened = target.row;
+
+    /* Report what the list says each of these rows is FOR. get_project_info
+       answers the same thing whatever sub-task number it is given on some
+       Nexus builds, so the Description column here is the only place the
+       newest sub-task's own description can be read. The extension keeps it,
+       and the timecard's JOB TYPE is right from then on. */
+    try {
+      var seen = rowDescriptions(rows.length ? rows : [target]);
+      if (seen.length) window.postMessage({ __tcRows: { task: J.task, rows: seen } }, '*');
+    } catch (e) {}
 
     say(rows.length > 1
       ? 'saw ' + rows.map(function (r) { return r.row; }).join(', ') +
