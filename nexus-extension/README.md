@@ -5,8 +5,9 @@ Two things, both **in the browser you are already using**:
 1. **The 🚀** fills the Nexus hours form for that row, in a tab right next to
    the timecard. No second window, no Node.js, no helper in the background.
 2. **Task lookup** — type a 6-digit task number in the timecard and its
-   **project** and **contractor** are pulled from Nexus and filled in. Job type
-   stays yours to pick.
+   **project**, **contractor** and **job type** are pulled from Nexus and
+   filled in. Job type is the task's own description — the *Description*
+   column in Nexus's task list, not the note on the Hours tab.
 
 It never presses Submit. You do that.
 
@@ -78,6 +79,12 @@ the job and injects `page.js` into the page itself, where jQuery is real.
 The folder holds nine files: `manifest.json`, `background.js`, `content.js`,
 `page.js`, `bridge.js`, this README, and `icon16/32/48/128.png` — the navy N.
 They all have to sit in the one folder, or the browser refuses to load it.
+
+**Sub-tasks.** Nexus lists a task and its sub-tasks as separate rows — 321526,
+321526-1, 321526-2. Hours belong on the newest, so the 🚀 opens the highest
+suffix the search brings back, and the banner names the row it opened. A task
+with no sub-tasks opens itself, as before. Type the number *with* a suffix and
+you get that exact row.
 
 Every step waits for the thing it needs to appear rather than counting
 seconds, so a slow, US-hosted Nexus just means a longer wait — never a

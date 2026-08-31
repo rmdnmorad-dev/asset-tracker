@@ -21,17 +21,38 @@ function ajaxUrl(nexusUrl, task) {
          '?function=get_project_info&rowID=' + encodeURIComponent(task);
 }
 
+/* The task's own description - the "Description" column in Nexus's task list,
+   e.g. "Exterior Refrigeration Pipe Supports". That is what the timecard's JOB
+   TYPE holds. It is NOT the description on the Hours tab, which is per entry.
+   The key it arrives under differs between Nexus builds, so take the first one
+   that is actually there, and fall back to anything that reads like a task
+   description. `jobTypeFrom` reports which key it used, for the diagnostics. */
+const JOB_KEYS = ['Description', 'description', 'TaskDescription', 'Task_Description',
+                  'taskDescription', 'task_description', 'TaskType', 'Task_Type',
+                  'taskType', 'TaskName', 'Task_Name', 'ScopeOfWork', 'Scope'];
+function jobTypeFrom(data) {
+  const s = (v) => (typeof v === 'string' ? v.trim() : '');
+  for (const k of JOB_KEYS) if (s(data[k])) return { value: s(data[k]), key: k };
+  for (const k of Object.keys(data)) {
+    if (!/desc/i.test(k) || /project|hour|emp/i.test(k)) continue;   // not the project's, not an entry's
+    if (s(data[k])) return { value: s(data[k]), key: k };
+  }
+  return { value: '', key: '' };
+}
+
 function pick(data) {
   const s = (v) => (v == null ? '' : String(v)).trim();
   const project = s(data.projectName);
   const contractor = s(data.Contractor);
-  if (!project && !contractor) return null;             // nothing useful came back
+  const job = jobTypeFrom(data);
+  if (!project && !contractor && !job.value) return null;   // nothing useful came back
   return {
     project: project,
     contractor: contractor,
+    jobType: job.value,
+    jobTypeKey: job.key,
     projectId: s(data.projectID),
     projectNo: s(data.Project_No),
-    taskType: s(data.TaskType),
     manager: s(data.ProjectManager),
     status: s(data.Status)
   };
@@ -171,9 +192,10 @@ async function lookup(task, nexusUrl) {
 
   const info = pick(data);
   if (!info) {
-    diag.step = 'JSON had no projectName / Contractor';
+    diag.step = 'JSON had no projectName / Contractor / description';
     return { ok: false, error: 'task ' + task + ' not found', diag: diag };
   }
+  diag.jobTypeFrom = info.jobTypeKey || '(no description field in the answer)';
   diag.step = 'ok';
   return { ok: true, data: info, diag: diag };
 }

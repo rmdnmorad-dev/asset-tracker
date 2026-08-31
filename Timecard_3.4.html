@@ -2383,7 +2383,8 @@ function commitValue(inp, finalize){
         if(/^\d{6}$/.test(task)){
           const ri = +inp.dataset.row;
           const before = { project:    String(r.project||'').trim(),
-                           contractor: String(r.contractor||'').trim() };
+                           contractor: String(r.contractor||'').trim(),
+                           job:        String(r.job||'').trim() };
           setTimeout(()=>fillFromNexus(ri, task, before), 0);
         }else{
           const mem = state.taskInfo[task];
@@ -2566,7 +2567,7 @@ async function fillFromNexus(ri, task, before){
   const w = week(), r = w.rows[ri];
   if(!r || String(r.task||'').trim() !== String(task)) return;
   const mine = f => !!String(before[f]||'').trim();      // you typed it yourself
-  if(mine('project') && mine('contractor')) return;
+  if(mine('project') && mine('contractor') && mine('job')) return;
   const res = await nexusLookup(task);
   if(!res || !res.ok){
     const why = (res && res.error) || 'no answer';
@@ -2594,10 +2595,14 @@ async function fillFromNexus(ri, task, before){
   const got = [];
   if(put('project', res.data.project))       got.push('project');
   if(put('contractor', res.data.contractor)) got.push('contractor');
+  // JOB TYPE is the task's own description in Nexus — the "Description" column
+  // in its task list, not the per-entry note on the Hours tab.
+  if(put('job', res.data.jobType))           got.push('job type');
   if(got.length){
     recalc(); save();
-    toast('🔎 '+task+' — '+res.data.project+(res.data.contractor ? ' · '+res.data.contractor : '')+
-          '<br><span style="opacity:.85">from Nexus. Job type is still yours to pick.</span>', 7000);
+    const bits = [res.data.project, res.data.contractor, res.data.jobType].filter(Boolean);
+    toast('🔎 '+task+' — '+bits.join(' · ')+
+          '<br><span style="opacity:.85">'+got.join(', ')+' from Nexus.</span>', 7000);
   }
 }
 function rowHours(r, d){ return num(r.h[d]) || num(r.ha[d]) || 0; }

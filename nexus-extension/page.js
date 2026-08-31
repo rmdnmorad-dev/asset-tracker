@@ -82,11 +82,30 @@
   // ------------------------------------------------------- finding the task
   /* The Edit button must be the real one on the real row, so we search for the
      task the same way a person does and wait for the row to come back. */
+  /* Nexus lists a task and its sub-tasks as separate rows: 321526, 321526-1,
+     321526-2 … The hours belong on the newest one, so of everything the search
+     brought back for this number we take the highest suffix. A number given
+     WITH a suffix means that exact row and nothing else. */
+  var rx = function (s) { return String(s).replace(/[.*+?^${}()|[\]\\-]/g, '\\$&'); };
+  function subOf(row, task) {
+    var m = new RegExp('^' + rx(task) + '(?:-(\\d+))?$').exec(row);
+    return m ? (m[1] == null ? -1 : +m[1]) : null;    // -1 = the task itself
+  }
+  function editButtons(task) {
+    var all = document.querySelectorAll('button.btn-edit[data-row]'), out = [];
+    for (var i = 0; i < all.length; i++) {
+      var b = all[i], row = String(b.getAttribute('data-row') || '').trim();
+      if (!row) continue;                 // Nexus's hidden template button
+      var s = subOf(row, task);
+      if (s === null || !b.closest('tr') || !vis(b)) continue;
+      out.push({ btn: b, row: row, sub: s });
+    }
+    out.sort(function (a, b) { return a.sub - b.sub; });
+    return out;
+  }
   function editButton(task) {
-    var b = document.querySelector('#table1_body button.btn-edit[data-row="' + task + '"]') ||
-            document.querySelector('button.btn-edit[data-row="' + task + '"]');
-    // ignore Nexus's hidden template button, which has an empty data-row
-    return (b && b.closest('tr') && vis(b)) ? b : null;
+    var l = editButtons(task);
+    return l.length ? l[l.length - 1].btn : null;     // the newest sub-task
   }
 
   function fire(el, types) {
@@ -160,8 +179,19 @@
       'Task ' + J.task + ' did not come back from the search.<br>' +
       'Check the number, and that you can see the task in Nexus yourself.');
 
-    say('opening task <b>' + J.task + '</b>…');
-    click(btn);
+    /* The search paints its rows together, but give any straggler a moment to
+       land before choosing — picking the newest sub-task is only right if all
+       of them are on screen to choose from. */
+    await new Promise(function (r) { setTimeout(r, 500); });
+    var rows = editButtons(J.task);
+    var target = rows.length ? rows[rows.length - 1] : { btn: btn, row: J.task, sub: -1 };
+    var opened = target.row;
+
+    say(rows.length > 1
+      ? 'task <b>' + J.task + '</b> has ' + rows.length + ' sub-tasks — opening the newest, <b>' +
+        opened + '</b>…'
+      : 'opening task <b>' + opened + '</b>…');
+    click(target.btn);
 
     // 2 - the task window arrives by AJAX
     say('waiting for the task window…');
@@ -234,7 +264,8 @@
     form.style.outlineOffset = '3px';
     try { form.scrollIntoView({ block: 'center' }); } catch (e) {}
 
-    done('Filled ' + filled.join(', ') + '.<br>Check it and press <b>Submit</b> yourself.' +
+    done('Filled ' + filled.join(', ') + ' on <b>' + opened + '</b>.' +
+         '<br>Check it and press <b>Submit</b> yourself.' +
          (missing.length ? '<br><span style="color:#ffd58a">Could not fill: ' + missing.join(', ') + '</span>' : ''));
   })().catch(function (e) {
     fail((e && e.message ? e.message : e) + '<br>Nothing was submitted.');
