@@ -584,6 +584,20 @@
   .rocket[hidden]{display:none}
   .rocket:hover{background:#1d4ed8;transform:translateY(-50%) scale(1.15)}
   .rocket.set{box-shadow:0 0 0 2px #93c5fd}     /* a milestone is chosen for this task */
+  /* no Nexus tab open, so nothing can be looked up — click to open one */
+  .rocket.needtab{background:#dc2626}
+  .rocket.needtab:hover{background:#ef4444}
+  /* the standing reminder, above the sheet where it cannot be missed */
+  #needNexus{display:none;align-items:center;gap:9px;margin:10px auto 0;width:max-content;max-width:94vw;
+    background:#fee2e2;color:#7f1d1d;border:1px solid #fca5a5;border-radius:9px;padding:7px 12px;
+    font:13px Arial,sans-serif;cursor:pointer}
+  body.no-nexus-tab #needNexus{display:flex}
+  #needNexus b.n{background:#dc2626;color:#fff;border-radius:3px;width:17px;height:19px;flex:0 0 auto;
+    display:flex;align-items:center;justify-content:center;font:bold 12px Arial,sans-serif}
+  #needNexus:hover{background:#fecaca}
+  body.dark #needNexus{background:#3b1113;color:#fecaca;border-color:#7f1d1d}
+  body.dark #needNexus:hover{background:#4c1618}
+  body.capturing #needNexus{display:none !important}
   .msmenu{position:fixed;z-index:130;background:#fff;color:#111;border:1px solid #cbd5e1;border-radius:8px;
     box-shadow:0 10px 30px rgba(0,0,0,.3);padding:6px;min-width:250px;font-family:Arial;font-size:12.5px}
   .msmenu h5{margin:2px 4px 6px;font-size:11px;color:#555;font-weight:bold}
@@ -822,6 +836,10 @@
     </div>
   </div>
 </div>
+
+<button type="button" id="needNexus" title="Open Nexus in this browser">
+  <b class="n">N</b><span>Keep a Nexus tab open for the tool to work — <b>click here to open one</b>.</span>
+</button>
 
 <div id="sheetWrap">
 <div id="sheet">
@@ -2139,6 +2157,7 @@ function pasteInto(text){
   selAnchor = cellAt(tr0,tc0) || anchor; selInput = selAnchor; selectRange(selAnchor, cellAt(tr1,tc1)||selAnchor);
   if(selInput && INFO_FIELDS.indexOf(selInput.dataset.f)>=0) updateHoursInd(selInput.dataset.f, selInput.value);
   recalc(); save(); toast('Pasted '+n+' cell'+(n>1?'s':'')+'.', 1600);
+  sweepTasks();                 // any task numbers that landed get looked up
 }
 // ---- arrow-key navigation across the sheet (Excel-style: click a box, then move with arrows) ----
 const NAV_COLS = (function(){
@@ -2277,6 +2296,12 @@ function bindSheetInputs(){
     if(dup){ e.preventDefault(); e.stopPropagation(); duplicateRow(+dup.dataset.row); return; }
     const rk = e.target.closest && e.target.closest('.rocket');
     if(rk){ e.preventDefault(); e.stopPropagation();
+      // red = there is no Nexus tab to work with, so the click opens one
+      if(rk.classList.contains('needtab') && !e.ctrlKey && !e.metaKey){
+        openNexusTab();
+        toast('Opening Nexus — keep that tab open and the N goes back to navy.', 6000);
+        return;
+      }
       // Ctrl/⌘ + click = show exactly what Nexus answers for this task
       if(e.ctrlKey || e.metaKey){
         const r = week().rows[+rk.dataset.row];
@@ -2387,11 +2412,8 @@ function commitValue(inp, finalize){
            guess. Any other length is not something Nexus knows about, so those
            still fill from the memory as before. */
         if(/^\d{6}$/.test(task)){
-          const ri = +inp.dataset.row;
-          const before = { project:    String(r.project||'').trim(),
-                           contractor: String(r.contractor||'').trim(),
-                           job:        String(r.job||'').trim() };
-          setTimeout(()=>fillFromNexus(ri, task, before), 0);
+          delete swept[+inp.dataset.row];    // typing it again asks again
+          sweepTasks();
         }else{
           const mem = state.taskInfo[task];
           if(mem){
@@ -2442,7 +2464,9 @@ function bindHeader(){
 /* ---------------- week navigation ---------------- */
 function setWeek(key){
   weekKey = key;
+  for(const k in swept) delete swept[k];   // a different week is a different set of rows
   renderWeek();
+  sweepTasks();
   save();
 }
 /* ---------------- 🚀 push a row's hours into Nexus ----------------
@@ -2464,13 +2488,41 @@ function setTaskMilestone(task, ms){
 }
 // show which rows already have a milestone chosen
 function markRockets(){
+  const need = nexusTabsOpen === 0;
   document.querySelectorAll('#tblhost .rocket').forEach(b=>{
     const r = week().rows[+b.dataset.row] || {}, t = String(r.task||'').trim();
     const ms = t ? taskMilestone(t) : '';
     b.hidden = !/^\d{6}$/.test(t);            // only a real 6-digit task can go to Nexus
     b.classList.toggle('set', !!ms);
-    b.title = t ? ('Send to Nexus — task '+t+(ms?' · '+ms:' · pick a milestone first')+
-                   '\nRight-click (or Alt+click) to change the milestone') : 'Enter a task # first';
+    b.classList.toggle('needtab', need);
+    b.title = need
+      ? 'No Nexus tab is open — click to open one.\nKeep a Nexus tab open for the tool to work.'
+      : (t ? ('Send to Nexus — task '+t+(ms?' · '+ms:' · pick a milestone first')+
+              '\nRight-click (or Alt+click) to change the milestone'+
+              '\nCtrl+click to see what Nexus answers for it') : 'Enter a task # first');
+  });
+}
+/* ---- is Nexus open in this browser? -----------------------------------
+   Nothing can be looked up without a Nexus tab: this page is a local file and
+   the tab is what carries your session. So it is watched, and when there is
+   none the N turns red and a line above the sheet says so. */
+let nexusTabsOpen = null;
+async function checkNexusTabs(){
+  if(!nexusBridge) return;
+  const r = await nexusTabStatus();
+  const was = nexusTabsOpen;
+  nexusTabsOpen = (r && r.ok && typeof r.tabs === 'number') ? r.tabs : null;
+  document.body.classList.toggle('no-nexus-tab', nexusTabsOpen === 0);
+  markRockets();
+  // a tab has just appeared — pick up whatever could not be looked up before
+  if(was === 0 && nexusTabsOpen > 0){ for(const k in swept) delete swept[k]; sweepTasks(); }
+}
+function openNexusTab(){
+  nexusOpen(null).then(r=>{
+    if(!r || !r.ok){
+      window.open((state.settings.nexusUrl || NEXUS_URL_DEFAULT).split('#')[0], '_blank');
+    }
+    setTimeout(checkNexusTabs, 1500);
   });
 }
 // what this row would send for the day the timecard is set to
@@ -2483,24 +2535,33 @@ let lookupSeq = 0;
 const lookupWaiting = {};
 window.addEventListener('message', (e)=>{
   if(e.source !== window || !e.data) return;
-  if(e.data.__tc === 'ready'){ nexusBridge = true; markLookupHint(); return; }
+  if(e.data.__tc === 'ready'){ nexusBridge = true; markLookupHint();
+                               checkNexusTabs(); sweepTasks(); return; }
   if(e.data.__tc === 'lookupResult'){
     const cb = lookupWaiting[e.data.id];
     if(cb){ delete lookupWaiting[e.data.id]; cb(e.data); }
   }
 });
-function nexusLookup(task){
+function nexusAsk(kind, payload, ms){
   return new Promise(resolve=>{
     if(!nexusBridge) return resolve({ok:false, error:'no extension'});
     const id = ++lookupSeq;
     let done = false;
     const finish = (r)=>{ if(done) return; done = true; delete lookupWaiting[id]; resolve(r); };
     lookupWaiting[id] = finish;
-    setTimeout(()=>finish({ok:false, error:'no answer in 12s — the extension or Nexus never replied'}), 12000);
-    window.postMessage({__tc:'lookup', id:id, task:String(task),
-                        nexusUrl: state.settings.nexusUrl || NEXUS_URL_DEFAULT}, '*');
+    setTimeout(()=>finish({ok:false, error:'no answer in '+Math.round(ms/1000)+
+                           's — the extension or Nexus never replied'}), ms);
+    window.postMessage(Object.assign({__tc:kind, id:id,
+                        nexusUrl: state.settings.nexusUrl || NEXUS_URL_DEFAULT}, payload||{}), '*');
   });
 }
+/* A task with sub-tasks takes several questions to answer, and a far-away
+   Nexus is not quick about any of them, so this waits longer than it used to. */
+function nexusLookup(task){ return nexusAsk('lookup', {task:String(task)}, 30000); }
+/* Hand the job to the Nexus tab that is already open, rather than piling up a
+   new one on every press. */
+function nexusOpen(job){ return nexusAsk('open', {job:job||null}, 15000); }
+function nexusTabStatus(){ return nexusAsk('status', {}, 8000); }
 /* Walks the whole chain and says where it stopped, so a failure can be read
    instead of guessed at. */
 /* The panel it prints into. Nexus has no place in Settings, so it is built on
@@ -2633,6 +2694,9 @@ async function fillFromNexus(ri, task, before){
       return false;
     }
     r2[f] = v;
+    // remember what Nexus itself put here, and for which task
+    (r2.nx = r2.nx || {}).task = task;
+    r2.nx[f] = v;
     const cell = document.querySelector('.cell[data-row="'+ri+'"][data-f="'+f+'"]');
     if(cell){ cell.value = v; autoGrow(cell); }
     state.taskInfo = state.taskInfo || {};
@@ -2660,6 +2724,64 @@ async function fillFromNexus(ri, task, before){
     toast('🔎 '+task+' — Nexus sent no task description, so JOB TYPE is still yours to type.'+
           '<br><span style="opacity:.85">Ctrl+click the <b>N</b> to see everything it did send.</span>', 8000);
   }
+}
+/* ---- look up whatever task numbers are on the sheet --------------------
+   Typing one and pressing Enter is only one way a task number arrives. It can
+   be pasted into a cell, or a whole column of them pasted at once, or brought
+   back by an undo. So instead of hanging the lookup off one keystroke, the
+   sheet is swept: every 6-digit task with an empty PROJECT, CONTRACTOR or JOB
+   TYPE is looked up, one after another so Nexus is never hammered. */
+const TASK_INFO_FIELDS = ['project','contractor','job'];   // what Nexus answers for
+const swept = {};                       // row -> the task already looked up there
+let sweepTimer = null, sweeping = false;
+function sweepTasks(){ clearTimeout(sweepTimer); sweepTimer = setTimeout(runSweep, 300); }
+function needsLookup(r){
+  const t = String(r.task||'').trim();
+  if(!/^\d{6}(-\d+)?$/.test(t)) return false;
+  return !String(r.project||'').trim() || !String(r.contractor||'').trim() || !String(r.job||'').trim();
+}
+/* Put a different task number in a row and whatever Nexus filled in beside it
+   belongs to the old one. Each row remembers the exact values Nexus gave it, so
+   only those are dropped — a box you have since typed in no longer matches, and
+   is left exactly as you wrote it. */
+function dropStaleInfo(){
+  let cleared = false;
+  week().rows.forEach((r,i)=>{
+    const nx = r.nx;
+    if(!nx || nx.task === String(r.task||'').trim()) return;
+    TASK_INFO_FIELDS.forEach(f=>{
+      if(!nx[f] || String(r[f]||'').trim() !== String(nx[f]).trim()) return;   // yours now
+      r[f] = '';
+      const cell = document.querySelector('.cell[data-row="'+i+'"][data-f="'+f+'"]');
+      if(cell){ cell.value = ''; autoGrow(cell); }
+      cleared = true;
+    });
+    delete r.nx;
+  });
+  if(cleared) recalc();
+}
+async function runSweep(){
+  if(sweeping || !nexusBridge) return;
+  sweeping = true;
+  dropStaleInfo();
+  try{
+    let done = 0;
+    for(;;){
+      const rows = week().rows;
+      let i = -1;
+      for(let k=0; k<rows.length; k++){
+        const t = String(rows[k].task||'').trim();
+        if(needsLookup(rows[k]) && swept[k] !== t){ i = k; break; }
+      }
+      if(i < 0) break;
+      const r = rows[i], task = String(r.task||'').trim();
+      swept[i] = task;                                   // one go per row per number
+      if(++done === 2) toast('🔎 Looking the pasted task numbers up in Nexus…', 4000);
+      await fillFromNexus(i, task, { project:    String(r.project||'').trim(),
+                                     contractor: String(r.contractor||'').trim(),
+                                     job:        String(r.job||'').trim() });
+    }
+  } finally { sweeping = false; }
 }
 function rowHours(r, d){ return num(r.h[d]) || num(r.ha[d]) || 0; }
 /* Every day this row has hours on. Nexus books one day per submission, so the
@@ -2696,8 +2818,26 @@ function rocketGo(ri, btn, forcePick, dayIdx){
   const job = {task:p.task, milestone:p.milestone, hours:p.hours, date:p.date, desc:p.desc};
   const what = '<b>'+p.task+'</b> · '+p.milestone+' · '+(p.hours||'0')+' h · '+p.date;
   if(state.settings.rocketMode === 'helper'){ rocketViaHelper(job, what); return; }
-  // Default: open Nexus as a new tab in THIS browser window, right beside the
-  // timecard, and let the "Timecard → Nexus" extension fill it in that tab.
+  /* The Nexus tab you already have open is the one to use: it is signed in,
+     and pressing N six times should not leave six tabs behind. The extension
+     hands the job to that tab and brings it to the front; only when there is
+     no Nexus tab at all does a new one get opened. */
+  if(nexusBridge){
+    nexusOpen(job).then(r=>{
+      if(r && r.ok){
+        toast('🚀 '+r.how+' — '+what+
+              '<br><span style="opacity:.85">It fills the Hours form there; check it and press <b>Submit</b>.</span>', 9000);
+        setTimeout(checkNexusTabs, 1500);
+      }else{
+        rocketNewTab(job, what);
+      }
+    });
+    return;
+  }
+  rocketNewTab(job, what);
+}
+// Without the extension there is no way to reach an existing tab, so open one.
+function rocketNewTab(job, what){
   const base = (state.settings.nexusUrl || NEXUS_URL_DEFAULT).split('#')[0];
   const w = window.open(base + '#tcjob=' + encodeURIComponent(JSON.stringify(job)), '_blank');
   if(!w){
@@ -5539,6 +5679,16 @@ applyBar();
 applyGames();
 undoBase = JSON.stringify(state);       // baseline for undo (after the current week is materialised)
 updateUndoButtons();
+/* Watch for a Nexus tab, so the reminder appears the moment the last one is
+   closed and clears itself the moment one is opened. */
+{
+  const nn = document.getElementById('needNexus');
+  if(nn) nn.addEventListener('click', openNexusTab);
+  setInterval(checkNexusTabs, 10000);
+  addEventListener('focus', checkNexusTabs);
+  setTimeout(checkNexusTabs, 1200);
+  setTimeout(sweepTasks, 1500);          // fill in anything the sheet opened with
+}
 initSaveFile();                          // resume the linked auto-save file, if one was set up before
 if(!splitEmails(state.settings.recipients.daily.to).length && !splitEmails(state.settings.recipients.weekly.to).length){
   toast('👋 Welcome! Open <b>⚙ Settings</b> once to save the email address and CCs you send your timecard to. Everything you type in the sheet is saved automatically in this browser.', 12000);

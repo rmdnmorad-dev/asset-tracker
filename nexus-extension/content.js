@@ -7,6 +7,14 @@
  *  the page's own jQuery, which the fill routine needs. page.js is injected
  *  into the page itself, where jQuery is real.
  */
+function tcInject(job) {
+  var s = document.createElement('script');
+  s.src = chrome.runtime.getURL('page.js');
+  s.dataset.job = JSON.stringify(job);
+  s.onload = function () { s.remove(); };
+  (document.head || document.documentElement).appendChild(s);
+}
+
 (function () {
   'use strict';
 
@@ -23,17 +31,19 @@
     history.replaceState(null, '', location.pathname + location.search);
   } catch (e) {}
 
-  function inject() {
-    var s = document.createElement('script');
-    s.src = chrome.runtime.getURL('page.js');
-    s.dataset.job = JSON.stringify(job);
-    s.onload = function () { s.remove(); };
-    (document.head || document.documentElement).appendChild(s);
-  }
-
-  if (document.documentElement) inject();
-  else document.addEventListener('readystatechange', inject, { once: true });
+  if (document.documentElement) tcInject(job);
+  else document.addEventListener('readystatechange', function () { tcInject(job); }, { once: true });
 })();
+
+/* A job handed to a tab that is already sitting on the task list. Nothing
+   reloads, so whatever you had open stays open. If this is some other Nexus
+   page the answer is no, and the extension sends the tab to the list instead. */
+chrome.runtime.onMessage.addListener(function (msg, sender, reply) {
+  if (!msg || msg.type !== 'tcJob' || !msg.job || !msg.job.task) return;
+  if (!document.querySelector('input.task_search')) { reply({ ok: false }); return; }
+  try { tcInject(msg.job); reply({ ok: true }); }
+  catch (e) { reply({ ok: false }); }
+});
 
 /* ---- lookups run in here, not in the background ----------------------
    A background fetch has its own network context: it cannot use a

@@ -17,7 +17,12 @@
   var box, txt;
   function banner() {
     if (box) return;
+    /* The tab is reused now, so a second press would otherwise leave the first
+       press's panel sitting underneath this one. */
+    var old = document.getElementById('tcn-box');
+    if (old) old.remove();
     box = document.createElement('div');
+    box.id = 'tcn-box';
     box.style.cssText = [
       'position:fixed', 'z-index:2147483647', 'right:14px', 'bottom:14px',
       'max-width:330px', 'background:#0f1626', 'color:#e8eefc',

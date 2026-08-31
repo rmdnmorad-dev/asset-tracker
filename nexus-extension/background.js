@@ -211,17 +211,40 @@ function readBody(got, task, diag, soft) {
 /* Nexus lists a task's sub-tasks as separate rows - 300042, 300042-1,
    300042-2 - and each carries its own description. The newest one is the one
    the timecard wants. There is no call that lists them, so they are asked for
-   in turn and the run stops at the first one that is not there. */
+   directly. A whole batch goes at once: asking one at a time meant a round
+   trip each, and four of those ran the timecard's patience out. Nearly every
+   task is answered by the first batch. */
 const MAX_SUBTASKS = 40;
+const PROBE_BATCH = 5;
 async function latestSub(task, nexusUrl, diag, route) {
   let best = null;
-  for (let n = 1; n <= MAX_SUBTASKS; n++) {
-    const row = task + '-' + n;
-    const r = readBody(await ask(row, nexusUrl, diag, route, false), row, diag, true);
-    if (!r || !r.info) break;                 // not there, so nothing above it is either
-    best = { row: row, info: r.info };
+  for (let start = 1; start <= MAX_SUBTASKS; start += PROBE_BATCH) {
+    const ns = [];
+    for (let n = start; n < start + PROBE_BATCH && n <= MAX_SUBTASKS; n++) ns.push(n);
+    const found = await Promise.all(ns.map(async (n) => {
+      const row = task + '-' + n;
+      const r = readBody(await ask(row, nexusUrl, diag, route, false), row, diag, true);
+      return r && r.info ? { row: row, info: r.info } : null;
+    }));
+    let gap = false;
+    for (const f of found) {
+      if (!f) { gap = true; break; }     // a missing number ends the run
+      best = f;
+    }
+    if (gap) break;
   }
   return best;
+}
+
+/* The same task is asked for again the moment a whole column is pasted, so a
+   short memory keeps that from becoming a burst of identical requests. */
+const CACHE_MS = 60000;
+const cache = new Map();
+function cached(key) {
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.t < CACHE_MS) return hit.res;
+  if (hit) cache.delete(key);
+  return null;
 }
 
 async function lookup(task, nexusUrl) {
@@ -250,23 +273,94 @@ async function lookup(task, nexusUrl) {
   // A number typed WITH a suffix already names the row it wants.
   if (!/-\d+$/.test(task)) {
     const newest = await latestSub(task, nexusUrl, diag, opened.route);
-    if (newest) { row = newest.row; info = newest.info; }
+    if (newest) {
+      row = newest.row;
+      info = newest.info;
+      diag.subTasks = 'used ' + row + ' — the newest sub-task of ' + task;
+    }
   }
   diag.ms = Date.now() - t0;
   diag.row = row;
-  if (row !== task) {
-    diag.subTasks = 'used ' + row + ' — the newest sub-task of ' + task;
-    // show the row that was actually used, not the one that was typed
-    const re = readBody(await ask(row, nexusUrl, diag, opened.route, false), row, diag, false);
-    if (re && re.info) info = re.info;
-  }
   diag.jobTypeFrom = info.jobTypeKey || '(no description field in the answer)';
   diag.step = 'ok';
   return { ok: true, data: Object.assign({ row: row }, info), diag: diag };
 }
 
+/* ---- opening Nexus ----------------------------------------------------
+   The rocket used to open a new tab every time. If Nexus is already open,
+   that tab is the one to use: it is signed in, and a pile of duplicates is
+   nobody's idea of help. */
+function activate(tab) {
+  return new Promise((done) => {
+    try {
+      chrome.tabs.update(tab.id, { active: true }, () => {
+        void chrome.runtime.lastError;
+        try { chrome.windows.update(tab.windowId, { focused: true }, () => { void chrome.runtime.lastError; done(); }); }
+        catch (e) { done(); }
+      });
+    } catch (e) { done(); }
+  });
+}
+function handOver(tabId, job) {
+  return new Promise((done) => {
+    try {
+      chrome.tabs.sendMessage(tabId, { type: 'tcJob', job: job }, (r) => {
+        done(!chrome.runtime.lastError && !!(r && r.ok));
+      });
+    } catch (e) { done(false); }
+  });
+}
+async function openJob(job, nexusUrl) {
+  const base = String(nexusUrl || '').split('#')[0] || 'http://nexus.tcs.local/protected.php';
+  const url = base + (job ? '#tcjob=' + encodeURIComponent(JSON.stringify(job)) : '');
+  const tabs = await findNexusTabs(base);
+
+  for (const tab of tabs) {
+    /* Best case: the tab is on the task list already, so it takes the job
+       where it stands - no reload, no losing your place. */
+    if (job && await handOver(tab.id, job)) {
+      await activate(tab);
+      return { ok: true, how: 'handed to your open Nexus tab' };
+    }
+    // It is on some other Nexus page, so send that same tab to the list.
+    try {
+      await chrome.tabs.update(tab.id, { url: onTabOrigin(tab.url, url) });
+      await activate(tab);
+      return { ok: true, how: 'sent your open Nexus tab to the task' };
+    } catch (e) { /* try the next tab */ }
+  }
+
+  try {
+    await chrome.tabs.create({ url: url, active: true });
+    return { ok: true, how: 'opened a new Nexus tab' };
+  } catch (e) {
+    return { ok: false, error: String((e && e.message) || e) };
+  }
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
-  if (!msg || msg.type !== 'tcLookup') return;
-  lookup(msg.task, msg.nexusUrl).then(reply);
-  return true;                                          // reply arrives asynchronously
+  if (!msg) return;
+
+  if (msg.type === 'tcLookup') {
+    const key = String(msg.task) + '@' + String(msg.nexusUrl || '');
+    const hit = cached(key);
+    if (hit) { reply(Object.assign({ fromCache: true }, hit)); return true; }
+    lookup(msg.task, msg.nexusUrl).then((res) => {
+      if (res && res.ok) cache.set(key, { t: Date.now(), res: res });
+      reply(res);
+    });
+    return true;                                        // reply arrives asynchronously
+  }
+
+  if (msg.type === 'tcOpen') {
+    openJob(msg.job, msg.nexusUrl).then(reply);
+    return true;
+  }
+
+  // "is Nexus open in this browser?" - the timecard turns its N red when not
+  if (msg.type === 'tcStatus') {
+    const base = String(msg.nexusUrl || '').split('#')[0] || 'http://nexus.tcs.local/protected.php';
+    findNexusTabs(base).then((tabs) => reply({ ok: true, tabs: tabs.length }));
+    return true;
+  }
 });

@@ -77,9 +77,12 @@ The Hours form is outlined in green so you can see exactly what was touched.
 
 ## How it works
 
-The 🚀 opens `nexus.tcs.local/protected.php#tcjob=…` with that row's task,
-milestone, hours, date and notes in the URL. The extension is the only thing
-that reads that, and it only runs on Nexus pages.
+The 🚀 hands that row's task, milestone, hours, date and notes to the Nexus tab
+you already have open, and brings it to the front — no reload, and no pile of
+duplicate tabs however many times you press it. Only when there is no Nexus tab
+at all does it open one, at
+`nexus.tcs.local/protected.php#tcjob=…`. The extension is the only thing that
+reads that, and it only runs on Nexus pages.
 
 Two files, for one reason: a content script runs in an isolated world and
 cannot see the page's own jQuery, which the form needs. So `content.js` reads
@@ -148,9 +151,19 @@ reload the extension.
 
 Type a 6-digit task number and the row's **project**, **contractor** and **job
 type** fill themselves in a moment later, taken from the newest sub-task.
-Anything you have already typed is left alone — it only fills boxes that are
-empty, so a job type you disagree with has to be cleared before Nexus will
-replace it.
+
+It does not matter how the number arrives: typed and entered, pasted into one
+cell, or a whole column of numbers pasted at once — the sheet is swept and
+every task on it that is still missing information is looked up, one after
+another. Put a different number in a row and the previous task's answers are
+cleared out first, so a row never keeps information belonging to a task that is
+no longer in it. Anything you typed yourself is left exactly as you wrote it.
+
+**No Nexus tab open?** Nothing can be looked up — this page is a local file and
+the tab is what carries your session. So the N buttons turn red and a line
+appears above the sheet saying so; click either one and Nexus opens. When a tab
+is there, the N goes back to navy and the tasks that could not be looked up are
+picked up automatically.
 
 The answers are remembered per task number, so the same task fills instantly
 next time even without Nexus.

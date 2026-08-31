@@ -10,6 +10,9 @@
 (function () {
   'use strict';
 
+  // what the Timecard may ask for, and nothing else
+  const KINDS = { lookup: 'tcLookup', open: 'tcOpen', status: 'tcStatus' };
+
   function answer(id, payload) {
     window.postMessage(Object.assign({ __tc: 'lookupResult', id: id }, payload), '*');
   }
@@ -17,11 +20,13 @@
   window.addEventListener('message', function (e) {
     if (e.source !== window) return;                   // only this page, not frames
     const d = e.data;
-    if (!d || d.__tc !== 'lookup' || !d.task) return;
+    if (!d || !d.__tc) return;
+    const type = KINDS[d.__tc];
+    if (!type) return;
 
     try {
       chrome.runtime.sendMessage(
-        { type: 'tcLookup', task: d.task, nexusUrl: d.nexusUrl },
+        { type: type, task: d.task, job: d.job, nexusUrl: d.nexusUrl },
         function (res) {
           if (chrome.runtime.lastError) {
             answer(d.id, { ok: false, error: 'the extension was reloaded — refresh this page' });
