@@ -205,6 +205,26 @@
 
   .todayhl{box-shadow:inset 0 -3px 0 #2563eb}
   .customhl{box-shadow:inset 0 -4px 0 #eab308}
+
+  /* ---- the day the N button books hours against ----
+     Off by default: the N sends the day the timecard is on. Switch it on in the
+     Total Hours corner and a tab appears at the top of every day; the one you
+     pick is the day the hours are filed under. */
+  #thLabel{position:relative}
+  #nexusDayBtn{position:absolute;top:3px;left:3px;right:3px;height:17px;padding:0;
+    border:1px solid #b59a1f;border-radius:3px;cursor:pointer;
+    background:rgba(255,255,255,.55);color:#5c4b00;
+    font:bold 9.5px/1 Arial,sans-serif;letter-spacing:.03em;
+    display:flex;align-items:center;justify-content:center;white-space:nowrap;overflow:hidden}
+  #nexusDayBtn:hover{background:#fff}
+  body.nexusday #nexusDayBtn{background:#1e3a8a;border-color:#1e3a8a;color:#fff}
+  body.nexusday #nexusDayBtn:hover{background:#1d4ed8}
+  .ndaypick{display:none;position:absolute;top:1px;left:50%;transform:translateX(-50%);
+    width:18px;height:5px;border-radius:3px;background:rgba(220,38,38,.4);cursor:pointer;z-index:8}
+  body.nexusday .ndaypick{display:block}
+  .ndaypick:hover{background:rgba(220,38,38,.75)}
+  .ndaypick.on{background:#dc2626;width:30px;height:6px;box-shadow:0 0 0 1px rgba(255,255,255,.5)}
+  body.capturing .ndaypick,body.capturing #nexusDayBtn{display:none !important}
   #sheet.customday .dayhdr{cursor:grab}
   #sheet.customday .dayhdr:active{cursor:grabbing}
   #customDaySel{font-size:12px;padding:1px 3px;max-width:170px}
@@ -823,10 +843,14 @@
   <div class="row" style="margin-top:6px">
     <div class="fld" style="flex:1 1 100%">
       <div style="font-size:11px;color:#555;background:#f6f7f9;border:1px solid #e2e6ec;border-radius:6px;padding:8px 10px;line-height:1.6">
-        <b>N</b> — the navy N beside a 6-digit task opens that task in Nexus and fills the Hours form.
+        <b>N</b> — the navy N beside a task number opens that task in Nexus and fills the Hours form.
         It never presses Submit. Right-click it (or Alt+click) to choose that task's <b>milestone</b>;
-        it is remembered per task number. Typing a 6-digit task also fills its <b>project</b> and
-        <b>contractor</b> from Nexus. Keep a Nexus tab open and signed in.
+        it is remembered per task number. Typing a task number also fills its <b>project</b>,
+        <b>contractor</b> and <b>job type</b> from Nexus. A revision works the same way — type
+        <b>300042-1</b> and you get that row. Keep a Nexus tab open and signed in.<br>
+        <b>Filing hours for an earlier day:</b> the small <b>N day</b> switch in the yellow
+        <i>Total Hours</i> corner turns on a red tab above each day name. Pick a day and the N files
+        its hours under that date, until you switch it off again.
       </div>
     </div>
   </div>
@@ -1350,6 +1374,7 @@ function defaultState(){
       subject:'{type} Timecard-{date}',
       subjectV2:true, subjectMode:'auto', sendFormat:'eml',
       customDay:false, customDayIdx:null,      // custom single day for a Daily send
+      nexusDay:false, nexusDayIdx:null,        // which day's hours the N button sends
       includeProjects:true, creditOn:true,
       clockLA:true, clockJO:true, clockOut:true,   // digital clocks beside the sheet
       clockColor:'#f2f7ff', clockSize:37, clockFont:'mono',
@@ -1412,6 +1437,8 @@ if(state.settings.remBefore1===undefined) state.settings.remBefore1 = 30;
 if(state.settings.remBefore2===undefined) state.settings.remBefore2 = 5;
 if(state.settings.customDay===undefined) state.settings.customDay = false;
 if(state.settings.customDayIdx===undefined) state.settings.customDayIdx = null;
+if(state.settings.nexusDay===undefined) state.settings.nexusDay = false;
+if(state.settings.nexusDayIdx===undefined) state.settings.nexusDayIdx = null;
 if(state.settings.includeProjects===undefined) state.settings.includeProjects = true;
 if(state.settings.creditOn===undefined) state.settings.creditOn = true;
 if(!state.settings.nexusUrl) state.settings.nexusUrl = 'http://nexus.tcs.local/protected.php';
@@ -1754,9 +1781,12 @@ function buildTable(){
 
   // day headers ---------------------------------------------------------
   h += '<tr><td class="nb" colspan="5"></td>';
+  /* the little tab on each day header that picks the day the N button sends */
+  const pickDay = d => '<span class="ndaypick" data-nday="'+d+'" title="Send this day\'s hours to Nexus"></span>';
   for(let d=0; d<7; d++) h += '<td class="b dayhdr" colspan="2" data-daycol="'+d+'" id="dh'+d+'">'+
-                              '<span class="hdrtx">'+DAYS[d]+'</span>'+gripDay(d)+'</td>';
+                              pickDay(d)+'<span class="hdrtx">'+DAYS[d]+'</span>'+gripDay(d)+'</td>';
   h += '<td class="b yellow" rowspan="8" data-totcol id="thLabel">'+
+       '<button type="button" id="nexusDayBtn"></button>'+
        esc(state.settings.totalHoursLabel||'Total Hours')+'</td></tr>';
 
   // DATE row -------------------------------------------------------------
@@ -2290,8 +2320,23 @@ function bindSheetInputs(){
     }
   });
   // duplicate-row button (⧉) and Nexus rocket (🚀) on each task row
-  host.addEventListener('mousedown', e=>{ if(e.target.closest && e.target.closest('.duprow,.rocket')) e.stopPropagation(); }, true);
+  host.addEventListener('mousedown', e=>{ if(e.target.closest && e.target.closest('.duprow,.rocket,.ndaypick,#nexusDayBtn')) e.stopPropagation(); }, true);
   host.addEventListener('click', e=>{
+    // the N-day switch in the Total Hours corner, and the day tabs it turns on
+    const nb = e.target.closest && e.target.closest('#nexusDayBtn');
+    if(nb){
+      e.preventDefault(); e.stopPropagation();
+      state.settings.nexusDay = !state.settings.nexusDay;
+      if(state.settings.nexusDay && state.settings.nexusDayIdx==null)
+        state.settings.nexusDayIdx = dailyCol();
+      applyNexusDay(); save();
+      toast(state.settings.nexusDay
+        ? '🅽 Pick the day with the red tabs above the day names. The N button files hours under it.'
+        : '🅽 Back to normal — the N button files hours under the day the timecard is on.', 6000);
+      return;
+    }
+    const nt = e.target.closest && e.target.closest('.ndaypick');
+    if(nt){ e.preventDefault(); e.stopPropagation(); setNexusDay(+nt.dataset.nday); return; }
     const dup = e.target.closest && e.target.closest('.duprow');
     if(dup){ e.preventDefault(); e.stopPropagation(); duplicateRow(+dup.dataset.row); return; }
     const rk = e.target.closest && e.target.closest('.rocket');
@@ -2500,9 +2545,12 @@ function markRockets(){
     b.hidden = !NEXUS_TASK.test(t);           // 300042, and 300042-1 too
     b.classList.toggle('set', !!ms);
     b.classList.toggle('needtab', need);
+    const col = nexusCol(), day = DAYS[col];
     b.title = need
       ? 'No Nexus tab is open — click to open one.\nKeep a Nexus tab open for the tool to work.'
       : (t ? ('Send to Nexus — task '+t+(ms?' · '+ms:' · pick a milestone first')+
+              '\nDated '+day.charAt(0)+day.slice(1).toLowerCase()+' '+usDate(weekDates()[col])+
+              (state.settings.nexusDay ? ' (the day picked in the header)' : '')+
               '\nRight-click (or Alt+click) to change the milestone'+
               '\nCtrl+click to see what Nexus answers for it') : 'Enter a task # first');
   });
@@ -2837,8 +2885,12 @@ function rocketPayload(ri, dayIdx){
   const choices = rowHourDays(r);
   // The day you are on, unless it has nothing on this row and exactly one other
   // day does — then that is plainly the one you meant.
-  let d = dayIdx==null ? dailyCol() : dayIdx, moved = false;
-  if(dayIdx==null && !rowHours(r,d) && choices.length===1){ d = choices[0].d; moved = true; }
+  let d = dayIdx==null ? nexusCol() : dayIdx, moved = false;
+  /* Only guess when no day was asked for. A day picked on the header is a
+     decision, so an empty cell there means "nothing that day", not "find one". */
+  if(dayIdx==null && !state.settings.nexusDay && !rowHours(r,d) && choices.length===1){
+    d = choices[0].d; moved = true;
+  }
   const task = String(r.task||'').trim();
   const hrs = rowHours(r,d);
   return { task, milestone: taskMilestone(task), hours: hrs ? String(fmtNum(hrs)) : '',
@@ -2850,14 +2902,16 @@ function rocketGo(ri, btn, forcePick, dayIdx){
   if(!/^\d{3,}(-\d+)?$/.test(p.task)){ toast('🚀 Put a task number in this row first.'); return; }
   if(forcePick || !p.milestone){ milestoneMenu(btn, p.task, ()=>rocketGo(ri, btn, false, dayIdx)); return; }
   // Nothing on today, but hours on several other days — only you know which one.
-  if(dayIdx==null && !p.hours && p.choices.length>1){
+  if(dayIdx==null && !state.settings.nexusDay && !p.hours && p.choices.length>1){
     dayMenu(btn, p.choices, d=>rocketGo(ri, btn, false, d)); return;
   }
-  if(!p.hours) toast('🚀 No hours logged for <b>'+p.day+'</b> on this row — sending the note only.', 6000);
-  else if(p.moved) toast('🚀 Nothing on <b>'+DAYS[dailyCol()]+'</b> for this row — sending <b>'+p.day+
-                         '</b> instead ('+p.hours+' h).', 7000);
+  if(p.moved) toast('🚀 Nothing on <b>'+DAYS[nexusCol()]+'</b> for this row — sending <b>'+p.day+
+                    '</b> instead ('+p.hours+' h).', 7000);
   const job = {task:p.task, milestone:p.milestone, hours:p.hours, date:p.date, desc:p.desc};
-  const what = '<b>'+p.task+'</b> · '+p.milestone+' · '+(p.hours||'0')+' h · '+p.date;
+  /* Said in the one message rather than a warning the next toast wipes out. */
+  const what = '<b>'+p.task+'</b> · '+p.milestone+' · '+(p.hours||'0')+' h · '+p.date +
+               (p.hours ? '' : '<br><span style="color:#ffd58a">No hours on <b>'+p.day+
+                               '</b> for this row — the note is going on its own.</span>');
   if(state.settings.rocketMode === 'helper'){ rocketViaHelper(job, what); return; }
   /* The Nexus tab you already have open is the one to use: it is signed in,
      and pressing N six times should not leave six tabs behind. The extension
@@ -3037,6 +3091,38 @@ function updateDayIndicator(){
   }
   const sheet = document.getElementById('sheet');
   if(sheet) sheet.classList.toggle('customday', custom);
+  applyNexusDay();
+}
+/* The N day: the switch in the Total Hours corner, and the tab on the day it
+   is set to. Off, the N follows the timecard's own day and neither shows. */
+function applyNexusDay(){
+  const on = !!state.settings.nexusDay, col = nexusCol(), dates = weekDates();
+  document.body.classList.toggle('nexusday', on);
+  document.querySelectorAll('#tblhost .ndaypick').forEach(t=>{
+    const d = +t.dataset.nday;
+    t.classList.toggle('on', on && d === col);
+    t.title = 'Send this row\'s hours to Nexus dated ' +
+              DAYS[d].charAt(0)+DAYS[d].slice(1).toLowerCase() + ' ' + usDate(dates[d]);
+  });
+  const b = document.getElementById('nexusDayBtn');
+  if(b){
+    b.textContent = on ? 'N · ' + DAYS[col].slice(0,3) : 'N day';
+    b.title = on
+      ? 'The N button files hours under ' + DAYS[col].charAt(0)+DAYS[col].slice(1).toLowerCase() +
+        ' ' + usDate(dates[col]) + '.\nPick another with the red tabs on the day headers.' +
+        '\nClick to go back to the day the timecard is on.'
+      : 'The N button files hours under the day the timecard is on (' +
+        DAYS[col].charAt(0)+DAYS[col].slice(1).toLowerCase() + ').' +
+        '\nClick to choose a different day — for hours worked yesterday or earlier.';
+  }
+  markRockets();
+}
+function setNexusDay(idx){
+  state.settings.nexusDayIdx = idx;
+  applyNexusDay(); save();
+  const dates = weekDates();
+  toast('🅽 The N button now files hours under <b>'+DAYS[idx].charAt(0)+DAYS[idx].slice(1).toLowerCase()+
+        ' '+usDate(dates[idx])+'</b>.', 5000);
 }
 function syncCustomDayUI(){
   const cb = document.getElementById('customDay'), sel = document.getElementById('customDaySel');
@@ -3059,7 +3145,7 @@ function bindCustomDayDrag(){
   let dragging = false;
   const dayUnder = e=>{ const el=document.elementFromPoint(e.clientX,e.clientY); const dh=el&&el.closest('.dayhdr'); return dh?+dh.dataset.daycol:null; };
   host.addEventListener('pointerdown', e=>{
-    if(!state.settings.customDay || e.target.closest('.colgrip')) return;
+    if(!state.settings.customDay || e.target.closest('.colgrip,.ndaypick,#nexusDayBtn')) return;
     const dh = e.target.closest('.dayhdr'); if(!dh) return;
     e.preventDefault(); dragging = true;
     setCustomDay(+dh.dataset.daycol, false);
@@ -3761,6 +3847,14 @@ function todayCol(){ return (new Date().getDay()+6)%7; }   // Mon=0 … Sun=6
 function dailyCol(){
   return state.settings.customDay ? (state.settings.customDayIdx==null ? todayCol() : state.settings.customDayIdx)
                                   : todayCol();
+}
+/* Which day the N button books hours against. Normally the day the timecard is
+   already on; switch the N day on in the header and it is the day you picked
+   there instead, so yesterday's hours can be filed today. */
+function nexusCol(){
+  return state.settings.nexusDay
+       ? (state.settings.nexusDayIdx==null ? todayCol() : state.settings.nexusDayIdx)
+       : dailyCol();
 }
 /* What the draft email covers. A Weekly send is always the whole week; a Daily
    one is the single day, unless you asked for the full week under Daily. */
