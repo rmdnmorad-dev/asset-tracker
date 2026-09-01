@@ -120,8 +120,13 @@ function tcReport(base) {
 /* page.js runs in the page's own world and cannot reach the extension, so it
    asks for the scan through here once its search has landed. */
 window.addEventListener('message', function (e) {
-  if (e.source !== window || !e.data || !e.data.__tcScan) return;
-  tcReport(e.data.__tcScan);
+  if (e.source !== window || !e.data) return;
+  if (e.data.__tcScan) { tcReport(e.data.__tcScan); return; }
+  // the milestones this task really offers, read off its own Hours tab
+  if (e.data.__tcMilestones) {
+    try { chrome.runtime.sendMessage({ type: 'tcMilestonesSeen', seen: e.data.__tcMilestones }); }
+    catch (err) {}
+  }
 });
 
 /* The lookup asks this before it fetches: if the rows happen to be on screen

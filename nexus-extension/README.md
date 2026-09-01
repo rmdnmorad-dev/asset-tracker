@@ -19,6 +19,12 @@ Two things, both **in the browser you are already using**:
    job type stays empty — the field that holds the description will be in that
    list.
 
+**Milestones** come from Nexus too. The first time the 🚀 opens a task it reads
+that task's own milestone dropdown off the Hours tab and keeps it, so choosing a
+milestone in the timecard offers what that task actually has rather than a fixed
+list. Until a task has been opened once, the timecard shows its own usual list
+and says so.
+
 It never presses Submit. You do that.
 
 ---

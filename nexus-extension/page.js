@@ -246,8 +246,22 @@
 
     // 4 - milestone first, then hours, date, description
     var filled = [], missing = [];
+    var sel = form.querySelector('select[name="ms_select"]') || form.querySelector('select');
+
+    /* Send back the milestones this task actually offers. The timecard used to
+       carry a fixed list of its own, which was only ever a copy of a typical
+       one; these are the real thing, for this task. */
+    if (sel) try {
+      var opts = [];
+      for (var mi = 0; mi < sel.options.length; mi++) {
+        var mo = sel.options[mi], mt = String(mo.textContent || '').replace(/\s+/g, ' ').trim();
+        if (!mt || !String(mo.value || '').trim()) continue;      // skip "-- pick --"
+        if (opts.indexOf(mt) < 0) opts.push(mt);
+      }
+      if (opts.length) window.postMessage({ __tcMilestones: { task: J.task, list: opts } }, '*');
+    } catch (e) {}
+
     if (J.milestone) {
-      var sel = form.querySelector('select[name="ms_select"]') || form.querySelector('select');
       if (sel) {
         var hit = null, o, i;
         for (i = 0; i < sel.options.length; i++) {

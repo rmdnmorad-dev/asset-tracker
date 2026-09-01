@@ -248,6 +248,38 @@ function rememberRows(seen) {
   if (any) { learnedAt = Date.now(); saveLearned(); }
 }
 
+/* ---- the milestones a task really offers -------------------------------
+   Read off that task's own Hours tab the first time the N opens it, so the
+   timecard can stop offering a fixed list of its own. Kept per task, and per
+   base task as well, since revisions of one task share their milestones. */
+const msByTask = new Map();
+function saveMilestones() {
+  try { chrome.storage.local.set({ tcMs: Object.fromEntries(msByTask) }); } catch (e) {}
+}
+try {
+  chrome.storage.local.get('tcMs', (o) => {
+    void chrome.runtime.lastError;
+    const m = (o && o.tcMs) || {};
+    for (const k of Object.keys(m)) if (Array.isArray(m[k])) msByTask.set(k, m[k]);
+  });
+} catch (e) {}
+function rememberMilestones(seen) {
+  if (!seen || !seen.task || !Array.isArray(seen.list) || !seen.list.length) return;
+  const list = seen.list.map(String).filter(Boolean);
+  if (!list.length) return;
+  const task = String(seen.task).trim();
+  const same = (a) => a && a.length === list.length && a.every((v, i) => v === list[i]);
+  if (same(msByTask.get(task)) && same(msByTask.get(baseOf(task)))) return;
+  msByTask.set(task, list);
+  msByTask.set(baseOf(task), list);
+  saveMilestones();
+}
+function milestonesFor(task) {
+  task = String(task || '').trim();
+  return msByTask.get(task) || msByTask.get(baseOf(task)) || null;
+}
+function baseOf(task) { return String(task || '').replace(/-\d+$/, ''); }
+
 /* Ask an open Nexus tab what it can see of this task right now. Free - it reads
    the page, touches nothing - and it means a task already listed over there is
    understood without anyone pressing N first. */
@@ -329,7 +361,8 @@ async function lookup(task, nexusUrl) {
   diag.row = task;
   diag.jobTypeFrom = info.jobTypeKey || '(no description field in the answer)';
   diag.step = 'ok';
-  return { ok: true, data: Object.assign({ row: task }, info), diag: diag };
+  const ms = milestonesFor(task);
+  return { ok: true, data: Object.assign({ row: task, milestones: ms || null }, info), diag: diag };
 }
 
 /* ---- opening Nexus ----------------------------------------------------
@@ -396,6 +429,14 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       reply(res);
     });
     return true;                                        // reply arrives asynchronously
+  }
+
+  if (msg.type === 'tcMilestonesSeen') { rememberMilestones(msg.seen); return; }
+
+  // what this task's own Hours tab offers, if it has been opened before
+  if (msg.type === 'tcMilestones') {
+    reply({ ok: true, list: milestonesFor(msg.task) || [] });
+    return true;
   }
 
   // page.js, by way of the Nexus tab's content script

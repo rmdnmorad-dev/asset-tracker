@@ -2637,6 +2637,11 @@ function nexusLookup(task){ return nexusAsk('lookup', {task:String(task)}, 30000
    new one on every press. */
 function nexusOpen(job){ return nexusAsk('open', {job:job||null}, 15000); }
 function nexusTabStatus(){ return nexusAsk('status', {}, 8000); }
+/* What this task's Hours tab offers, if the N has opened it before. */
+function nexusMilestones(task){
+  return nexusAsk('milestones', {task:String(task)}, 6000)
+    .then(r=>(r && r.ok && Array.isArray(r.list)) ? r.list : null);
+}
 /* Walks the whole chain and says where it stopped, so a failure can be read
    instead of guessed at. */
 /* The panel it prints into. Nexus has no place in Settings, so it is built on
@@ -2787,6 +2792,7 @@ async function fillFromNexus(ri, task, before){
   // JOB TYPE is the task's own description in Nexus — the "Description" column
   // in its task list, not the per-entry note on the Hours tab.
   if(put('job', res.data.jobType))           got.push('job type');
+  if(res.data.milestones) rememberMilestones(task, res.data.milestones);
   if(got.length){
     recalc(); save();
     const bits = [res.data.project, res.data.contractor, res.data.jobType].filter(Boolean);
@@ -3013,11 +3019,34 @@ function rocketMenu(anchor, title, buttons, pick){
     if(!m.contains(ev.target)){ m.remove(); document.removeEventListener('mousedown', off); }
   }), 0);
 }
+/* The milestones a task offers are Nexus's to say, not ours. They are read off
+   that task's own Hours tab the first time the N opens it and kept per task, so
+   the built-in list below is only what is shown until then. */
 function milestoneMenu(anchor, task, done){
   const cur = taskMilestone(task);
-  rocketMenu(anchor, 'Milestone for task '+escHtml(task),
-    NEXUS_MILESTONES.map(x=>({v:x, label:escHtml(x), cur:x===cur})),
-    v=>{ setTaskMilestone(task, v); if(done) done(); });
+  const show = (list, where)=>{
+    if(!document.body.contains(anchor)) return;      // the row went away
+    rocketMenu(anchor, 'Milestone for task '+escHtml(task)+
+      ' <span style="font-weight:normal;color:#8a93a0">· '+where+'</span>',
+      list.map(x=>({v:x, label:escHtml(x), cur:x===cur})),
+      v=>{ setTaskMilestone(task, v); if(done) done(); });
+  };
+  const known = ((state.taskInfo||{})[task]||{}).msList;
+  if(known && known.length){ show(known, 'from Nexus'); return; }
+  show(NEXUS_MILESTONES, 'the usual list');
+  // ask Nexus what this task really offers, and swap the menu if it knows
+  nexusMilestones(task).then(list=>{
+    if(!list || !list.length) return;
+    rememberMilestones(task, list);
+    if(document.querySelector('.msmenu')) show(list, 'from Nexus');
+  });
+}
+function rememberMilestones(task, list){
+  if(!list || !list.length) return;
+  state.taskInfo = state.taskInfo || {};
+  const m = state.taskInfo[task] = state.taskInfo[task] || {};
+  if(JSON.stringify(m.msList||null) === JSON.stringify(list)) return;
+  m.msList = list; save();
 }
 /* Which day's hours to book, when the day you are on has none on this row. */
 function dayMenu(anchor, choices, done){

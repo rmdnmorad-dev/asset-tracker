@@ -11,7 +11,8 @@
   'use strict';
 
   // what the Timecard may ask for, and nothing else
-  const KINDS = { lookup: 'tcLookup', open: 'tcOpen', status: 'tcStatus' };
+  const KINDS = { lookup: 'tcLookup', open: 'tcOpen', status: 'tcStatus',
+                  milestones: 'tcMilestones' };
 
   function answer(id, payload) {
     window.postMessage(Object.assign({ __tc: 'lookupResult', id: id }, payload), '*');
