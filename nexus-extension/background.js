@@ -106,8 +106,7 @@ function flipScheme(u) {
 }
 
 /* One request for one row id. Returns the body, or null if the route failed.
-   `route` is remembered between calls so the sub-task probes do not repeat the
-   work of finding out how this browser can reach Nexus. */
+   `route` is how this browser reaches Nexus, worked out once and reused. */
 async function ask(rowId, nexusUrl, diag, route, loud) {
   const url = ajaxUrl(nexusUrl, rowId);
   const note = (s) => { if (loud) diag.tried.push(s); };
@@ -167,9 +166,9 @@ async function openRoute(task, nexusUrl, diag) {
   return null;
 }
 
-/* Turn a body into the task's fields, or null if it is not a task. `soft` is
-   for the sub-task probes, where "not there" is the expected answer and must
-   not be reported as a failure. */
+/* Turn a body into the task's fields, or null if it is not a task. `soft`
+   returns null instead of naming a failure, for callers where "not there" is an
+   ordinary answer rather than something to report. */
 function readBody(got, task, diag, soft) {
   if (!got) return soft ? null : { error: 'no answer' };
   if (!soft) { diag.status = got.status; diag.type = got.type; diag.finalUrl = got.finalUrl; }
@@ -214,73 +213,35 @@ function readBody(got, task, diag, soft) {
    directly. A whole batch goes at once: asking one at a time meant a round
    trip each, and four of those ran the timecard's patience out. Nearly every
    task is answered by the first batch. */
-const MAX_SUBTASKS = 40;
-const PROBE_BATCH = 5;
-/* Two answers that are the same in every field are the same row. */
-function sameInfo(a, b) {
-  return !!a && !!b && a.jobType === b.jobType && a.project === b.project &&
-         a.contractor === b.contractor && a.projectId === b.projectId;
-}
-async function latestSub(task, nexusUrl, diag, route, base) {
-  /* Check the first sub-task on its own. Some Nexus builds hand back the task
-     itself whatever suffix they are given, and asking forty times for forty
-     copies of the same answer is slow and, worse, ends up filling JOB TYPE
-     with the wrong row's description. */
-  const one = readBody(await ask(task + '-1', nexusUrl, diag, route, false), task + '-1', diag, true);
-  if (!one || !one.info) return null;                  // no sub-tasks at all
-  if (sameInfo(one.info, base)) {
-    diag.subTasks = 'this Nexus answers the same whatever sub-task number it is given, ' +
-                    'so sub-tasks cannot be told apart by number alone — if this task ' +
-                    'has any, press N once and the task list will teach it which is newest';
-    return null;
-  }
-  let best = { row: task + '-1', info: one.info };
-  for (let start = 2; start <= MAX_SUBTASKS; start += PROBE_BATCH) {
-    const ns = [];
-    for (let n = start; n < start + PROBE_BATCH && n <= MAX_SUBTASKS; n++) ns.push(n);
-    const found = await Promise.all(ns.map(async (n) => {
-      const row = task + '-' + n;
-      const r = readBody(await ask(row, nexusUrl, diag, route, false), row, diag, true);
-      return r && r.info ? { row: row, info: r.info } : null;
-    }));
-    let gap = false;
-    for (const f of found) {
-      if (!f) { gap = true; break; }     // a missing number ends the run
-      best = f;
-    }
-    if (gap) break;
-  }
-  return best;
-}
-
 /* ---- what the task list itself said ------------------------------------
-   Where get_project_info cannot tell sub-tasks apart, the list can: it prints
-   a Description against every row. page.js reads that whenever the N button
-   opens a task, and it is kept here so the next lookup of that number gets the
-   newest sub-task's own description instead of the parent's. */
+   A row is asked for exactly as it is written: 300042 answers for 300042, and
+   300042-1 for 300042-1. Some Nexus builds hand the parent task back whatever
+   suffix get_project_info is given, though, and then the endpoint alone cannot
+   tell the rows apart. The task list can - it prints a Description against every
+   row - so whenever the N button opens a task, page.js reads that column and
+   every row it saw is kept here, one description per row id. */
 const learned = new Map();
 function saveLearned() {
-  try { chrome.storage.local.set({ tcLearned: Object.fromEntries(learned) }); } catch (e) {}
+  try { chrome.storage.local.set({ tcRowDesc: Object.fromEntries(learned) }); } catch (e) {}
 }
 try {
-  chrome.storage.local.get('tcLearned', (o) => {
+  chrome.storage.local.get('tcRowDesc', (o) => {
     void chrome.runtime.lastError;
-    const m = (o && o.tcLearned) || {};
+    const m = (o && o.tcRowDesc) || {};
     for (const k of Object.keys(m)) learned.set(k, m[k]);
   });
 } catch (e) {}
-function baseOf(task) { return String(task || '').replace(/-\d+$/, ''); }
 function rememberRows(seen) {
-  if (!seen || !seen.task || !Array.isArray(seen.rows) || !seen.rows.length) return;
-  let best = null;
+  if (!seen || !Array.isArray(seen.rows) || !seen.rows.length) return;
+  let any = false;
   for (const r of seen.rows) {
-    const m = /-(\d+)$/.exec(String(r.row || ''));
-    const n = m ? +m[1] : -1;
-    if (r.desc && (!best || n > best.n)) best = { n: n, row: r.row, desc: r.desc };
+    const row = String((r && r.row) || '').trim();
+    const desc = String((r && r.desc) || '').trim();
+    if (!row || !desc || learned.get(row) === desc) continue;
+    learned.set(row, desc);                 // 300042, 300042-1, 300042-2 … each its own
+    any = true;
   }
-  if (!best) return;
-  learned.set(baseOf(seen.task), { row: best.row, desc: best.desc });
-  saveLearned();
+  if (any) saveLearned();
 }
 
 /* The same task is asked for again the moment a whole column is pasted, so a
@@ -316,30 +277,20 @@ async function lookup(task, nexusUrl) {
   const base = readBody(opened.got, task, diag, false);
   if (base.error) return { ok: false, error: base.error, diag: diag };
 
-  let row = task, info = base.info;
-  // A number typed WITH a suffix already names the row it wants.
-  if (!/-\d+$/.test(task)) {
-    const newest = await latestSub(task, nexusUrl, diag, opened.route, base.info);
-    if (newest) {
-      row = newest.row;
-      info = newest.info;
-      diag.subTasks = 'used ' + row + ' — the newest sub-task of ' + task;
-    }
-    /* Whatever the endpoint managed, the list is the authority on which row is
-       newest and what it is for. */
-    const seen = learned.get(baseOf(task));
-    if (seen && seen.desc && seen.desc !== info.jobType) {
-      info = Object.assign({}, info, { jobType: seen.desc, jobTypeKey: 'the task list' });
-      row = seen.row || row;
-      diag.fromList = 'job type read off the task list, row ' + row;
-      diag.subTasks = 'used ' + row + ' — the newest sub-task of ' + task + ', per the task list';
-    }
+  /* The row asked for is the row answered for - no hunting for a newer one.
+     Where the task list has been seen, its Description for THIS row wins: it is
+     per-row, and get_project_info is not always. */
+  let info = base.info;
+  const seen = learned.get(task);
+  if (seen && seen !== info.jobType) {
+    info = Object.assign({}, info, { jobType: seen, jobTypeKey: 'the task list' });
+    diag.fromList = 'job type read off the task list, row ' + task;
   }
   diag.ms = Date.now() - t0;
-  diag.row = row;
+  diag.row = task;
   diag.jobTypeFrom = info.jobTypeKey || '(no description field in the answer)';
   diag.step = 'ok';
-  return { ok: true, data: Object.assign({ row: row }, info), diag: diag };
+  return { ok: true, data: Object.assign({ row: task }, info), diag: diag };
 }
 
 /* ---- opening Nexus ----------------------------------------------------

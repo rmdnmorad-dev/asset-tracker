@@ -4,7 +4,8 @@ Two things, both **in the browser you are already using**:
 
 1. **The 🚀** fills the Nexus hours form for that row, in a tab right next to
    the timecard. No second window, no Node.js, no helper in the background.
-2. **Task lookup** — type a 6-digit task number in the timecard and its
+2. **Task lookup** — type a task number in the timecard — six digits, or six
+   digits and a revision like `300042-1` — and its
    **project**, **contractor** and **job type** are pulled from Nexus and
    filled in. Job type is the task's own description — the *Description*
    column in Nexus's task list, not the note on the Hours tab. Only a field
@@ -92,26 +93,18 @@ The folder holds nine files: `manifest.json`, `background.js`, `content.js`,
 `page.js`, `bridge.js`, this README, and `icon16/32/48/128.png` — the navy N.
 They all have to sit in the one folder, or the browser refuses to load it.
 
-**Sub-tasks.** Nexus lists a task and its sub-tasks as separate rows — 300042,
-300042-1, 300042-2 — and each carries its own description. The newest is the
-live one, so **both** halves use it:
-
-- the 🚀 opens the highest suffix the search brings back, and the banner names
-  the rows it saw and the one it opened;
-- the lookup asks for `-1`, `-2`, … until one is not there, and fills PROJECT,
-  CONTRACTOR and JOB TYPE from the last one that answered. The toast says which
-  row it read.
+**Revisions.** Nexus lists a task and its revisions as separate rows — 300042,
+300042-1, 300042-2 — each with its own description. They are separate tasks, so
+the row you write is the row you get: `300042` looks up and opens 300042, and
+`300042-1` looks up and opens 300042-1. Nothing hunts for a newer one.
 
 Some Nexus builds answer `get_project_info` with the parent task whatever
-sub-task number they are given, and then the number alone cannot tell the rows
+revision number they are given, and then the endpoint alone cannot tell the rows
 apart. The task list still can — it prints a Description against every row — so
-whenever the 🚀 opens a task, the descriptions of every row it saw are read off
-the list and kept. From then on that task's JOB TYPE is the newest sub-task's
-own description, and the row on the timecard refreshes itself a few seconds
-after the press.
-
-A task with no sub-tasks uses itself, as before. Type the number *with* a
-suffix and you get that exact row, with no probing.
+whenever the 🚀 opens a task, the descriptions of **every** revision the search
+listed are read off that column and kept, one per row. From then on each of them
+fills JOB TYPE with its own description, and a row on the timecard refreshes
+itself a few seconds after the press.
 
 Every step waits for the thing it needs to appear rather than counting
 seconds, so a slow, US-hosted Nexus just means a longer wait — never a
@@ -159,8 +152,9 @@ reload the extension.
 
 ## The task lookup
 
-Type a 6-digit task number and the row's **project**, **contractor** and **job
-type** fill themselves in a moment later, taken from the newest sub-task.
+Type a task number — `300042`, or `300042-1` for a revision — and the row's
+**project**, **contractor** and **job type** fill themselves in a moment later,
+from that exact row.
 
 It does not matter how the number arrives: typed and entered, pasted into one
 cell, or a whole column of numbers pasted at once — the sheet is swept and

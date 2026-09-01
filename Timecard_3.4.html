@@ -2404,14 +2404,15 @@ function commitValue(inp, finalize){
   if(finalize && inp.dataset.row!==undefined){
     const r = w.rows[+inp.dataset.row];
     const task = String(r.task||'').trim();
-    if(/^\d{4,}$/.test(task)){                 // any task number of 4+ digits (6- and 7-digit numbers included)
+    if(/^\d{4,}(-\d+)?$/.test(task)){         // any task number of 4+ digits, with or without a -revision
       state.taskInfo = state.taskInfo || {};
       if(inp.dataset.f==='task'){
-        /* A 6-digit number is a real Nexus task, so Nexus answers for it and the
-           remembered values are left out of it entirely - they were only ever a
+        /* A 6-digit number - and a 6-digit number with a -revision after it,
+           like 300042-1 - is a real Nexus task, so Nexus answers for it and the
+           remembered values are left out of it entirely; they were only ever a
            guess. Any other length is not something Nexus knows about, so those
            still fill from the memory as before. */
-        if(/^\d{6}$/.test(task)){
+        if(NEXUS_TASK.test(task)){
           delete swept[+inp.dataset.row];    // typing it again asks again
           sweepTasks();
         }else{
@@ -2478,6 +2479,10 @@ const NEXUS_MILESTONES = ['DRAFT PACKAGE','QC-DESIGN REVIEW','CUSTOMER APPROVAL 
   'FINAL SUBMITTAL','QC - FINAL SUBMITTAL REVIEW','WET STAMP','SUBMITTAL SENT TO CUSTOMER','BILLING REQUESTED'];
 const NEXUS_URL_DEFAULT = 'http://nexus.tcs.local/protected.php';
 const HELPER_URL_DEFAULT = 'http://127.0.0.1:8765';
+/* What counts as a Nexus task number: six digits, on its own or followed by a
+   revision — 300042, 300042-1, 300042-30. Each is a row of its own over there,
+   with its own description, so each is looked up and sent as written. */
+const NEXUS_TASK = /^\d{6}(-\d+)?$/;
 function pad2(n){ return (n<10?'0':'')+n; }
 function usDatePad(d){ return pad2(d.getMonth()+1)+'/'+pad2(d.getDate())+'/'+d.getFullYear(); }   // 08/26/2026
 function taskMilestone(task){ return ((state.taskInfo||{})[task]||{}).milestone || ''; }
@@ -2492,7 +2497,7 @@ function markRockets(){
   document.querySelectorAll('#tblhost .rocket').forEach(b=>{
     const r = week().rows[+b.dataset.row] || {}, t = String(r.task||'').trim();
     const ms = t ? taskMilestone(t) : '';
-    b.hidden = !/^\d{6}$/.test(t);            // only a real 6-digit task can go to Nexus
+    b.hidden = !NEXUS_TASK.test(t);           // 300042, and 300042-1 too
     b.classList.toggle('set', !!ms);
     b.classList.toggle('needtab', need);
     b.title = need
@@ -2637,7 +2642,6 @@ async function runLookupTest(taskArg){
     d.fields.forEach(f=>L.push('     ' + f));
   }else if(d.keys) L.push('   fields sent    : ' + d.keys.join(', '));
   L.push('');
-  if(d.subTasks) L.push('   sub-tasks      : ' + d.subTasks);
   if(res && res.ok){
     L.push('3. RESULT: row read   = ' + (res.data.row || task));
     L.push('           project    = ' + res.data.project);
@@ -2713,9 +2717,7 @@ async function fillFromNexus(ri, task, before){
   if(got.length){
     recalc(); save();
     const bits = [res.data.project, res.data.contractor, res.data.jobType].filter(Boolean);
-    // say which row it read, so a sub-task's description is not a surprise
-    const row = res.data.row && res.data.row !== task ? res.data.row + ' (newest sub-task)' : task;
-    toast('🔎 '+row+' — '+bits.join(' · ')+
+    toast('🔎 '+task+' — '+bits.join(' · ')+
           '<br><span style="opacity:.85">'+got.join(', ')+' from Nexus.</span>', 7000);
   }
   // Nothing in the answer was clearly the task's description, so JOB TYPE was
@@ -2737,7 +2739,7 @@ let sweepTimer = null, sweeping = false;
 function sweepTasks(){ clearTimeout(sweepTimer); sweepTimer = setTimeout(runSweep, 300); }
 function needsLookup(r){
   const t = String(r.task||'').trim();
-  if(!/^\d{6}(-\d+)?$/.test(t)) return false;
+  if(!NEXUS_TASK.test(t)) return false;
   return !String(r.project||'').trim() || !String(r.contractor||'').trim() || !String(r.job||'').trim();
 }
 /* Put a different task number in a row and whatever Nexus filled in beside it
@@ -2761,8 +2763,8 @@ function dropStaleInfo(){
   if(cleared) recalc();
 }
 /* Ask again for one row, throwing away what Nexus put there last time. Used
-   after an N press: opening the task teaches the extension what the task list
-   says the newest sub-task is for, which can be better than the first answer. */
+   after an N press: opening the task shows the extension the task list, which
+   carries a description for every row and can better the first answer. */
 function relookupRow(ri){
   const r = week().rows[ri]; if(!r) return;
   if(r.nx){
@@ -2790,7 +2792,7 @@ function adoptTypedTasks(){
     const i = +inp.dataset.row, r = rows[i];
     if(!r) return;
     const v = String(inp.value||'').trim();
-    if(!/^\d{6}(-\d+)?$/.test(v) || v === String(r.task||'').trim()){ delete settling[i]; return; }
+    if(!NEXUS_TASK.test(v) || v === String(r.task||'').trim()){ delete settling[i]; return; }
     if(document.activeElement === inp && settling[i] !== v){ settling[i] = v; return; }
     delete settling[i];
     r.task = v;
@@ -2845,7 +2847,7 @@ function rocketPayload(ri, dayIdx){
 }
 function rocketGo(ri, btn, forcePick, dayIdx){
   const p = rocketPayload(ri, dayIdx);
-  if(!/^\d{3,}$/.test(p.task)){ toast('🚀 Put a task number in this row first.'); return; }
+  if(!/^\d{3,}(-\d+)?$/.test(p.task)){ toast('🚀 Put a task number in this row first.'); return; }
   if(forcePick || !p.milestone){ milestoneMenu(btn, p.task, ()=>rocketGo(ri, btn, false, dayIdx)); return; }
   // Nothing on today, but hours on several other days — only you know which one.
   if(dayIdx==null && !p.hours && p.choices.length>1){
@@ -2867,9 +2869,9 @@ function rocketGo(ri, btn, forcePick, dayIdx){
         toast('🚀 '+r.how+' — '+what+
               '<br><span style="opacity:.85">It fills the Hours form there; check it and press <b>Submit</b>.</span>', 9000);
         setTimeout(checkNexusTabs, 1500);
-        /* Opening the task shows the extension the list, and the list knows
-           which sub-task is newest and what it is for. Ask again once it has
-           had time to read it, so JOB TYPE catches up. */
+        /* Opening the task shows the extension the list, which spells out what
+           each row is for. Ask again once it has had time to read it, so JOB
+           TYPE catches up. */
         setTimeout(()=>relookupRow(ri),  9000);
         setTimeout(()=>relookupRow(ri), 22000);
       }else{
@@ -4356,7 +4358,7 @@ function projectsWorked(days){
   const w = week(), map = {};
   for(const r of w.rows){
     const t = String(r.task||'').trim();
-    if(!/^\d{6}$/.test(t)) continue;                       // only real 6-digit task numbers
+    if(!NEXUS_TASK.test(t)) continue;                      // real task numbers only
     let hrs = 0; const codes = {};                         // work-type code -> hours in this period
     for(const d of DYS){
       const hv = num(r.ha[d]) + num(r.h[d]);               // sheet-counted value (matches the blue Total column)

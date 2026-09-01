@@ -87,52 +87,54 @@
   // ------------------------------------------------------- finding the task
   /* The Edit button must be the real one on the real row, so we search for the
      task the same way a person does and wait for the row to come back. */
-  /* Nexus lists a task and its sub-tasks as separate rows: 321526, 321526-1,
-     321526-2 … The hours belong on the newest one, so of everything the search
-     brought back for this number we take the highest suffix. A number given
-     WITH a suffix means that exact row and nothing else. */
+  /* Nexus lists a task and its revisions as separate rows: 300042, 300042-1,
+     300042-2. They are separate tasks, so the one asked for is the one opened -
+     300042 means 300042, and never 300042-2. */
   var rx = function (s) { return String(s).replace(/[.*+?^${}()|[\]\\-]/g, '\\$&'); };
-  function subOf(row, task) {
-    var m = new RegExp('^' + rx(task) + '(?:-(\\d+))?$').exec(row);
+  function baseOf(task) { return String(task).replace(/-\d+$/, ''); }
+  function subOf(row, base) {
+    var m = new RegExp('^' + rx(base) + '(?:-(\\d+))?$').exec(row);
     return m ? (m[1] == null ? -1 : +m[1]) : null;    // -1 = the task itself
   }
-  /* Which task this row is. data-row is the row Nexus opens, but it does not
-     always carry the suffix; the row's own text does - the Project ID cell
-     reads "LM68339XTRASAV.300042-2" - so both are read and the higher wins.
+  /* Which row this is. data-row is what Nexus opens, but it does not always
+     carry the revision; the row's own text does - the Project ID cell reads
+     "LM68339XTRASAV.300042-2" - so both are read and the more specific wins.
      Returns null when the row is not this task at all, which is what keeps
      3000420 and 1300042 out of it. */
-  function rowNumber(btn, task) {
-    var base = task.replace(/-\d+$/, '');
-    var want = /-(\d+)$/.exec(task);          // an exact sub-task was asked for
+  function rowIdOf(btn, base) {
     var tr = btn.closest('tr');
-    var best = subOf(String(btn.getAttribute('data-row') || '').trim(), base);
+    var sub = subOf(String(btn.getAttribute('data-row') || '').trim(), base);
     var m = new RegExp('(?:^|[^0-9-])' + rx(base) + '-(\\d+)(?![0-9])', 'g');
     var text = tr ? (tr.textContent || '') : '', hit;
     while ((hit = m.exec(text)) !== null) {
       var n = +hit[1];
-      if (best === null || n > best) best = n;
+      if (sub === null || n > sub) sub = n;
     }
-    if (best === null) return null;                        // a different task
-    if (want && +want[1] !== best) return null;            // not the one asked for
-    return { row: best < 0 ? base : base + '-' + best, sub: best };
+    if (sub === null) return null;                    // a different task entirely
+    return sub < 0 ? base : base + '-' + sub;
   }
-  function editButtons(task) {
+  /* Every row the search brought back for this task number, revisions included.
+     The descriptions of all of them are worth reporting even though only one is
+     opened. */
+  function rowsFor(base) {
     var all = document.querySelectorAll('button.btn-edit[data-row]'), out = [], seen = {};
     for (var i = 0; i < all.length; i++) {
       var b = all[i];
       if (!String(b.getAttribute('data-row') || '').trim()) continue;   // hidden template button
       if (!b.closest('tr') || !vis(b)) continue;
-      var r = rowNumber(b, task);
-      if (!r || seen[r.row]) continue;
-      seen[r.row] = 1;
-      out.push({ btn: b, row: r.row, sub: r.sub });
+      var id = rowIdOf(b, base);
+      if (!id || seen[id]) continue;
+      seen[id] = 1;
+      out.push({ btn: b, row: id });
     }
-    out.sort(function (a, b) { return a.sub - b.sub; });
     return out;
+  }
+  function editButtons(task) {
+    return rowsFor(baseOf(task)).filter(function (r) { return r.row === task; });
   }
   function editButton(task) {
     var l = editButtons(task);
-    return l.length ? l[l.length - 1].btn : null;     // the newest sub-task
+    return l.length ? l[0].btn : null;
   }
 
   /* The list's own Description column, found by its heading rather than by
@@ -217,9 +219,9 @@
     // so a button we make ourselves has no row to belong to and opens a
     // half-built task window. Only a task already listed on screen ever
     // worked; any other number quietly broke.
-    /* Always search, even when the number is already on screen. Whatever is
-       showing might be one row of a task that has sub-tasks, and the newest
-       one cannot be picked out of rows that were never listed. */
+    /* Always search, even when the number seems to be on screen already: what
+       is showing may be a different revision of it, and the right row has to be
+       picked out of the full list rather than whatever happens to be there. */
     say('searching for task <b>' + J.task + '</b>…');
     var btn = await lookUp(J.task, false);
     if (!btn) {
@@ -231,28 +233,24 @@
       'Task ' + J.task + ' did not come back from the search.<br>' +
       'Check the number, and that you can see the task in Nexus yourself.');
 
-    /* The search paints its rows together, but give any straggler a moment to
-       land before choosing — picking the newest sub-task is only right if all
-       of them are on screen to choose from. */
+    // let any straggling row land before reading the list
     await new Promise(function (r) { setTimeout(r, 500); });
-    var rows = editButtons(J.task);
-    var target = rows.length ? rows[rows.length - 1] : { btn: btn, row: J.task, sub: -1 };
+    var rows = rowsFor(baseOf(J.task));                    // this task and its revisions
+    var exact = editButtons(J.task);
+    var target = exact.length ? exact[0] : { btn: btn, row: J.task };
     var opened = target.row;
 
-    /* Report what the list says each of these rows is FOR. get_project_info
-       answers the same thing whatever sub-task number it is given on some
-       Nexus builds, so the Description column here is the only place the
-       newest sub-task's own description can be read. The extension keeps it,
-       and the timecard's JOB TYPE is right from then on. */
+    /* Report what the list says each of these rows is FOR - every revision, not
+       just the one being opened. get_project_info answers the same thing
+       whatever revision number it is given on some Nexus builds, so this column
+       is the only place each row's own description can be read. The extension
+       keeps them, and the timecard's JOB TYPE is right for each from then on. */
     try {
       var seen = rowDescriptions(rows.length ? rows : [target]);
       if (seen.length) window.postMessage({ __tcRows: { task: J.task, rows: seen } }, '*');
     } catch (e) {}
 
-    say(rows.length > 1
-      ? 'saw ' + rows.map(function (r) { return r.row; }).join(', ') +
-        ' — opening the newest, <b>' + opened + '</b>…'
-      : 'opening task <b>' + opened + '</b>…');
+    say('opening task <b>' + opened + '</b>…');
     click(target.btn);
 
     // 2 - the task window arrives by AJAX
