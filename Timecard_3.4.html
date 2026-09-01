@@ -627,9 +627,17 @@
   .msmenu button.ms.cur{background:#dbeafe;border-color:#93c5fd;font-weight:bold}
   #toolbar.lightbar .hoursind{color:#111;background:rgba(0,0,0,.08);border-color:rgba(0,0,0,.2)}
   @media (max-width:1200px){ .hoursind{display:none !important} }
-  /* click a box to SELECT it (highlight); double-click to EDIT it — Excel-style */
-  td.cellsel{outline:2px solid #2563eb !important;outline-offset:-2px;position:relative;z-index:4;background:rgba(37,99,235,.12) !important}
-  td.cellsel input,td.cellsel textarea{background:transparent !important}
+  /* click a box to SELECT it (highlight); double-click to EDIT it — Excel-style.
+     The highlight belongs to the screen only: scoped away from the capture and
+     out of print, so it can never reach the emailed image or the PDF. Scoped
+     rather than overridden, so the cell keeps its own colour instead of having
+     one painted back over it. */
+  @media screen{
+    body:not(.capturing) td.cellsel{outline:2px solid #2563eb !important;outline-offset:-2px;
+      position:relative;z-index:4;background:rgba(37,99,235,.12) !important}
+    body:not(.capturing) td.cellsel input,
+    body:not(.capturing) td.cellsel textarea{background:transparent !important}
+  }
   #clipHelper{position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0}
   .greact{height:120px;border-radius:9px;display:flex;align-items:center;justify-content:center;
     text-align:center;font-weight:bold;font-size:13px;cursor:pointer;color:#fff;background:#1d4ed8;padding:6px}
@@ -2108,6 +2116,11 @@ function selectCell(inp, mod){
     if(i>=0){ selCells.splice(i,1); if(td) td.classList.remove('cellsel'); }
     else { selCells.push(inp); if(td) td.classList.add('cellsel'); }
     selAnchor = inp; selInput = inp;
+  }else if(selCells.length===1 && selCells[0]===inp){
+    // clicking the one box that is already picked lets it go again
+    clearSel(); selAnchor = null; selInput = null;
+    updateHoursInd('','');
+    return;
   }else{
     selAnchor = inp; selInput = inp; setSelCells([inp]);
   }
