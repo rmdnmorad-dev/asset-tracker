@@ -2559,7 +2559,7 @@ function markRockets(){
    Nothing can be looked up without a Nexus tab: this page is a local file and
    the tab is what carries your session. So it is watched, and when there is
    none the N turns red and a line above the sheet says so. */
-let nexusTabsOpen = null;
+let nexusTabsOpen = null, lastLearnedAt = null;
 async function checkNexusTabs(){
   if(!nexusBridge) return;
   const r = await nexusTabStatus();
@@ -2569,6 +2569,15 @@ async function checkNexusTabs(){
   markRockets();
   // a tab has just appeared — pick up whatever could not be looked up before
   if(was === 0 && nexusTabsOpen > 0){ for(const k in swept) delete swept[k]; sweepTasks(); }
+  /* The extension has read something new off the Nexus task list — a revision's
+     own description, say — so anything it filled in earlier is worth asking
+     again. Rows you typed yourself are untouched, as always. */
+  if(r && r.ok && typeof r.learnedAt === 'number'){
+    if(lastLearnedAt !== null && r.learnedAt !== lastLearnedAt){
+      week().rows.forEach((row,i)=>{ if(row.nx) relookupRow(i); });
+    }
+    lastLearnedAt = r.learnedAt;
+  }
 }
 function openNexusTab(){
   nexusOpen(null).then(r=>{
@@ -2690,6 +2699,9 @@ async function runLookupTest(taskArg){
     d.fields.forEach(f=>L.push('     ' + f));
   }else if(d.keys) L.push('   fields sent    : ' + d.keys.join(', '));
   L.push('');
+  if(d.sawInTab) L.push('   rows on screen : ' + d.sawInTab);
+  if(d.askedAs)  L.push('   ' + d.askedAs);
+  if(d.fromList) L.push('   ' + d.fromList);
   if(res && res.ok){
     L.push('3. RESULT: row read   = ' + (res.data.row || task));
     L.push('           project    = ' + res.data.project);

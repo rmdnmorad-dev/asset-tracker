@@ -149,9 +149,9 @@ async function ask(rowId, nexusUrl, diag, route, loud) {
 
 /* Work out how this browser can reach Nexus, and prove it on the row we
    actually want. Returns { route, got } or null. */
-async function openRoute(task, nexusUrl, diag) {
+async function openRoute(task, nexusUrl, diag, tabs) {
   const url = ajaxUrl(nexusUrl, task);
-  const tabs = await findNexusTabs(url);
+  tabs = tabs || await findNexusTabs(url);
   diag.nexusTabsOpen = tabs.length;
   for (const tab of tabs) {
     const route = { tabId: tab.id, tabUrl: tab.url };
@@ -220,15 +220,16 @@ function readBody(got, task, diag, soft) {
    tell the rows apart. The task list can - it prints a Description against every
    row - so whenever the N button opens a task, page.js reads that column and
    every row it saw is kept here, one description per row id. */
-const learned = new Map();
+const learned = new Map();                  // '300042-2' -> { id, desc }
+let learnedAt = 0;                          // bumped whenever something new is read
 function saveLearned() {
-  try { chrome.storage.local.set({ tcRowDesc: Object.fromEntries(learned) }); } catch (e) {}
+  try { chrome.storage.local.set({ tcRows2: Object.fromEntries(learned) }); } catch (e) {}
 }
 try {
-  chrome.storage.local.get('tcRowDesc', (o) => {
+  chrome.storage.local.get('tcRows2', (o) => {
     void chrome.runtime.lastError;
-    const m = (o && o.tcRowDesc) || {};
-    for (const k of Object.keys(m)) learned.set(k, m[k]);
+    const m = (o && o.tcRows2) || {};
+    for (const k of Object.keys(m)) if (m[k] && typeof m[k] === 'object') learned.set(k, m[k]);
   });
 } catch (e) {}
 function rememberRows(seen) {
@@ -236,12 +237,32 @@ function rememberRows(seen) {
   let any = false;
   for (const r of seen.rows) {
     const row = String((r && r.row) || '').trim();
-    const desc = String((r && r.desc) || '').trim();
-    if (!row || !desc || learned.get(row) === desc) continue;
-    learned.set(row, desc);                 // 300042, 300042-1, 300042-2 … each its own
+    if (!row) continue;
+    const was = learned.get(row) || {};
+    const next = { id: String((r && r.id) || was.id || row).trim(),
+                   desc: String((r && r.desc) || was.desc || '').trim() };
+    if (was.id === next.id && was.desc === next.desc) continue;
+    learned.set(row, next);                 // 300042, 300042-1, 300042-2 … each its own
     any = true;
   }
-  if (any) saveLearned();
+  if (any) { learnedAt = Date.now(); saveLearned(); }
+}
+
+/* Ask an open Nexus tab what it can see of this task right now. Free - it reads
+   the page, touches nothing - and it means a task already listed over there is
+   understood without anyone pressing N first. */
+function scanTab(tabId, base) {
+  return new Promise((done) => {
+    let settled = false;
+    const finish = (r) => { if (!settled) { settled = true; done(r); } };
+    setTimeout(() => finish(null), 4000);
+    try {
+      chrome.tabs.sendMessage(tabId, { type: 'tcScanRows', base: base }, (r) => {
+        void chrome.runtime.lastError;
+        finish(r && r.ok ? r.rows : null);
+      });
+    } catch (e) { finish(null); }
+  });
 }
 
 /* The same task is asked for again the moment a whole column is pasted, so a
@@ -263,7 +284,25 @@ async function lookup(task, nexusUrl) {
 
   diag.step = 'fetching';
   const t0 = Date.now();
-  const opened = await openRoute(task, nexusUrl, diag);
+
+  /* Look at the task list first, if a Nexus tab has it on screen. It gives the
+     id Nexus itself uses for each row - which for a revision is not always the
+     number you see - so the question can be asked about the right row rather
+     than about a number the endpoint may quietly round back to the parent. */
+  const tabs = await findNexusTabs(ajaxUrl(nexusUrl, task));
+  for (const tab of tabs) {
+    const rows = await scanTab(tab.id, task);
+    if (rows && rows.length) {
+      rememberRows({ task: task, rows: rows });
+      diag.sawInTab = rows.map(r => r.row + (r.id !== r.row ? ' (id ' + r.id + ')' : '')).join(', ');
+      break;
+    }
+  }
+  const known = learned.get(task) || {};
+  const rowId = known.id || task;
+  if (rowId !== task) diag.askedAs = 'asked Nexus for row id ' + rowId + ', which is what it calls ' + task;
+
+  const opened = await openRoute(rowId, nexusUrl, diag, tabs);
   if (!opened) {
     diag.step = diag.nexusTabsOpen ? 'the Nexus tab could not fetch it either'
                                    : 'no Nexus tab open, and the extension cannot reach it directly';
@@ -278,12 +317,12 @@ async function lookup(task, nexusUrl) {
   if (base.error) return { ok: false, error: base.error, diag: diag };
 
   /* The row asked for is the row answered for - no hunting for a newer one.
-     Where the task list has been seen, its Description for THIS row wins: it is
-     per-row, and get_project_info is not always. */
+     If the list showed a description for THIS row, it wins: it is per-row, and
+     get_project_info is not always, however it is addressed. */
   let info = base.info;
-  const seen = learned.get(task);
-  if (seen && seen !== info.jobType) {
-    info = Object.assign({}, info, { jobType: seen, jobTypeKey: 'the task list' });
+  const desc = (learned.get(task) || {}).desc;
+  if (desc && desc !== info.jobType) {
+    info = Object.assign({}, info, { jobType: desc, jobTypeKey: 'the task list' });
     diag.fromList = 'job type read off the task list, row ' + task;
   }
   diag.ms = Date.now() - t0;
@@ -374,7 +413,7 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   // "is Nexus open in this browser?" - the timecard turns its N red when not
   if (msg.type === 'tcStatus') {
     const base = String(msg.nexusUrl || '').split('#')[0] || 'http://nexus.tcs.local/protected.php';
-    findNexusTabs(base).then((tabs) => reply({ ok: true, tabs: tabs.length }));
+    findNexusTabs(base).then((tabs) => reply({ ok: true, tabs: tabs.length, learnedAt: learnedAt }));
     return true;
   }
 });

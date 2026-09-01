@@ -98,13 +98,18 @@ They all have to sit in the one folder, or the browser refuses to load it.
 the row you write is the row you get: `300042` looks up and opens 300042, and
 `300042-1` looks up and opens 300042-1. Nothing hunts for a newer one.
 
-Some Nexus builds answer `get_project_info` with the parent task whatever
-revision number they are given, and then the endpoint alone cannot tell the rows
-apart. The task list still can — it prints a Description against every row — so
-whenever the 🚀 opens a task, the descriptions of **every** revision the search
-listed are read off that column and kept, one per row. From then on each of them
-fills JOB TYPE with its own description, and a row on the timecard refreshes
-itself a few seconds after the press.
+Asking `get_project_info` for `300042-2` does not work: it answers with the
+parent task, because the displayed number is not the id Nexus files that row
+under. The list knows the real one — it is on the row's own Edit button — so
+whenever a Nexus tab has the task on screen, the extension reads each row's id
+and description straight off the list and asks with **that**. Nothing is clicked
+or searched to do it; the page is only read.
+
+So a task already listed in your Nexus tab is right the first time, and one that
+is not becomes right the moment it appears — pressing 🚀 lists it, and rows
+already filled in on the timecard correct themselves within a few seconds.
+Whichever way, each revision ends up with its own project, contractor and
+description, and what is learned is remembered.
 
 Every step waits for the thing it needs to appear rather than counting
 seconds, so a slow, US-hosted Nexus just means a longer wait — never a

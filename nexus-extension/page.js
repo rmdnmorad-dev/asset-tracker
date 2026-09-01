@@ -137,30 +137,6 @@
     return l.length ? l[0].btn : null;
   }
 
-  /* The list's own Description column, found by its heading rather than by
-     counting - the columns move about between views. */
-  function descColumn(tr) {
-    var tbl = tr && tr.closest('table');
-    if (!tbl) return -1;
-    var heads = tbl.querySelectorAll('thead th, thead td');
-    for (var i = 0; i < heads.length; i++)
-      if (norm(heads[i].textContent).replace(/[^A-Z]/g, '') === 'DESCRIPTION') return i;
-    return -1;
-  }
-  function rowDescriptions(list) {
-    if (!list.length) return [];
-    var idx = descColumn(list[0].btn.closest('tr'));
-    if (idx < 0) return [];
-    var out = [];
-    list.forEach(function (r) {
-      var tr = r.btn.closest('tr');
-      if (!tr || idx >= tr.children.length) return;
-      var d = String(tr.children[idx].textContent || '').replace(/\s+/g, ' ').trim();
-      if (d) out.push({ row: r.row, desc: d });
-    });
-    return out;
-  }
-
   function fire(el, types) {
     types.forEach(function (t) { el.dispatchEvent(new Event(t, { bubbles: true })); });
     if (window.jQuery) try { window.jQuery(el).trigger('input').trigger('change'); } catch (e) {}
@@ -235,20 +211,15 @@
 
     // let any straggling row land before reading the list
     await new Promise(function (r) { setTimeout(r, 500); });
-    var rows = rowsFor(baseOf(J.task));                    // this task and its revisions
     var exact = editButtons(J.task);
     var target = exact.length ? exact[0] : { btn: btn, row: J.task };
     var opened = target.row;
 
-    /* Report what the list says each of these rows is FOR - every revision, not
-       just the one being opened. get_project_info answers the same thing
-       whatever revision number it is given on some Nexus builds, so this column
-       is the only place each row's own description can be read. The extension
-       keeps them, and the timecard's JOB TYPE is right for each from then on. */
-    try {
-      var seen = rowDescriptions(rows.length ? rows : [target]);
-      if (seen.length) window.postMessage({ __tcRows: { task: J.task, rows: seen } }, '*');
-    } catch (e) {}
+    /* Ask the content script to read this task's rows off the list while they
+       are on screen - every revision, not just the one being opened. It takes
+       each row's own id and description, which is what makes the timecard's
+       JOB TYPE right for each of them afterwards. */
+    try { window.postMessage({ __tcScan: baseOf(J.task) }, '*'); } catch (e) {}
 
     say('opening task <b>' + opened + '</b>…');
     click(target.btn);
